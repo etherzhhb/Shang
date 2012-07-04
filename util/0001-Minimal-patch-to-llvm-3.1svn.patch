@@ -1,0 +1,598 @@
+From bd16ae4a9b174b35aa352ffdaff6f473662da952 Mon Sep 17 00:00:00 2001
+From: ether <etherzhhb@gmail.com>
+Date: Tue, 26 Jun 2012 21:31:17 +0800
+Subject: [PATCH] Minimal patch to llvm 3.1svn.
+
+---
+ CMakeLists.txt                            |    1 +
+ cmake/modules/LLVMProcessSources.cmake    |   17 ++++-
+ include/llvm/CodeGen/MachineOperand.h     |    7 ++-
+ include/llvm/Instruction.h                |    2 +-
+ include/llvm/Support/FormattedStream.h    |   17 ++--
+ include/llvm/Target/TargetInstrInfo.h     |    5 +
+ lib/CMakeLists.txt                        |    2 +-
+ lib/CodeGen/MachineInstr.cpp              |    3 +-
+ lib/CodeGen/MachineSink.cpp               |    4 +-
+ lib/CodeGen/MachineVerifier.cpp           |  121 +++++++++++++++--------------
+ lib/CodeGen/SelectionDAG/DAGCombiner.cpp  |   36 ++++++---
+ lib/CodeGen/SelectionDAG/SelectionDAG.cpp |    3 +
+ lib/CodeGen/VirtRegMap.cpp                |    7 +-
+ lib/Support/Windows/Path.inc              |    2 +-
+ lib/Target/LLVMBuild.txt                  |    2 +-
+ lib/Target/TargetRegisterInfo.cpp         |    4 +-
+ lib/Transforms/Scalar/CodeGenPrepare.cpp  |    2 +-
+ lib/VMCore/LeaksContext.h                 |    2 +-
+ lib/VMCore/Verifier.cpp                   |    7 +-
+ 19 files changed, 146 insertions(+), 98 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 014b85f..c403b48 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -84,6 +84,7 @@ set(LLVM_ALL_TARGETS
+   NVPTX
+   PowerPC
+   Sparc
++  VerilogBackend
+   X86
+   XCore
+   )
+diff --git a/cmake/modules/LLVMProcessSources.cmake b/cmake/modules/LLVMProcessSources.cmake
+index 0e410ed..36c621d 100644
+--- a/cmake/modules/LLVMProcessSources.cmake
++++ b/cmake/modules/LLVMProcessSources.cmake
+@@ -63,14 +63,27 @@ function(llvm_process_sources OUT_VAR)
+       llvm_replace_compiler_option(CMAKE_CXX_FLAGS "/EHsc" "/EHs-c-")
+       add_definitions( /D_HAS_EXCEPTIONS=0 )
+     endif()
+-  endif()
++  else ( NOT LLVM_REQUIRES_EH )
++    if( LLVM_COMPILER_IS_GCC_COMPATIBLE )
++      remove_definitions( -fno-exceptions )
++    elseif( MSVC )
++      llvm_replace_compiler_option(CMAKE_CXX_FLAGS "/EHs-c-" "/EHsc")
++      remove_definitions( /D_HAS_EXCEPTIONS=0 )
++    endif()
++  endif( NOT LLVM_REQUIRES_EH )
+   if( NOT LLVM_REQUIRES_RTTI )
+     if( LLVM_COMPILER_IS_GCC_COMPATIBLE )
+       llvm_replace_compiler_option(CMAKE_CXX_FLAGS "-frtti" "-fno-rtti")
+     elseif( MSVC )
+       llvm_replace_compiler_option(CMAKE_CXX_FLAGS "/GR" "/GR-")
+     endif()
+-  endif()
++  else ( NOT LLVM_REQUIRES_RTTI )
++    if( LLVM_COMPILER_IS_GCC_COMPATIBLE )
++      llvm_replace_compiler_option(CMAKE_CXX_FLAGS "-fno-rtti" "-frtti")
++    elseif( MSVC )
++      llvm_replace_compiler_option(CMAKE_CXX_FLAGS "/GR-" "/GR")
++    endif()
++  endif( NOT LLVM_REQUIRES_RTTI )
+ 
+   set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" PARENT_SCOPE )
+   set( ${OUT_VAR} ${sources} PARENT_SCOPE )
+diff --git a/include/llvm/CodeGen/MachineOperand.h b/include/llvm/CodeGen/MachineOperand.h
+index 9ccbfe9..3c5136c 100644
+--- a/include/llvm/CodeGen/MachineOperand.h
++++ b/include/llvm/CodeGen/MachineOperand.h
+@@ -50,7 +50,8 @@ public:
+     MO_BlockAddress,           ///< Address of a basic block
+     MO_RegisterMask,           ///< Mask of preserved registers.
+     MO_Metadata,               ///< Metadata reference (for debug info)
+-    MO_MCSymbol                ///< MCSymbol reference (for debug/eh info)
++    MO_MCSymbol,               ///< MCSymbol reference (for debug/eh info)
++    MO_Invalid                 ///< Invalide MachineOperand
+   };
+ 
+ private:
+@@ -170,6 +171,10 @@ private:
+     TargetFlags = 0;
+   }
+ public:
++  MachineOperand() : OpKind(MO_Invalid), ParentMI(0) {
++    TargetFlags = 0;
++  }
++
+   /// getType - Returns the MachineOperandType for this operand.
+   ///
+   MachineOperandType getType() const { return (MachineOperandType)OpKind; }
+diff --git a/include/llvm/Instruction.h b/include/llvm/Instruction.h
+index a386d1d..f438db3 100644
+--- a/include/llvm/Instruction.h
++++ b/include/llvm/Instruction.h
+@@ -84,7 +84,7 @@ public:
+   const char *getOpcodeName() const { return getOpcodeName(getOpcode()); }
+   bool isTerminator() const { return isTerminator(getOpcode()); }
+   bool isBinaryOp() const { return isBinaryOp(getOpcode()); }
+-  bool isShift() { return isShift(getOpcode()); }
++  bool isShift() const { return isShift(getOpcode()); }
+   bool isCast() const { return isCast(getOpcode()); }
+   
+   static const char* getOpcodeName(unsigned OpCode);
+diff --git a/include/llvm/Support/FormattedStream.h b/include/llvm/Support/FormattedStream.h
+index 58a1885..ab4cfbe 100644
+--- a/include/llvm/Support/FormattedStream.h
++++ b/include/llvm/Support/FormattedStream.h
+@@ -33,12 +33,20 @@ namespace llvm
+     ///
+     static const bool PRESERVE_STREAM = false;
+ 
+-  private:
++  protected:
+     /// TheStream - The real stream we output to. We set it to be
+     /// unbuffered, since we're already doing our own buffering.
+     ///
+     raw_ostream *TheStream;
+ 
++    /// ComputeColumn - Examine the given output buffer and figure out which
++    /// column we end up in after output.
++    ///
++    void ComputeColumn(const char *Ptr, size_t size);
++
++    virtual void write_impl(const char *Ptr, size_t Size);
++
++  private:
+     /// DeleteStream - Do we need to delete TheStream in the
+     /// destructor?
+     ///
+@@ -55,8 +63,6 @@ namespace llvm
+     ///
+     const char *Scanned;
+ 
+-    virtual void write_impl(const char *Ptr, size_t Size);
+-
+     /// current_pos - Return the current position within the stream,
+     /// not counting the bytes currently in the buffer.
+     virtual uint64_t current_pos() const { 
+@@ -65,11 +71,6 @@ namespace llvm
+       return TheStream->tell() - TheStream->GetNumBytesInBuffer();
+     }
+ 
+-    /// ComputeColumn - Examine the given output buffer and figure out which
+-    /// column we end up in after output.
+-    ///
+-    void ComputeColumn(const char *Ptr, size_t size);
+-
+   public:
+     /// formatted_raw_ostream - Open the specified file for
+     /// writing. If an error occurs, information about the error is
+diff --git a/include/llvm/Target/TargetInstrInfo.h b/include/llvm/Target/TargetInstrInfo.h
+index 4e73139..10f8cc2 100644
+--- a/include/llvm/Target/TargetInstrInfo.h
++++ b/include/llvm/Target/TargetInstrInfo.h
+@@ -71,6 +71,11 @@ public:
+              isReallyTriviallyReMaterializableGeneric(MI, AA)));
+   }
+ 
++  /// shouldAvoidSinking - Return true if the instruction should not be sunk.
++  virtual bool shouldAvoidSinking(MachineInstr *MI) const {
++    return false;
++  }
++
+ protected:
+   /// isReallyTriviallyReMaterializable - For instructions with opcodes for
+   /// which the M_REMATERIALIZABLE flag is set, this hook lets the target
+diff --git a/lib/CMakeLists.txt b/lib/CMakeLists.txt
+index fb63c63..bcb3605 100644
+--- a/lib/CMakeLists.txt
++++ b/lib/CMakeLists.txt
+@@ -10,6 +10,6 @@ add_subdirectory(MC)
+ add_subdirectory(Object)
+ add_subdirectory(DebugInfo)
+ add_subdirectory(ExecutionEngine)
+-add_subdirectory(Target)
+ add_subdirectory(AsmParser)
+ add_subdirectory(Archive)
++add_subdirectory(Target)
+diff --git a/lib/CodeGen/MachineInstr.cpp b/lib/CodeGen/MachineInstr.cpp
+index a35978b..5627869 100644
+--- a/lib/CodeGen/MachineInstr.cpp
++++ b/lib/CodeGen/MachineInstr.cpp
+@@ -36,6 +36,7 @@
+ #include "llvm/Analysis/DebugInfo.h"
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/ErrorHandling.h"
++#include "llvm/Support/Format.h"
+ #include "llvm/Support/LeakDetector.h"
+ #include "llvm/Support/MathExtras.h"
+ #include "llvm/Support/raw_ostream.h"
+@@ -290,7 +291,7 @@ void MachineOperand::print(raw_ostream &OS, const TargetMachine *TM) const {
+     }
+     break;
+   case MachineOperand::MO_Immediate:
+-    OS << getImm();
++    OS << format_object1<int64_t>("%lx", getImm());
+     break;
+   case MachineOperand::MO_CImmediate:
+     getCImm()->getValue().print(OS, false);
+diff --git a/lib/CodeGen/MachineSink.cpp b/lib/CodeGen/MachineSink.cpp
+index 1ce546b..80fb61c 100644
+--- a/lib/CodeGen/MachineSink.cpp
++++ b/lib/CodeGen/MachineSink.cpp
+@@ -379,7 +379,7 @@ MachineBasicBlock *MachineSinking::SplitCriticalEdge(MachineInstr *MI,
+   return FromBB->SplitCriticalEdge(ToBB, this);
+ }
+ 
+-static bool AvoidsSinking(MachineInstr *MI, MachineRegisterInfo *MRI) {
++static bool AvoidsSinking(MachineInstr *MI) {
+   return MI->isInsertSubreg() || MI->isSubregToReg() || MI->isRegSequence();
+ }
+ 
+@@ -566,7 +566,7 @@ MachineBasicBlock *MachineSinking::FindSuccToSinkTo(MachineInstr *MI,
+ bool MachineSinking::SinkInstruction(MachineInstr *MI, bool &SawStore) {
+   // Don't sink insert_subreg, subreg_to_reg, reg_sequence. These are meant to
+   // be close to the source to make it easier to coalesce.
+-  if (AvoidsSinking(MI, MRI))
++  if (AvoidsSinking(MI) || TII->shouldAvoidSinking(MI))
+     return false;
+ 
+   // Check if it's safe to move the instruction.
+diff --git a/lib/CodeGen/MachineVerifier.cpp b/lib/CodeGen/MachineVerifier.cpp
+index a443b51..69f5d9b 100644
+--- a/lib/CodeGen/MachineVerifier.cpp
++++ b/lib/CodeGen/MachineVerifier.cpp
+@@ -564,8 +564,9 @@ MachineVerifier::visitMachineBasicBlockBefore(const MachineBasicBlock *MBB) {
+       continue;
+     }
+     regsLive.insert(*I);
+-    for (MCSubRegIterator SubRegs(*I, TRI); SubRegs.isValid(); ++SubRegs)
+-      regsLive.insert(*SubRegs);
++    // No subregister in VTM.
++    // for (MCSubRegIterator SubRegs(*I, TRI); SubRegs.isValid(); ++SubRegs)
++    //   regsLive.insert(*SubRegs);
+   }
+   regsLiveInButUnused = regsLive;
+ 
+@@ -687,64 +688,64 @@ MachineVerifier::visitMachineOperand(const MachineOperand *MO, unsigned MONum) {
+ 
+ 
+     // Check register classes.
+-    if (MONum < MCID.getNumOperands() && !MO->isImplicit()) {
+-      unsigned SubIdx = MO->getSubReg();
+-
+-      if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
+-        if (SubIdx) {
+-          report("Illegal subregister index for physical register", MO, MONum);
+-          return;
+-        }
+-        if (const TargetRegisterClass *DRC =
+-              TII->getRegClass(MCID, MONum, TRI, *MF)) {
+-          if (!DRC->contains(Reg)) {
+-            report("Illegal physical register for instruction", MO, MONum);
+-            *OS << TRI->getName(Reg) << " is not a "
+-                << DRC->getName() << " register.\n";
+-          }
+-        }
+-      } else {
+-        // Virtual register.
+-        const TargetRegisterClass *RC = MRI->getRegClass(Reg);
+-        if (SubIdx) {
+-          const TargetRegisterClass *SRC =
+-            TRI->getSubClassWithSubReg(RC, SubIdx);
+-          if (!SRC) {
+-            report("Invalid subregister index for virtual register", MO, MONum);
+-            *OS << "Register class " << RC->getName()
+-                << " does not support subreg index " << SubIdx << "\n";
+-            return;
+-          }
+-          if (RC != SRC) {
+-            report("Invalid register class for subregister index", MO, MONum);
+-            *OS << "Register class " << RC->getName()
+-                << " does not fully support subreg index " << SubIdx << "\n";
+-            return;
+-          }
+-        }
+-        if (const TargetRegisterClass *DRC =
+-              TII->getRegClass(MCID, MONum, TRI, *MF)) {
+-          if (SubIdx) {
+-            const TargetRegisterClass *SuperRC =
+-              TRI->getLargestLegalSuperClass(RC);
+-            if (!SuperRC) {
+-              report("No largest legal super class exists.", MO, MONum);
+-              return;
+-            }
+-            DRC = TRI->getMatchingSuperRegClass(SuperRC, DRC, SubIdx);
+-            if (!DRC) {
+-              report("No matching super-reg register class.", MO, MONum);
+-              return;
+-            }
+-          }
+-          if (!RC->hasSuperClassEq(DRC)) {
+-            report("Illegal virtual register for instruction", MO, MONum);
+-            *OS << "Expected a " << DRC->getName() << " register, but got a "
+-                << RC->getName() << " register\n";
+-          }
+-        }
+-      }
+-    }
++    //if (MONum < MCID.getNumOperands() && !MO->isImplicit()) {
++    //  unsigned SubIdx = MO->getSubReg();
++
++    //  if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
++    //    if (SubIdx) {
++    //      report("Illegal subregister index for physical register", MO, MONum);
++    //      return;
++    //    }
++    //    if (const TargetRegisterClass *DRC =
++    //          TII->getRegClass(MCID, MONum, TRI, *MF)) {
++    //      if (!DRC->contains(Reg)) {
++    //        report("Illegal physical register for instruction", MO, MONum);
++    //        *OS << TRI->getName(Reg) << " is not a "
++    //            << DRC->getName() << " register.\n";
++    //      }
++    //    }
++    //  } else {
++    //    // Virtual register.
++    //    const TargetRegisterClass *RC = MRI->getRegClass(Reg);
++    //    if (SubIdx) {
++    //      const TargetRegisterClass *SRC =
++    //        TRI->getSubClassWithSubReg(RC, SubIdx);
++    //      if (!SRC) {
++    //        report("Invalid subregister index for virtual register", MO, MONum);
++    //        *OS << "Register class " << RC->getName()
++    //            << " does not support subreg index " << SubIdx << "\n";
++    //        return;
++    //      }
++    //      if (RC != SRC) {
++    //        report("Invalid register class for subregister index", MO, MONum);
++    //        *OS << "Register class " << RC->getName()
++    //            << " does not fully support subreg index " << SubIdx << "\n";
++    //        return;
++    //      }
++    //    }
++    //    if (const TargetRegisterClass *DRC =
++    //          TII->getRegClass(MCID, MONum, TRI, *MF)) {
++    //      if (SubIdx) {
++    //        const TargetRegisterClass *SuperRC =
++    //          TRI->getLargestLegalSuperClass(RC);
++    //        if (!SuperRC) {
++    //          report("No largest legal super class exists.", MO, MONum);
++    //          return;
++    //        }
++    //        DRC = TRI->getMatchingSuperRegClass(SuperRC, DRC, SubIdx);
++    //        if (!DRC) {
++    //          report("No matching super-reg register class.", MO, MONum);
++    //          return;
++    //        }
++    //      }
++    //      if (!RC->hasSuperClassEq(DRC)) {
++    //        report("Illegal virtual register for instruction", MO, MONum);
++    //        *OS << "Expected a " << DRC->getName() << " register, but got a "
++    //            << RC->getName() << " register\n";
++    //      }
++    //    }
++    //  }
++    //}
+     break;
+   }
+ 
+diff --git a/lib/CodeGen/SelectionDAG/DAGCombiner.cpp b/lib/CodeGen/SelectionDAG/DAGCombiner.cpp
+index 28c3be9..635e81c 100644
+--- a/lib/CodeGen/SelectionDAG/DAGCombiner.cpp
++++ b/lib/CodeGen/SelectionDAG/DAGCombiner.cpp
+@@ -1756,7 +1756,8 @@ SDValue DAGCombiner::visitMUL(SDNode *N) {
+   if (N1C && N1C->isNullValue())
+     return N1;
+   // fold (mul x, -1) -> 0-x
+-  if (N1C && N1C->isAllOnesValue())
++  if (N1C && N1C->isAllOnesValue() &&
++      (!LegalOperations || TLI.isOperationLegal(ISD::SUB, VT)))
+     return DAG.getNode(ISD::SUB, N->getDebugLoc(), VT,
+                        DAG.getConstant(0, VT), N0);
+   // fold (mul x, (1 << c)) -> x << c
+@@ -1765,7 +1766,8 @@ SDValue DAGCombiner::visitMUL(SDNode *N) {
+                        DAG.getConstant(N1C->getAPIntValue().logBase2(),
+                                        getShiftAmountTy(N0.getValueType())));
+   // fold (mul x, -(1 << c)) -> -(x << c) or (-x) << c
+-  if (N1C && (-N1C->getAPIntValue()).isPowerOf2()) {
++  if (N1C && (-N1C->getAPIntValue()).isPowerOf2() &&
++      (!LegalOperations || TLI.isOperationLegal(ISD::SUB, VT))) {
+     unsigned Log2Val = (-N1C->getAPIntValue()).logBase2();
+     // FIXME: If the input is something that is easily negated (e.g. a
+     // single-use add), we should put the negate there.
+@@ -2116,7 +2118,9 @@ SDValue DAGCombiner::visitMULHU(SDNode *N) {
+     MVT Simple = VT.getSimpleVT();
+     unsigned SimpleSize = Simple.getSizeInBits();
+     EVT NewVT = EVT::getIntegerVT(*DAG.getContext(), SimpleSize*2);
+-    if (TLI.isOperationLegal(ISD::MUL, NewVT)) {
++    if (TLI.isOperationLegal(ISD::MUL, NewVT) && (!LegalOperations ||
++        (TLI.isOperationLegal(ISD::ZERO_EXTEND, NewVT) &&
++         TLI.isOperationLegal(ISD::TRUNCATE, VT)))) {
+       N0 = DAG.getNode(ISD::ZERO_EXTEND, DL, NewVT, N0);
+       N1 = DAG.getNode(ISD::ZERO_EXTEND, DL, NewVT, N1);
+       N1 = DAG.getNode(ISD::MUL, DL, NewVT, N0, N1);
+@@ -2228,7 +2232,9 @@ SDValue DAGCombiner::visitUMUL_LOHI(SDNode *N) {
+     MVT Simple = VT.getSimpleVT();
+     unsigned SimpleSize = Simple.getSizeInBits();
+     EVT NewVT = EVT::getIntegerVT(*DAG.getContext(), SimpleSize*2);
+-    if (TLI.isOperationLegal(ISD::MUL, NewVT)) {
++    if (TLI.isOperationLegal(ISD::MUL, NewVT) && (!LegalOperations ||
++        (TLI.isOperationLegal(ISD::ZERO_EXTEND, NewVT) &&
++         TLI.isOperationLegal(ISD::TRUNCATE, VT)))) {
+       SDValue Lo = DAG.getNode(ISD::ZERO_EXTEND, DL, NewVT, N->getOperand(0));
+       SDValue Hi = DAG.getNode(ISD::ZERO_EXTEND, DL, NewVT, N->getOperand(1));
+       Lo = DAG.getNode(ISD::MUL, DL, NewVT, Lo, Hi);
+@@ -3666,8 +3672,12 @@ SDValue DAGCombiner::visitSRA(SDNode *N) {
+       // on that type, and the truncate to that type is both legal and free,
+       // perform the transform.
+       if ((ShiftAmt > 0) &&
+-          TLI.isOperationLegalOrCustom(ISD::SIGN_EXTEND, TruncVT) &&
+-          TLI.isOperationLegalOrCustom(ISD::TRUNCATE, VT) &&
++          (TLI.isOperationLegalOrCustom(ISD::SIGN_EXTEND, TruncVT) &&
++           (!LegalOperations || TLI.isOperationLegal(ISD::SIGN_EXTEND, TruncVT)))
++          &&
++          (TLI.isOperationLegalOrCustom(ISD::TRUNCATE, VT) &&
++          (!LegalOperations || TLI.isOperationLegal(ISD::TRUNCATE, VT)))
++          &&
+           TLI.isTruncateFree(VT, TruncVT)) {
+ 
+           SDValue Amt = DAG.getConstant(ShiftAmt,
+@@ -5371,7 +5381,7 @@ SDValue DAGCombiner::visitBITCAST(SDNode *N) {
+   if (ISD::isNormalLoad(N0.getNode()) && N0.hasOneUse() &&
+       // Do not change the width of a volatile load.
+       !cast<LoadSDNode>(N0)->isVolatile() &&
+-      (!LegalOperations || TLI.isOperationLegal(ISD::LOAD, VT))) {
++      (/*!LegalOperations || */TLI.isOperationLegal(ISD::LOAD, VT))) {
+     LoadSDNode *LN0 = cast<LoadSDNode>(N0);
+     unsigned Align = TLI.getTargetData()->
+       getABITypeAlignment(VT.getTypeForEVT(*DAG.getContext()));
+@@ -6281,7 +6291,8 @@ SDValue DAGCombiner::visitBRCOND(SDNode *N) {
+ 
+   // Transform br(xor(x, y)) -> br(x != y)
+   // Transform br(xor(xor(x,y), 1)) -> br (x == y)
+-  if (N1.hasOneUse() && N1.getOpcode() == ISD::XOR) {
++  if (N1.hasOneUse() && N1.getOpcode() == ISD::XOR
++      && false/*Using an Xor is ok*/) {
+     SDNode *TheXor = N1.getNode();
+     SDValue Op0 = TheXor->getOperand(0);
+     SDValue Op1 = TheXor->getOperand(1);
+@@ -6315,7 +6326,9 @@ SDValue DAGCombiner::visitBRCOND(SDNode *N) {
+       EVT SetCCVT = N1.getValueType();
+       if (LegalTypes)
+         SetCCVT = TLI.getSetCCResultType(SetCCVT);
+-      SDValue SetCC = DAG.getSetCC(TheXor->getDebugLoc(),
++
++      if (!LegalOperations || TLI.isOperationLegal(ISD::SETCC, SetCCVT)) {
++		  SDValue SetCC = DAG.getSetCC(TheXor->getDebugLoc(),
+                                    SetCCVT,
+                                    Op0, Op1,
+                                    Equal ? ISD::SETEQ : ISD::SETNE);
+@@ -6325,7 +6338,8 @@ SDValue DAGCombiner::visitBRCOND(SDNode *N) {
+       removeFromWorkList(N1.getNode());
+       DAG.DeleteNode(N1.getNode());
+       return DAG.getNode(ISD::BRCOND, N->getDebugLoc(),
+-                         MVT::Other, Chain, SetCC, N2);
++               MVT::Other, Chain, SetCC, N2);
++      }
+     }
+   }
+ 
+@@ -7107,7 +7121,7 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
+     unsigned Align = TLI.getTargetData()->
+       getABITypeAlignment(SVT.getTypeForEVT(*DAG.getContext()));
+     if (Align <= OrigAlign &&
+-        ((!LegalOperations && !ST->isVolatile()) ||
++        (/*(!LegalOperations && !ST->isVolatile()) ||*/
+          TLI.isOperationLegalOrCustom(ISD::STORE, SVT)))
+       return DAG.getStore(Chain, N->getDebugLoc(), Value.getOperand(0),
+                           Ptr, ST->getPointerInfo(), ST->isVolatile(),
+diff --git a/lib/CodeGen/SelectionDAG/SelectionDAG.cpp b/lib/CodeGen/SelectionDAG/SelectionDAG.cpp
+index ff0877c..18ea2be 100644
+--- a/lib/CodeGen/SelectionDAG/SelectionDAG.cpp
++++ b/lib/CodeGen/SelectionDAG/SelectionDAG.cpp
+@@ -1981,6 +1981,9 @@ void SelectionDAG::ComputeMaskedBits(SDValue Op, APInt &KnownZero,
+   // fall through
+   case ISD::ADD:
+   case ISD::ADDE: {
++    // The SDValue maybe the carry output of the ADDE.
++    if (Op.getResNo() == 1) break;
++
+     // Output known-0 bits are known if clear or set in both the low clear bits
+     // common to both LHS & RHS.  For example, 8+(X<<3) is known to have the
+     // low 3 bits clear.
+diff --git a/lib/CodeGen/VirtRegMap.cpp b/lib/CodeGen/VirtRegMap.cpp
+index 93840f0..2a2a620 100644
+--- a/lib/CodeGen/VirtRegMap.cpp
++++ b/lib/CodeGen/VirtRegMap.cpp
+@@ -276,9 +276,10 @@ void VirtRegRewriter::rewrite() {
+           continue;
+         unsigned VirtReg = MO.getReg();
+         unsigned PhysReg = VRM->getPhys(VirtReg);
+-        assert(PhysReg != VirtRegMap::NO_PHYS_REG &&
+-               "Instruction uses unmapped VirtReg");
+-        assert(!Reserved.test(PhysReg) && "Reserved register assignment");
++        // assert(PhysReg != VirtRegMap::NO_PHYS_REG &&
++        //        "Instruction uses unmapped VirtReg");
++        if (PhysReg == VirtRegMap::NO_PHYS_REG) continue;
++        //assert(!Reserved.test(PhysReg) && "Reserved register assignment");
+ 
+         // Preserve semantics of sub-register operands.
+         if (MO.getSubReg()) {
+diff --git a/lib/Support/Windows/Path.inc b/lib/Support/Windows/Path.inc
+index 2280b34..75a7749 100644
+--- a/lib/Support/Windows/Path.inc
++++ b/lib/Support/Windows/Path.inc
+@@ -103,7 +103,7 @@ Path::isValid() const {
+ 
+   // Remove trailing slash, unless it's a root slash.
+   if (len > rootslash+1 && path[len-1] == '/')
+-    path.erase(--len);
++    path.erase(--len, 1);
+ 
+   // Check each component for legality.
+   for (pos = 0; pos < len; ++pos) {
+diff --git a/lib/Target/LLVMBuild.txt b/lib/Target/LLVMBuild.txt
+index 8995080..2f14135 100644
+--- a/lib/Target/LLVMBuild.txt
++++ b/lib/Target/LLVMBuild.txt
+@@ -16,7 +16,7 @@
+ ;===------------------------------------------------------------------------===;
+ 
+ [common]
+-subdirectories = ARM CellSPU CppBackend Hexagon MBlaze MSP430 NVPTX Mips PowerPC Sparc X86 XCore
++subdirectories = ARM CellSPU CppBackend Hexagon MBlaze MSP430 NVPTX Mips PowerPC Sparc X86 XCore VerilogBackend
+ 
+ ; This is a special group whose required libraries are extended (by llvm-build)
+ ; with the best execution engine (the native JIT, if available, or the
+diff --git a/lib/Target/TargetRegisterInfo.cpp b/lib/Target/TargetRegisterInfo.cpp
+index 2395f2b..f8aa86a 100644
+--- a/lib/Target/TargetRegisterInfo.cpp
++++ b/lib/Target/TargetRegisterInfo.cpp
+@@ -34,7 +34,9 @@ void PrintReg::print(raw_ostream &OS) const {
+     OS << "SS#" << TargetRegisterInfo::stackSlot2Index(Reg);
+   else if (TargetRegisterInfo::isVirtualRegister(Reg))
+     OS << "%vreg" << TargetRegisterInfo::virtReg2Index(Reg);
+-  else if (TRI && Reg < TRI->getNumRegs())
++  else if (TRI && Reg < TRI->getNumRegs()
++     // DIRTY HACK: None architecture have so much registers.
++           && TRI->getNumRegs() < 1024)
+     OS << '%' << TRI->getName(Reg);
+   else
+     OS << "%physreg" << Reg;
+diff --git a/lib/Transforms/Scalar/CodeGenPrepare.cpp b/lib/Transforms/Scalar/CodeGenPrepare.cpp
+index 24d64b5..9d1c2c0 100644
+--- a/lib/Transforms/Scalar/CodeGenPrepare.cpp
++++ b/lib/Transforms/Scalar/CodeGenPrepare.cpp
+@@ -1244,7 +1244,7 @@ bool CodeGenPrepare::OptimizeInst(Instruction *I) {
+     return DupRetToEnableTailCallOpts(RI);
+ 
+   if (SelectInst *SI = dyn_cast<SelectInst>(I))
+-    return OptimizeSelectInst(SI);
++    if (TLI)  return OptimizeSelectInst(SI);
+ 
+   return false;
+ }
+diff --git a/lib/VMCore/LeaksContext.h b/lib/VMCore/LeaksContext.h
+index b9e59d4..2a75f99 100644
+--- a/lib/VMCore/LeaksContext.h
++++ b/lib/VMCore/LeaksContext.h
+@@ -47,7 +47,7 @@ struct LeakDetectorImpl {
+   // immediately, it is added to the CachedValue Value.  If it is
+   // immediately removed, no set search need be performed.
+   void addGarbage(const T* o) {
+-    assert(Ts.count(o) == 0 && "Object already in set!");
++    //assert(Ts.count(o) == 0 && "Object already in set!");
+     if (Cache) {
+       assert(Cache != o && "Object already in set!");
+       Ts.insert(Cache);
+diff --git a/lib/VMCore/Verifier.cpp b/lib/VMCore/Verifier.cpp
+index 9a9b0b7..6e2e4bc 100644
+--- a/lib/VMCore/Verifier.cpp
++++ b/lib/VMCore/Verifier.cpp
+@@ -1453,9 +1453,10 @@ void Verifier::visitStoreInst(StoreInst &SI) {
+ 
+ void Verifier::visitAllocaInst(AllocaInst &AI) {
+   PointerType *PTy = AI.getType();
+-  Assert1(PTy->getAddressSpace() == 0, 
+-          "Allocation instruction pointer not in the generic address space!",
+-          &AI);
++  // We need address space to identify different block RAM.
++  //Assert1(PTy->getAddressSpace() == 0,
++  //        "Allocation instruction pointer not in the generic address space!",
++  //        &AI);
+   Assert1(PTy->getElementType()->isSized(), "Cannot allocate unsized type",
+           &AI);
+   Assert1(AI.getArraySize()->getType()->isIntegerTy(),
+-- 
+1.7.5.1
+
