@@ -531,7 +531,9 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
     for (it I = MRI.use_begin(MO.getReg()); I != MachineRegisterInfo::use_end();
          /*++I*/) {
       MachineInstr &MI = *I;
-      if (MI.getOpcode() == VTM::VOpSel && I.getOperandNo() == 1) {
+      unsigned OperandNo = I.getOperandNo();
+
+      if (MI.getOpcode() == VTM::VOpSel && OperandNo == 1) {
         // Change the condition to always true condition.
         if (Imm == 0) {
           MachineOperand TrueVal = MI.getOperand(2),FalseVal = MI.getOperand(3);
@@ -547,6 +549,22 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
 
         VInstrInfo::setBitWidth(I.getOperand(), 1);
         (I++).getOperand().ChangeToRegister(0, false);
+        continue;
+      }
+
+      const MCInstrDesc &TID = MI.getDesc();
+      if (TID.getNumOperands() > OperandNo
+          && TID.OpInfo[OperandNo].isPredicate()) {
+        if (Imm) {
+          // Predicate become always true.
+          I.getOperand().ChangeToRegister(0, false);
+          I.getOperand().setTargetFlags(1);
+          ++I;
+        } else {
+          // Predicate become always false, remove the MI, because it is dead.
+          I.skipInstruction();
+          MI.eraseFromParent();
+        }
         continue;
       }
 
