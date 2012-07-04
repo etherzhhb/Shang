@@ -651,7 +651,8 @@ bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
            EndSlot = FInfo->getEndSlotFor(MBB),
            II = FInfo->getIIFor(MBB);
   // Compute the modulo endslot.
-  if (II) EndSlot = StartSlot + (EndSlot - StartSlot) % II;
+  if (II < FInfo->getTotalSlotFor(MBB))
+    EndSlot = StartSlot + (EndSlot - StartSlot) % II;
   unsigned CurSlot = FInfo->getIISlotFor(MBB);
 
   // Scan the instructions in the MBB to detect the conflict.
@@ -659,11 +660,14 @@ bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
   typedef MachineBasicBlock::reverse_instr_iterator rev_it;
   for (rev_it I = MBB->instr_rbegin(), E = MBB->instr_rend(); I != E; ++I) {
     MachineInstr &MI = *I;
+    unsigned Opcode = MI.getOpcode();
 
-    if (MI.isPseudo() || VInstrInfo::isDatapath(MI.getOpcode())) continue;
+    if (MI.isPseudo() || VInstrInfo::isDatapath(Opcode)
+        || Opcode == VTM::VOpDisableFU || Opcode == VTM::VOpReadFU)
+      continue;
 
     // Update CurSlot if we are entering a new control bundle.
-    if (MI.getOpcode() == VTM::CtrlEnd) CurSlot = MI.getOperand(0).getImm();
+    if (Opcode == VTM::CtrlEnd) CurSlot = MI.getOperand(0).getImm();
 
     // Only check the FU conflict at the modulo endslot.
     if (CurSlot < EndSlot) break;
