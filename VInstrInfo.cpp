@@ -791,7 +791,8 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
          || Opcode == VTM::VOpDstMux
          || Opcode == VTM::VOpReadReturn
          || Opcode == VTM::VOpReadFU
-         || Opcode == VTM::VOpMvPhi;
+         || Opcode == VTM::VOpMvPhi
+         || Opcode == VTM::VOpDefPhi;
 }
 
 bool VInstrInfo::isBrCndLike(unsigned Opcode) {
