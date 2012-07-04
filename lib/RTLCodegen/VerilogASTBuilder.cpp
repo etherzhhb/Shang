@@ -975,6 +975,13 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
       break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, Slot, Cnds);        break;
     case VTM::VOpBRAMTrans:     emitOpBRamTrans(MI, Slot, Cnds);       break;
+    case VTM::VOpAdd:           emitOpAdd(MI, Slot, Cnds);             break;
+    case VTM::VOpICmp:
+    case VTM::VOpMultLoHi:
+    case VTM::VOpMult:
+    case VTM::VOpSHL:
+    case VTM::VOpSRL:
+    case VTM::VOpSRA:           emitBinaryFUOp(MI, Slot, Cnds);        break;
     default:  llvm_unreachable("Unexpected opcode!");         break;
     }
   }
