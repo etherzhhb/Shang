@@ -13,7 +13,6 @@ this allow Shang to easily represent and optimize some high-level synthesis spec
 At the moment, Shang has several high-level synthesis specific (optimization) passes including:
 
 *  (pre-schedule) Arithmetic/bitwise operation strength reduction
-*  BasicBlock frequency based hyper-block formation
 *  Pre-schedule logic synthesis with [ABC](http://www.eecs.berkeley.edu/~alanmi/abc/) (optional, maps all bitwise logic operations to look-up tables)
 *  Scheduling pass that support Multi-cycles chaining
 *  Unified register/functional-unit allocation and binding
