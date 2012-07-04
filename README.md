@@ -67,8 +67,15 @@ After installing Quartus update your environment to add quartus and modelsim to 
 First you should download the source code of llvm to the local computer, you’ll get a folder named llvm, cd into the ~\llvm\lib\Target folder and rename the verilogbackend of Shang which was called VBE to VerilogBackend. Now you have got all the source code of Shang.
 To get both llvm and VBE you can run those:
 <pre>
-git clone git@192.168.1.3:llvm.git
-git clone git@192.168.1.3:vbe.git
+git clone  http://llvm.org/git/llvm.git
+cd llvm/lib/Target/
+git clone https://github.com/SysuEDA/Shang.git
+</pre>
+Before compiling Shang, you need to checkout LLVM revsion 16436dffb50fac4677c7162639f8da0b73eb4e99, and a patch located in <path-to-Shang's-source>/util/0001-Minimal-patch-to-llvm-3.1svn.patch. You can do this by the below commands:
+<pre>
+cd path-to-llvm-source
+git reset --hard 16436dffb50fac4677c7162639f8da0b73eb4e99
+git apply path-to-Shang's-source/util/0001-Minimal-patch-to-llvm-3.1svn.patch
 </pre>
 Then we use CMake ,a cross-platform, open-source build system to control the compilation process of Shang. On command line you can type the cmake command shows as follew to configure path for the environment variable used by Shang.
 <pre>
