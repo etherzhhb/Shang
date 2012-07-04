@@ -647,7 +647,12 @@ bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
   // We assume there is always a conflict in the unscheduled blocks.
   if (MBB->back().getOpcode() != VTM::EndState) return true;
 
-  unsigned EndSlot = FInfo->getEndSlotFor(MBB);
+  unsigned StartSlot = FInfo->getStartSlotFor(MBB),
+           EndSlot = FInfo->getEndSlotFor(MBB),
+           II = FInfo->getIIFor(MBB);
+  // Compute the modulo endslot.
+  if (II) EndSlot = StartSlot + (EndSlot - StartSlot) % II;
+  unsigned CurSlot = FInfo->getIISlotFor(MBB);
 
   // Scan the instructions in the MBB to detect the conflict.
   // FIXME: We had better to setup a global FU usage table.
@@ -657,8 +662,12 @@ bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
 
     if (MI.isPseudo() || VInstrInfo::isDatapath(MI.getOpcode())) continue;
 
-    // Get the slot that the MI is scheduled to.
-    if (VInstrInfo::getTraceOperand(&MI)->getImm() != EndSlot) continue;
+    // Update CurSlot if we are entering a new control bundle.
+    if (MI.getOpcode() == VTM::CtrlEnd) CurSlot = MI.getOperand(0).getImm();
+
+    // Only check the FU conflict at the modulo endslot.
+    if (CurSlot < EndSlot) break;
+    if (CurSlot > EndSlot) continue;
 
     // The instruction in the last slot accessing the same FU?
     if (VInstrInfo::getPreboundFUId(&MI) == Id) return true;
