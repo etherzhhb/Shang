@@ -236,7 +236,7 @@ public:
                           unsigned BitWidth);
   VASTValPtr buildMulExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
   VASTValPtr buildAddExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-
+  VASTValPtr buildShiftExpr(VASTExpr::Opcode Opc, VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth);
   VASTValPtr buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op);
 
   VASTValPtr buildNotExpr(VASTValPtr U);

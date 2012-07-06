@@ -537,7 +537,11 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
   case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
   case VASTExpr::dpSel:  return buildSelExpr(Ops[0], Ops[1], Ops[2], BitWidth);
-
+  case VASTExpr::dpShl:
+  case VASTExpr::dpSRA:
+  case VASTExpr::dpSRL:
+    assert(Ops.size() == 2 && "Bad Operand input!");
+    return buildShiftExpr(Opc, Ops[0], Ops[1], BitWidth);
   case VASTExpr::dpRAnd:
   case VASTExpr::dpRXor:
     assert(Ops.size() == 1 && "Unexpected more than 1 operands for reduction!");
@@ -900,6 +904,34 @@ VASTValPtr VASTExprBuilder::buildXorExpr(ArrayRef<VASTValPtr> Ops,
   return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
                    buildNotExpr(buildAndExpr(Ops, BitWidth)),
                    BitWidth);
+}
+
+VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc, 
+                                           VASTValPtr LHS, 
+                                           VASTValPtr RHS, 
+                                           unsigned BitWidth) {
+  if (VASTExprPtr RHSExpr = dyn_cast<VASTExprPtr>(RHS)) {
+    uint64_t KnownZeros, KnownOnes;
+    calculateBitCatBitMask(RHSExpr, KnownZeros, KnownOnes);
+    
+    // Any known zeros?
+    if (KnownZeros) {
+      // Try to trim the leading zeros.
+      KnownZeros = SignExtend64(KnownZeros, RHS->getBitWidth());
+
+      // Ignore the zero operand for the addition.
+      if (KnownZeros == ~UINT64_C(0)) return 0;
+
+      // Any known leading zeros?
+      if (KnownZeros >> 63) {
+        unsigned NoZerosUB = 64 - CountLeadingOnes_64(KnownZeros);
+        RHS = buildBitSliceExpr(RHS, NoZerosUB, 0);
+      }
+    }
+  }
+
+  VASTValPtr Ops[] = { LHS, RHS }; 
+  return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
