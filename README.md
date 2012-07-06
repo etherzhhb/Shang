@@ -266,10 +266,13 @@ The "EP2C35F672C6.lua" could be like this:
 
 In this script, we configure the period of corresponding paltform and parameter
 of function units. We make the latency table for the combinational logic.(to be continued...)   
-In configure.lua, we have to include the EP2C35F672C6.lua with the following statement:   
-<pre><code>-- load platform information script
-dofile(InDir .. 'EP2C35F672C6.lua')</pre></code>
-######4.  Setup the other configuration which is not to be concerned by client###### 
+In configure.lua, we have to include the EP2C35F672C6.lua with the following
+statement:   
+
+    -- load platform information script
+    dofile(InDir .. 'EP2C35F672C6.lua')
+
+######4.  Setup the other configuration.######
 User will find the other configuration in the example configure.lua at the XXXX.    
 As a whole the example configure.lua should look like this(without the
 configuration information mentioned in setp 4):  
