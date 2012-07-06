@@ -600,7 +600,6 @@ public:
   bool isLoopPHIMove(MachineInstr *MI);
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
-  MachineBasicBlock *operator->() const { return getMachineBasicBlock(); }
 
   /// Mapping machine instruction to schedule unit, this will help us build the
   /// the dependences between schedule unit based on dependences between machine

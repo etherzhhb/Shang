@@ -1142,8 +1142,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // the latency from operations need to wait to the exit operation.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
   VSUnit *ExitSU = 0;
+  MachineBasicBlock *MBB = CurState.getMachineBasicBlock();
 
-  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
+  for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
     if (!I->isTerminator()) {
       assert(MI->getOpcode() == VTM::VOpMvPhi && "Bad MBB!");
@@ -1161,7 +1162,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     }
   }
   
-  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
+  for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
     // Ignore the VOpMvPhis, which are handled, and also ignore the looping-back
     // terminator, which had been handled in the previous loop.
@@ -1183,7 +1184,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 
   assert(ExitSU && "Terminator not found?");
 
-  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
+  for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
 
     if (MI->getOpcode() == VTM::VOpMvPhi) {
@@ -1241,7 +1242,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
-  instr_it BI = State->begin();
+  MachineBasicBlock *MBB = State.getMachineBasicBlock();
+  instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
     State.addInstr(MI);
