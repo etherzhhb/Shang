@@ -115,6 +115,11 @@ public:
 
   VDEdge *getEdge() { return *I; }
   const VDEdge *getEdge() const { return *I; }
+
+  // Forwarding the function from the Edge.
+  unsigned getLatency() const { return (*I)->getLatency(); }
+  unsigned isLoopCarried() const { return (*I)->isLoopCarried(); }
+  unsigned getItDst() const { return (*I)->getItDst(); }
 };
 
 /// @brief Value Dependence Edge.
