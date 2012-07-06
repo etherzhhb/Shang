@@ -44,17 +44,38 @@ void SchedulingBase::buildTimeFrame() {
   DEBUG(dumpTimeFrame());
 }
 
+unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
+  unsigned NewStep = 0;
+  for (const_dep_it DI = A->dep_begin(), DE = A->dep_end(); DI != DE; ++DI) {
+    const VSUnit *Dep = *DI;
+    // Ignore the back-edges when we are not pipelining the BB.
+    if (DI.isLoopCarried() && !MII) continue;
+
+    unsigned DepASAP = Dep->isScheduled() ? Dep->getSlot() : getASAPStep(Dep);
+    int Step = DepASAP + DI.getLatency() - (MII * DI.getItDst());
+    DEBUG(dbgs() << "From ";
+          if (DI.getEdge()->isLoopCarried())
+            dbgs() << "BackEdge ";
+          Dep->print(dbgs());
+          dbgs() << " Step " << Step << '\n');
+    unsigned UStep = std::max(0, Step);
+    NewStep = std::max(UStep, NewStep);
+  }
+
+  return NewStep;
+}
+
 void SchedulingBase::buildASAPStep() {
   VSUnit *Entry = State.getEntryRoot();
   SUnitToTF[Entry].first = Entry->getSlot();
   typedef VSchedGraph::sched_iterator it;
   it Start = State.sched_begin();
 
-  bool changed = false;
+  bool NeedToReCalc = true;
 
   // Build the time frame iteratively.
-  do {
-    changed = false;
+  while(NeedToReCalc) {
+    NeedToReCalc = false;
     for (it I = Start + 1, E = State.sched_end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
@@ -65,39 +86,56 @@ void SchedulingBase::buildASAPStep() {
       DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
             A->dump(););
 
-      unsigned NewStep = 0;
-      for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-          DI != DE; ++DI) {
-        const VSUnit *Dep = *DI;
-        if (!DI.getEdge()->isLoopCarried() || MII) {
-          unsigned DepASAP = Dep->isScheduled() ?
-                             Dep->getSlot() : getASAPStep(Dep);
-          int Step = DepASAP + DI.getEdge()->getLatency()
-                     - (MII * DI.getEdge()->getItDst());
-          DEBUG(dbgs() << "From ";
-                if (DI.getEdge()->isLoopCarried())
-                  dbgs() << "BackEdge ";
-                Dep->print(dbgs());
-                dbgs() << " Step " << Step << '\n');
-          unsigned UStep = std::max(0, Step);
-          NewStep = std::max(UStep, NewStep);
-        }
-      }
+      unsigned NewStep = calculateASAP(A);
 
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
-      A->dump();
-      dbgs() << "\n\n";);
+            A->dump();
+            dbgs() << "\n\n";);
 
       unsigned &ASAPStep = SUnitToTF[A].first;
-      if (ASAPStep != NewStep) {
-        ASAPStep = NewStep;
-        changed |= true;
+      if (ASAPStep == NewStep) continue;
+      ASAPStep = NewStep;
+
+      // We need to re-calculate the ASAP steps if the sink of the back-edges,
+      // need to be update.
+      for (use_it UI = A->use_begin(), UE = A->use_end(); UI != UE; ++UI) {
+        VSUnit *Use = *UI;
+        NeedToReCalc |=
+          Use->getIdx() < A->getIdx() && calculateASAP(Use) != getASAPStep(Use);
       }
     }
-  } while (changed);
+  }
 
   VSUnit *Exit = State.getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
+}
+
+unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
+  unsigned NewStep = VSUnit::MaxSlot;
+  for (const_use_it UI = A->use_begin(), UE = A->use_end(); UI != UE; ++UI) {
+    const VSUnit *Use = *UI;
+    VDEdge *UseEdge = Use->getEdgeFrom(A);
+
+    // Ignore the back-edges when we are not pipelining the BB.
+    if (UseEdge->isLoopCarried() && !MII) continue;
+
+    unsigned UseALAP = Use->isScheduled() ?
+                       Use->getSlot() : getALAPStep(Use);
+    if (UseALAP == 0) {
+      assert(UseEdge->isLoopCarried() && "Broken time frame!");
+      UseALAP = VSUnit::MaxSlot;
+    }
+
+    unsigned Step = UseALAP - UseEdge->getLatency() + (MII * UseEdge->getItDst());
+    DEBUG(dbgs() << "From ";
+          if (UseEdge->isLoopCarried())
+            dbgs() << "BackEdge ";
+          Use->print(dbgs());
+          dbgs() << " Step " << Step << '\n');
+    NewStep = std::min(Step, NewStep);
+  }
+
+  return NewStep;
 }
 
 void SchedulingBase::buildALAPStep() {
@@ -105,10 +143,10 @@ void SchedulingBase::buildALAPStep() {
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit].second = LastSlot;
 
-  bool changed = false;
+  bool NeedToReCalc = true;
   // Build the time frame iteratively.
-  do {
-    changed = false;
+  while (NeedToReCalc) {
+    NeedToReCalc = false;
     for (int Idx = State.num_scheds()/*skip exitroot*/- 2; Idx >= 0; --Idx){
       VSUnit *A = State.getCtrlAt(Idx);
       if (A->isScheduled()) {
@@ -118,42 +156,25 @@ void SchedulingBase::buildALAPStep() {
 
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
-      unsigned NewStep = VSUnit::MaxSlot;
-      for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
-           UI != UE; ++UI) {
-        const VSUnit *Use = *UI;
-        VDEdge *UseEdge = Use->getEdgeFrom(A);
 
-        if (!UseEdge->isLoopCarried() || MII) {
-          unsigned UseALAP = Use->isScheduled() ?
-                             Use->getSlot() : getALAPStep(Use);
-          if (UseALAP == 0) {
-            assert(UseEdge->isLoopCarried() && "Broken time frame!");
-            UseALAP = VSUnit::MaxSlot;
-          }
-          unsigned Step = UseALAP - UseEdge->getLatency()
-                          + (MII * UseEdge->getItDst());
-          DEBUG(dbgs() << "From ";
-                if (UseEdge->isLoopCarried())
-                  dbgs() << "BackEdge ";
-                Use->print(dbgs());
-                dbgs() << " Step " << Step << '\n');
-          NewStep = std::min(Step, NewStep);
-        }
-      }
+      unsigned NewStep = calculateALAP(A);
 
       DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
             A->dump();
             dbgs() << "\n\n";);
 
       unsigned &ALAPStep = SUnitToTF[A].second;
-      if (ALAPStep != NewStep) {
-        assert(getASAPStep(A) <= NewStep && "Broken ALAP step!");
-        ALAPStep = NewStep;
-        changed = true;
+      if (ALAPStep == NewStep) continue;
+      assert(getASAPStep(A) <= NewStep && "Broken ALAP step!");
+      ALAPStep = NewStep;
+
+      for (dep_it DI = A->dep_begin(), DE = A->dep_end(); DI != DE; ++DI) {
+        VSUnit *Dep = *DI;
+        NeedToReCalc |=
+          A->getIdx() < Dep->getIdx() && calculateALAP(Dep) != getALAPStep(Dep);
       }
     }
-  } while (changed);
+  }
 }
 
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {

@@ -87,7 +87,13 @@ public:
 
   /// @name TimeFrame
   //{
+  typedef VSUnit::dep_iterator dep_it;
+  typedef VSUnit::const_dep_iterator const_dep_it;
+  typedef VSUnit::use_iterator use_it;
+  typedef VSUnit::const_use_iterator const_use_it;
+  unsigned calculateASAP(const VSUnit *A);
   void buildASAPStep();
+  unsigned calculateALAP(const VSUnit *A);
   void buildALAPStep();
   void buildTimeFrame();
 
