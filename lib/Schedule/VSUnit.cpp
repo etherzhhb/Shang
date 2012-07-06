@@ -23,6 +23,7 @@
 #include "vtm/SynSettings.h"
 #include "vtm/VFInfo.h"
 
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/CommandLine.h"
@@ -139,6 +140,19 @@ void VSchedGraph::removeDeadSU() {
 
   AllSUs.resize(Idx);
   SUCount = Idx;
+}
+
+void VSchedGraph::topologicalSortScheduleUnits() {
+  unsigned Idx = 0;
+  VSUnit *Exit = getExitRoot();
+  typedef po_iterator<VSUnit*, SmallPtrSet<VSUnit*, 64>, false,
+                      GraphTraits<Inverse<VSUnit*> > >
+          top_it;
+
+  for (top_it I = top_it::begin(Exit), E = top_it::end(Exit); I != E; ++I)
+    AllSUs[Idx++] = *I;
+
+  assert(Idx == num_scheds() && "Bad topological sort!");
 }
 
 void VSchedGraph::prepareForCtrlSched() {

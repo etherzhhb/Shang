@@ -580,6 +580,8 @@ public:
   // Extend the to schedule SU list to all SU in current schedule graph.
   void prepareForDatapathSched();
 
+  void topologicalSortScheduleUnits();
+
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
   void setExitRoot(VSUnit *exit) {
     assert(Exit == 0 && "ExitRoot already exist!");
