@@ -930,6 +930,35 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
     }
   }
 
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(RHS)) {
+    uint8_t ImmVal = Imm.getUnsignedValue();
+    switch(Opc) {
+    case VASTExpr::dpShl:{
+      VASTValPtr PaddingBits = buildBitSliceExpr(getOrCreateImmediate(0,8), 
+                                                 ImmVal, 0);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth() - ImmVal, 0);
+      VASTValPtr Ops[] = { LHS, PaddingBits }; 
+      return buildBitCatExpr(Ops, BitWidth);
+    }
+    case VASTExpr::dpSRL:{
+      VASTValPtr PaddingBits = buildBitSliceExpr(getOrCreateImmediate(0,8), 
+                                                 ImmVal, 0);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ImmVal);
+      VASTValPtr Ops[] = { PaddingBits, LHS }; 
+      return buildBitCatExpr(Ops, BitWidth);
+    }
+    case VASTExpr::dpSRA:{ 
+      VASTValPtr SignBitOps[] = { buildBitSliceExpr(LHS, LHS->getBitWidth(), 
+                                  LHS->getBitWidth() - 1), 
+                                  getOrCreateImmediate(ImmVal, 8) };
+      VASTValPtr SignBits = buildExpr(VASTExpr::dpBitRepeat, SignBitOps, 
+                                      ImmVal);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ImmVal);
+      VASTValPtr Ops[] = { SignBits, LHS }; 
+      return buildBitCatExpr(Ops, BitWidth);   
+    }
+    }
+  }
   VASTValPtr Ops[] = { LHS, RHS }; 
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
