@@ -194,7 +194,7 @@ begin with, You should assign the input path of .bc or .ll file (float64_add.bc)
 We also presume that the output path is the same as the input path. We output
 the RLT code (float64_add.v) and timing constraint code(float64_add.sdc).
 a simple example:   
-<pre><code>InDir = [[<your-work-dir>]]
+<pre><code>InDir = [[your-work-dir]]
 OutDir = Indir
 InputFile = InDir .. 'float64_add.bc'
 RTLOutput = OutDir .. 'float64_add.v'
