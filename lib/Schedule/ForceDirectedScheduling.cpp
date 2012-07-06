@@ -174,6 +174,8 @@ bool IterativeModuloScheduling::isAllSUnitScheduled() {
 
 bool ASAPScheduler::scheduleState() {
   State.getEntryRoot()->scheduledTo(State.getStartSlot());
+  BasicLinearOrderGenerator BLOG(*this);
+  BLOG.addLinOrdEdge();
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin() + 1, E = State.sched_end(); I != E; ++I) {
@@ -201,4 +203,61 @@ bool ASAPScheduler::scheduleState() {
   }
 
   return true;
+}
+
+void BasicLinearOrderGenerator::addLinOrdEdge() const {
+  ConflictListTy ConflictList;
+
+  typedef VSchedGraph::sched_iterator sched_it;
+  for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    FuncUnitId Id = U->getFUId();
+
+    // FIXME: Detect mutually exclusive predicate condition.
+    if (Id.isBound()) ConflictList[Id].push_back(U);
+  }
+
+  S.buildTimeFrame();
+
+  typedef ConflictListTy::iterator iterator;
+  for (iterator I = ConflictList.begin(), E = ConflictList.end(); I != E; ++I)
+    addLinOrdEdge(I->second);
+
+  S->topologicalSortScheduleUnits();
+}
+
+struct alap_less {
+  SchedulingBase &Info;
+  alap_less(SchedulingBase &s) : Info(s) {}
+  bool operator() (const VSUnit *LHS, const VSUnit *RHS) const {
+    // Ascending order using ALAP.
+    if (Info.getALAPStep(LHS) < Info.getALAPStep(RHS)) return true;
+    if (Info.getALAPStep(LHS) > Info.getALAPStep(RHS)) return false;
+
+    // Tie breaker 1: ASAP.
+    if (Info.getASAPStep(LHS) < Info.getASAPStep(RHS)) return true;
+    if (Info.getASAPStep(LHS) > Info.getASAPStep(RHS)) return false;
+
+    // Tie breaker 2: Original topological order.
+    return LHS->getIdx() < RHS->getIdx();
+  }
+};
+
+void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
+  std::sort(SUs.begin(), SUs.end(), alap_less(S));
+
+  VSUnit *LaterSU = SUs.back();
+  SUs.pop_back();
+
+  while (!SUs.empty()) {
+    VSUnit *EalierSU = SUs.back();
+    SUs.pop_back();
+
+    // Build a dependence edge from EalierSU to LaterSU.
+    // TODO: Add an new kind of edge: Constraint Edge, and there should be
+    // hard constraint and soft constraint.
+    LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
+
+    LaterSU = EalierSU;
+  }
 }

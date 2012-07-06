@@ -77,6 +77,7 @@ public:
   virtual ~SchedulingBase() {}
 
   VSchedGraph &getState() const { return State; }
+  VSchedGraph *operator->() const { return &State; }
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -193,6 +194,20 @@ struct ASAPScheduler : public SchedulingBase {
   ASAPScheduler(VSchedGraph &S) : SchedulingBase(S) {}
 
   bool scheduleState();
+};
+
+// A pseudo scheduler which generate linear order for SDC scheduler.
+class BasicLinearOrderGenerator {
+protected:
+  typedef std::map<FuncUnitId, std::vector<VSUnit*> > ConflictListTy;
+  SchedulingBase &S;
+
+  void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
+
+public:
+  explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
+
+  virtual void addLinOrdEdge() const;
 };
 
 class ILPScheduler : public SchedulingBase {
