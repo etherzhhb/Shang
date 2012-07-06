@@ -38,18 +38,13 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   if (!LHSID.isBound() && RHSID.isBound()) return true;
   if (LHSID.isBound() && !RHSID.isBound()) return false;
 
-  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
-  if (LASAP > RASAP) return true;
-  if (LASAP < RASAP) return false;
-
-  unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
-  // Schedule the low mobility nodes first.
-  if (LTF > RTF) return true; // Place RHS first.
-  if (LTF < RTF) return false;
-
   unsigned LALAP = Info.getALAPStep(LHS), RALAP = Info.getALAPStep(RHS);
   if (LALAP > RALAP) return true;
   if (LALAP < RALAP) return false;
+
+  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
+  if (LASAP > RASAP) return true;
+  if (LASAP < RASAP) return false;
 
   return LHS->getIdx() > RHS->getIdx();
 }
