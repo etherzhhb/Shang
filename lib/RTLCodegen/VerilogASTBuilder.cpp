@@ -588,7 +588,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   while(!I->isTerminator()) {
     // We are assign the register at the previous slot of this slot, so the
     // datapath op with same slot can read the register schedule to this slot.
-    unsigned stateSlot = VInstrInfo::getBundleSlot(I) - 1;
+    unsigned CurSlotNum = VInstrInfo::getBundleSlot(I) - 1;
 
     // Collect slot ready signals.
     instr_it NextI = instr_it(I);
@@ -598,14 +598,21 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
         addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
 
     // Create and collect the slots.
-    VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, &MBB);
+    VASTSlot *LeaderSlot = VM->getOrCreateSlot(CurSlotNum, &MBB);
+    // The control flow of the first slot is not staight-line, so does its
+    // alias slots.
+    if (CurSlotNum != startSlot)
+      addSuccSlot(VM->getSlot(CurSlotNum - 1), LeaderSlot,
+                  VM->getBoolImmediate(true));
     AliasSlots.push_back(LeaderSlot);
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
-      LeaderSlot->setAliasSlots(stateSlot, EndSlot, II);
-      for (unsigned slot = stateSlot + II; slot < EndSlot; slot += II) {
+      LeaderSlot->setAliasSlots(CurSlotNum, EndSlot, II);
+      for (unsigned slot = CurSlotNum + II; slot < EndSlot; slot += II) {
         VASTSlot *S = VM->getOrCreateSlot(slot, &MBB);
-        S->setAliasSlots(stateSlot, EndSlot, II);
+        addSuccSlot(VM->getOrCreateSlot(slot - 1, &MBB), S,
+                    VM->getBoolImmediate(true));
+        S->setAliasSlots(CurSlotNum, EndSlot, II);
         AliasSlots.push_back(S);
       }
     }
@@ -998,12 +1005,6 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
   assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
     "Cannot handle predicated BrCnd");
-
-  // Emit control operation for next state.
-  if (TargetBB == CurBB && Pipelined)
-    // The loop op of pipelined loop enable next slot explicitly.
-    addSuccSlot(CurSlot, VM->getOrCreateNextSlot(CurSlot),
-                VM->getBoolImmediate(true));
 
   // Emit the first micro state of the target state.
   if (!emitFirstCtrlBundle(TargetBB, CurSlot, Cnds)) {

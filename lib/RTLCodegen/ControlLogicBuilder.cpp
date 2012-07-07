@@ -128,22 +128,13 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
   bool hasSelfLoop = false;
   SmallVector<VASTValPtr, 2> EmptySlotEnCnd;
 
-  if (hasExplicitNextSlots()) {
-    CtrlS << "// Enable the successor slots.\n";
-    for (VASTSlot::const_succ_cnd_iterator I = succ_cnd_begin(),E = succ_cnd_end();
-         I != E; ++I) {
-      hasSelfLoop |= I->first->SlotNum == SlotNum;
-      VASTRegister *NextSlotReg = I->first->getRegister();
-      Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd, Builder);
-    }
-  } else {
-    // Enable the default successor slots.
-    VASTSlot *NextSlot = Mod.getSlot(SlotNum + 1);
-    VASTRegister *NextSlotReg = NextSlot->getRegister();
-    Mod.addAssignment(NextSlotReg, Mod.getBoolImmediate(true), this,
-                      EmptySlotEnCnd, Builder);
-    // And connect the fall through edge now.
-    addSuccSlot(NextSlot, Mod.getBoolImmediate(true), &Mod);
+  assert(!NextSlots.empty() && "Expect at least 1 next slot!");
+  CtrlS << "// Enable the successor slots.\n";
+  for (VASTSlot::const_succ_cnd_iterator I = succ_cnd_begin(),E = succ_cnd_end();
+        I != E; ++I) {
+    hasSelfLoop |= I->first->SlotNum == SlotNum;
+    VASTRegister *NextSlotReg = I->first->getRegister();
+    Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd, Builder);
   }
 
   assert(!(hasSelfLoop && PredAliasSlots)
@@ -182,7 +173,6 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
   CtrlS << "// Enable the active FUs.\n";
   for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
        I != E; ++I) {
-
     assert(!AliasEnables.count(I->first) && "Signal enabled by alias slot!");
     // No need to wait for the slot ready.
     // We may try to enable and disable the same port at the same slot.

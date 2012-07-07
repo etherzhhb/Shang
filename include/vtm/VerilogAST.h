@@ -938,9 +938,6 @@ public:
 
   void addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM);
   bool hasNextSlot(VASTSlot *NextSlot) const;
-  // Dose this slot jump to some other slot conditionally instead just fall
-  // through to SlotNum + 1 slot?
-  bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
 
   // Next VASTSlot iterator. 
   succ_iterator succ_begin() {
