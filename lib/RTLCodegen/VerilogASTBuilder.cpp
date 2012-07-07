@@ -953,7 +953,6 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
   MachineInstr *FirstBundle = DstBB->instr_begin();
   assert(FInfo->getStartSlotFor(DstBB) == VInstrInfo::getBundleSlot(FirstBundle)
          && FirstBundle->getOpcode() == VTM::CtrlStart && "Broken Slot!");
-  bool Bypassed = false;
 
   typedef MachineBasicBlock::instr_iterator instr_it;
   instr_it I = FirstBundle;
@@ -971,14 +970,12 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     case VTM::VOpToState_nt:
       emitBr(MI, Slot, Cnds, DstBB, false);
       ++SlotsByPassed;
-      Bypassed = true;
       break;
     case VTM::VOpRetVal:        emitOpRetVal(MI, Slot, Cnds); break;
     case VTM::VOpInternalCall:  emitOpInternalCall(MI, Slot, Cnds);    break;
     case VTM::VOpRet_nt:
       emitOpRet(MI, Slot, Cnds);
       ++SlotsByPassed;
-      Bypassed = true;
       break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, Slot, Cnds);        break;
     case VTM::VOpBRAMTrans:     emitOpBRamTrans(MI, Slot, Cnds);       break;
@@ -993,7 +990,7 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     }
   }
 
-  return Bypassed;
+  return FInfo->getTotalSlotFor(DstBB) == 0;
 }
 
 void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
