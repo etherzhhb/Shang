@@ -530,7 +530,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         MachineInstr *PipeStage =
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
             .addOperand(VInstrInfo::CreateReg(OldR, VInstrInfo::getBitWidth(MO),
-                                             true))
+                                              true))
             .addOperand(VInstrInfo::CreateReg(R, VInstrInfo::getBitWidth(MO)))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(*VInstrInfo::getTraceOperand(RepMI));
@@ -545,7 +545,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         State.addDummyLatencyEntry(PipeStage, 2.0f);
       }
 
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux
+          && Id.getFUType() != VFUs::FinPort) {
         MachineOperand FU = RepMI->getOperand(0);
         FU.clearParent();
         FU.setIsDef(false);

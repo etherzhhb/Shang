@@ -653,10 +653,11 @@ bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
 
   // The FU will never be enabled at the last slot, unless the MBB is pipelined,
   // in which the FU may be enabled in the alias slots of the last slot.
-  if (II >= FInfo->getTotalSlotFor(MBB)) return false;
+  if (II >= FInfo->getTotalSlotFor(MBB)) {
+    if (Id.getFUType() != VFUs::FinPort) return false;
+  } else // Compute the modulo endslot.
+    EndSlot = StartSlot + (EndSlot - StartSlot) % II;
 
-  // Compute the modulo endslot.
-  EndSlot = StartSlot + (EndSlot - StartSlot) % II;
   unsigned CurSlot = FInfo->getIISlotFor(MBB);
 
   // Scan the instructions in the MBB to detect the conflict.
