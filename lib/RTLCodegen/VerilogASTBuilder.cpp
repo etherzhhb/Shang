@@ -914,7 +914,6 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
              FInfo->getStartSlotFor(CurSlot->getParentBB())
            && "Unexpected first slot!");
 
-    Cnds.clear();
     Cnds.push_back(Builder->createCnd(MI));
 
     // Emit the operations.
@@ -943,6 +942,8 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
     default:  assert(0 && "Unexpected opcode!");                          break;
     }
+    Cnds.pop_back();
+    assert(Cnds.empty() && "Unexpected extra predicate operand!");
   }
 }
 
@@ -958,15 +959,16 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
   instr_it I = FirstBundle;
   while ((++I)->isInsideBundle()) {
     MachineInstr *MI = I;
+    if (MI->getOpcode() == VTM::CtrlEnd) break;
 
-    switch (I->getOpcode()) {
+    Cnds.push_back(Builder->createCnd(MI));
+    switch (MI->getOpcode()) {
     case VTM::VOpDstMux:
     case VTM::VOpMoveArg:
     case VTM::VOpMove:
     case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(MI, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
-    case VTM::CtrlEnd:          /*Not need to handle*/        break;
     case VTM::VOpToState_nt:
       emitBr(MI, Slot, Cnds, DstBB, false);
       ++SlotsByPassed;
@@ -988,6 +990,7 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     case VTM::VOpSRA:           emitBinaryFUOp(MI, Slot, Cnds);        break;
     default:  llvm_unreachable("Unexpected opcode!");         break;
     }
+    Cnds.pop_back();
   }
 
   return FInfo->getTotalSlotFor(DstBB) == 0;
@@ -1012,6 +1015,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
     VASTValPtr Cnd = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
     addSuccSlot(CurSlot, TargetSlot, Cnd);
   }
+  Cnds.pop_back();
 }
 
 void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
