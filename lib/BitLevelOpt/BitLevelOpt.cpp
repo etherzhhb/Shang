@@ -111,9 +111,7 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   default:
     PaddingBits = DAG.getConstant(0, PaddingVT, true);
     break;
-  case ISD::SRA:
-  case ISD::SRL:
-  case ISD::SHL:    
+  case ISD::SRA: 
     return SDValue();
   case ISD::ROTL:
     PaddingBits = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, SrcSize - PaddingSize);
@@ -126,16 +124,20 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   }
 
   switch (N->getOpcode()) {
-  case ISD::ROTL: 
+  case ISD::SHL:
+  case ISD::ROTL:{
     // Discard the higher bits of src.
     Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize - PaddingSize, 0);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, Op, PaddingBits);
-  case ISD::ROTR:
+  }
+  case ISD::SRL:
+  case ISD::ROTR:{
     // Discard the lower bits of src.
     Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, PaddingSize);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, PaddingBits, Op);
+  }
   default:
     assert(0 && "Bad opcode!");
     return SDValue();
