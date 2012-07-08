@@ -55,6 +55,7 @@ namespace VFUs {
     Mux = 7,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
+    LastBitLevelChainingFUType = Mult,
     LastPostBindFUType = ICmp,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
     LastCommonFUType = Mux,
@@ -64,8 +65,7 @@ namespace VFUs {
     // RTL module corresponding to callee functions of function corresponding to
     // current RTL module.
     CalleeFN = 8,
-    FinPort = 9,
-    LastFUType = FinPort,
+    LastFUType = CalleeFN,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
     // all kind of function units are selected.

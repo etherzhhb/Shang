@@ -863,9 +863,6 @@ FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
     unsigned Id = MI->getOperand(2).getImm();
     return FuncUnitId(VFUs::Mux, Id);
   }
-  case VTM::VOpRet:
-  case VTM::VOpRet_nt:
-    return FuncUnitId(VFUs::FinPort, 0);
   default:
     return FuncUnitId();
   }
