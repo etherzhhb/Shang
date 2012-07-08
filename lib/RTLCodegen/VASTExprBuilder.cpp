@@ -932,6 +932,10 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
 
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(RHS)) {
     uint8_t ImmVal = Imm.getUnsignedValue();
+
+    // If we not shift at all, simply return the operand.
+    if (ImmVal == 0) return LHS;
+
     switch(Opc) {
     case VASTExpr::dpShl:{
       VASTValPtr PaddingBits = buildBitSliceExpr(getOrCreateImmediate(0,8), 
