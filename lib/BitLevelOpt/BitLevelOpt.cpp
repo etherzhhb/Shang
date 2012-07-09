@@ -97,8 +97,28 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
 
   // Limit the shift amount.
   if (!ExtractConstant(ShiftAmt, ShiftVal)) {
+    unsigned MaxShiftAmtSize = Log2_32_Ceil(VTargetLowering::computeSizeInBits(Op));
+    unsigned ShiftAmtSize = VTargetLowering::computeSizeInBits(ShiftAmt);
+    // Limit the shift amount to the the width of operand.
+    if (ShiftAmtSize > MaxShiftAmtSize) {
+      ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
+                                              MaxShiftAmtSize, 0,
+                                              ShiftAmt.getValueSizeInBits());
+      DCI.AddToWorklist(ShiftAmt.getNode());
+      SDValue NewNode = DAG.getNode(N->getOpcode(), dl, N->getVTList(),
+                                    Op, ShiftAmt);
+      // Replace N by a new value shifted by the right amount, and do not try
+      // to combine the user of this node because there is nothing happen in
+      // fact.
+      DCI.CombineTo(N, NewNode, false);
+      return SDValue(N, 0);
+    }
+
     return SDValue();
   }
+
+  // If we not shift at all, simply return the operand.
+  if (ShiftVal == 0) return N->getOperand(0);
 
   unsigned SrcSize = VTargetLowering::computeSizeInBits(Op);
   EVT VT = N->getValueType(0);
@@ -111,8 +131,10 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   default:
     PaddingBits = DAG.getConstant(0, PaddingVT, true);
     break;
-  case ISD::SRA: 
-    return SDValue();
+  case ISD::SRA:
+    PaddingBits = VTargetLowering::getBitRepeat(DAG, dl, VTargetLowering::getSignBit(DAG, dl, Op),
+      PaddingSize);
+    break;
   case ISD::ROTL:
     PaddingBits = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, SrcSize - PaddingSize);
     DCI.AddToWorklist(PaddingBits.getNode());
@@ -124,20 +146,20 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   }
 
   switch (N->getOpcode()) {
-  case ISD::SHL:
-  case ISD::ROTL:{
+  case ISD::ROTL:
+  case ISD::SHL: {
     // Discard the higher bits of src.
     Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize - PaddingSize, 0);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, Op, PaddingBits);
   }
+  case ISD::ROTR:
+  case ISD::SRA:
   case ISD::SRL:
-  case ISD::ROTR:{
     // Discard the lower bits of src.
     Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, PaddingSize);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, PaddingBits, Op);
-  }
   default:
     assert(0 && "Bad opcode!");
     return SDValue();
