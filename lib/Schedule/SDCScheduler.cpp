@@ -181,6 +181,10 @@ bool SDCScheduler::scheduleState() {
   TotalRows = get_Nrows(lp);
   buildASAPObject();
   //buildOptimizingSlackDistributionObject();
+
+  set_verbose(lp, CRITICAL);
+  DEBUG(set_verbose(lp, FULL));
+
   int result = solve(lp);
 
   switch (result) {
