@@ -432,7 +432,7 @@ unsigned SchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
+unsigned SchedulingBase::buildTimeFrameAndResetSchedule(bool rstSTF) {
   if (rstSTF) State.resetSchedule(getMII());
 
   buildTimeFrame();
@@ -454,7 +454,7 @@ void SchedulingBase::schedulePassiveSUnits() {
     DEBUG(A->print(dbgs()));
     unsigned step = getASAPStep(A);
     A->scheduledTo(step);
-    buildFDepHD(false);
+    buildTimeFrameAndResetSchedule(false);
   }
 }
 
@@ -469,7 +469,7 @@ bool SchedulingBase::allNodesSchedued() const {
 }
 
 bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
-  if (refreshFDepHD) buildFDepHD(true);
+  if (refreshFDepHD) buildTimeFrameAndResetSchedule(true);
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {

@@ -454,7 +454,7 @@ void SDCScheduler::buildSchedule(lprec *lp) {
 }
 
 bool SDCScheduler::scheduleState() {
-  buildFDepHD(true);
+  buildTimeFrameAndResetSchedule(true);
   DEBUG(viewGraph());
   //Ensure there is no resource conflict in critical path.
   if (!scheduleCriticalPath(false))

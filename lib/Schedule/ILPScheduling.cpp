@@ -421,7 +421,7 @@ void ILPScheduler::buildSchedule(lprec *lp) {
 }
 
 bool ILPScheduler::scheduleState() {
-  buildFDepHD(true);
+  buildTimeFrameAndResetSchedule(true);
 
   // Ensure there is no resource conflict in critical path.
   // FIXME: We can consider resource conflict in build FDepHD.

@@ -143,7 +143,7 @@ public:
 
   void verifyFUUsage();
 
-  unsigned buildFDepHD(bool resetSTF);
+  unsigned buildTimeFrameAndResetSchedule(bool resetSTF);
 
   unsigned computeRecMII();
   unsigned computeResMII();
