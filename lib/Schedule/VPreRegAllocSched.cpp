@@ -709,7 +709,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
-    DetialLatencyInfo::PtrTy Src = I->first;
+    InstPtrTy Src = I->first;
     // Get the latency from SrcMI to MI.
     float DetailLatency = DetialLatencyInfo::getLatency(*I);
     int Latency = int(ceil(DetailLatency));

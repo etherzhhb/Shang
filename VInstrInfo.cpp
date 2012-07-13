@@ -933,7 +933,7 @@ void BitWidthAnnotator::changeToDefaultPred() {
 typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
 typedef DepLatInfoTy::mapped_type LatInfoTy;
 
-static void updateLatency(DepLatInfoTy &CurLatInfo, DetialLatencyInfo::PtrTy Src,
+static void updateLatency(DepLatInfoTy &CurLatInfo, InstPtrTy Src,
                           float MSBLatency, float LSBLatency) {
   // Latency from a control operation is simply the latency of the control
   // operation.

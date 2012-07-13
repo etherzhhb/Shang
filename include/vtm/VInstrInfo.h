@@ -338,52 +338,56 @@ public:
   void changeToDefaultPred();
 };
 
+struct InstPtrTy : public PointerUnion<MachineInstr*, MachineBasicBlock*> {
+  typedef PointerUnion<MachineInstr*, MachineBasicBlock*> Base;
+
+  bool isMI() const { return is<MachineInstr*>(); }
+  bool isMBB() const { return is<MachineBasicBlock*>(); }
+
+  MachineInstr* dyn_cast_mi() const {
+    return dyn_cast<MachineInstr*>();
+  }
+
+  MachineBasicBlock* dyn_cast_mbb() const {
+    return dyn_cast<MachineBasicBlock*>();
+  }
+
+  MachineInstr* get_mi() const {
+    return get<MachineInstr*>();
+  }
+
+  MachineBasicBlock* get_mbb() const {
+    return get<MachineBasicBlock*>();
+  }
+
+  operator MachineInstr*() const {
+    return dyn_cast_mi();
+  }
+
+  bool operator< (InstPtrTy RHS) const {
+    return getOpaqueValue() < RHS.getOpaqueValue();
+  }
+
+  // Dirty Hack: Accept constant pointer and perform const_cast. We should get
+  // rid of this.
+  /*implicit*/ InstPtrTy(const MachineInstr *MI)
+    : Base(const_cast<MachineInstr*>(MI)) {
+    assert(MI && "Unexpected null pointer!");
+  }
+
+  /*implicit*/ InstPtrTy(const MachineBasicBlock *MBB)
+    : Base(const_cast<MachineBasicBlock*>(MBB)) {
+    assert(MBB && "Unexpected null pointer!");
+  }
+};
+
 // Compute the detail ctrlop to ctrlop latency (in cycle ratio) infromation of
 // a given MBB.
 class DetialLatencyInfo {
 public:
-  struct PtrTy : public PointerUnion<const MachineInstr*,
-                                     const MachineBasicBlock*> {
-    typedef PointerUnion<const MachineInstr*, const MachineBasicBlock*> Base;
-
-    bool isMI() const { return is<const MachineInstr*>(); }
-    bool isMBB() const { return is<const MachineBasicBlock*>(); }
-
-    const MachineInstr* dyn_cast_mi() const {
-      return dyn_cast<const MachineInstr*>();
-    }
-
-    const MachineBasicBlock* dyn_cast_mbb() const {
-      return dyn_cast<const MachineBasicBlock*>();
-    }
-
-    const MachineInstr* get_mi() const {
-      return get<const MachineInstr*>();
-    }
-
-    const MachineBasicBlock* get_mbb() const {
-      return get<const MachineBasicBlock*>();
-    }
-
-    operator const MachineInstr*() const {
-      return dyn_cast_mi();
-    }
-
-    bool operator< (PtrTy RHS) const {
-      return getOpaqueValue() < RHS.getOpaqueValue();
-    }
-
-    /*implicit*/ PtrTy(const MachineInstr *MI) : Base(MI) {
-      assert(MI && "Unexpected null pointer!");
-    }
-
-    /*implicit*/ PtrTy(const MachineBasicBlock *MBB) : Base(MBB) {
-      assert(MBB && "Unexpected null pointer!");
-    }
-  };
   // The latency of MSB and LSB from a particular operation to the current
   // operation.
-  typedef std::map<PtrTy, std::pair<float, float> > DepLatInfoTy;
+  typedef std::map<InstPtrTy, std::pair<float, float> > DepLatInfoTy;
   static float getLatency(DepLatInfoTy::value_type v) {
     return std::max(v.second.first, v.second.second);
   }
