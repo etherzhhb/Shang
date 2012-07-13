@@ -961,6 +961,7 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
       VASTValPtr Ops[] = { SignBits, LHS }; 
       return buildBitCatExpr(Ops, BitWidth);   
     }
+    default: llvm_unreachable("Unexpected opcode!"); break;
     }
   }
   VASTValPtr Ops[] = { LHS, RHS }; 
