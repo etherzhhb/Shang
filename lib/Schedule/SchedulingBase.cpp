@@ -269,7 +269,7 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
 }
 
 void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
-  MachineInstr *MI = U->getRepresentativeInst();
+  MachineInstr *MI = U->getRepresentativePtr();
   FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
   if (FU.isTrivial()) return;
 
@@ -317,7 +317,7 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
 }
 
 bool SchedulingBase::hasSpareFU(VSUnit *U, unsigned step) {
-  MachineInstr *MI = U->getRepresentativeInst();
+  MachineInstr *MI = U->getRepresentativePtr();
   FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
   if (FU.isTrivial()) return true;
 
@@ -380,7 +380,7 @@ void SchedulingBase::revertFUUsage(VSUnit *U, unsigned step) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  revertFUUsage(U->getRepresentativeInst(), step, U->getLatency(), FU);
+  revertFUUsage(U->getRepresentativePtr(), step, U->getLatency(), FU);
   // Revert the Usage of DstMux.
   //for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
   //  MachineInstr *MI = U->getInstrAt(i);

@@ -423,7 +423,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   typedef VSchedGraph::sched_iterator it;
   for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *DstU = *I;
-    MachineInstr *DstMI = DstU->getRepresentativeInst();
+    MachineInstr *DstMI = DstU->getRepresentativePtr();
     // Skip the non-memory operation and non-call operation.
     if (DstMI == 0) continue;
 
@@ -450,7 +450,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       MachineMemOperand *SrcMO = I->first;
       VSUnit *SrcU = I->second;
 
-      MachineInstr *SrcMI = SrcU->getRepresentativeInst();
+      MachineInstr *SrcMI = SrcU->getRepresentativePtr();
 
       bool MayBothActive = !VInstrInfo::isPredicateMutex(SrcMI, DstMI);
       if (!MayBothActive) ++MutexPredNoAlias;
@@ -690,7 +690,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
   for (unsigned i = 0, e = U->num_instrs(); i < e; ++i) {
     // Do not consider positive intra schedule unit latency at the moment.
     int IntraLatency = i ? std::min(int(U->getLatencyAt(i)), 0) : 0;
-    int InstLatency = calculateLatencyFromEntry(U->getInstrAt(i));
+    int InstLatency = calculateLatencyFromEntry(U->getPtrAt(i));
     Latency = std::max(Latency, InstLatency - IntraLatency);
   }
 
@@ -764,7 +764,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
   MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
 
   // Find the incoming copy.
-  MachineInstr *IncomingCopy = PHISU->getInstrAt(1);
+  MachineInstr *IncomingCopy = PHISU->getPtrAt(1);
   assert(IncomingCopy->getOpcode() == VTM::VOpMvPhi && "Expect PHI move!");
   DepLatInfoTy *LatInfo = CurState.getDepLatInfo(IncomingCopy);
   assert(LatInfo && "Latency information for incoming copy not avaiable!");
@@ -802,7 +802,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   unsigned NumValDep = 0;
 
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
-    MachineInstr *MI = A->getInstrAt(I);
+    MachineInstr *MI = A->getPtrAt(I);
     int IntraSULatency = I ? A->getLatencyAt(I) : 0;
 
     assert(MI && "Unexpected entry root!");
@@ -826,7 +826,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 
       // If we got a back-edge, that should be a phinode.
       if (Dep->getIdx() > A->getIdx()) {
-        assert(A->getRepresentativeInst()->isPHI()
+        assert(A->getRepresentativePtr().get_mi()->isPHI()
                && "Expected backedge for PHI!");
         // Cross iteration dependences do not make sense in normal loops.
         if (CurState.isPipelined())
@@ -873,7 +873,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   typedef VSUnit::instr_iterator it;
   assert(A->isControl() && "Unexpected data-path schedule unit!");
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
-    MachineInstr *MI = A->getInstrAt(I);    
+    MachineInstr *MI = A->getPtrAt(I);    
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *DepLat =
       CurState.getDepLatInfo(MI);
@@ -969,7 +969,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
   // Look for the source value form distributed multiplexers.
   SmallVector<std::pair<MachineInstr*, unsigned>, 4> WorkStack;
-  WorkStack.push_back(std::make_pair(U->getRepresentativeInst(), 0));
+  WorkStack.push_back(std::make_pair(U->getRepresentativePtr(), 0));
 
   while (!WorkStack.empty()) {
     MachineInstr *CurMI = WorkStack.back().first;
@@ -1062,7 +1062,7 @@ template<int AllowDangling>
 void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
   typedef VSchedGraph::sched_iterator it;
   VSUnit *ExitRoot = CurState.getExitRoot();
-  MachineInstr *ExitMI = ExitRoot->getRepresentativeInst();
+  MachineInstr *ExitMI = ExitRoot->getRepresentativePtr();
   for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *VSU = *I;
 
@@ -1071,7 +1071,7 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
     if (VSU->getNumUses() == 0 && VSU != ExitRoot) {
-      assert((AllowDangling || CurState.isLoopOp(VSU->getRepresentativeInst()))
+      assert((AllowDangling || CurState.isLoopOp(VSU->getRepresentativePtr()))
              && "Unexpected handing node!");
 
       if (VSU->isDatapath() && AllowDangling) continue;
@@ -1221,7 +1221,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   addSchedDepForSU(ExitSU, CurState, true);
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI<VDCtrlDep>(ExitSU->getRepresentativeInst(), 0/*Offset*/,
+  addSchedDepForMI<VDCtrlDep>(ExitSU->getRepresentativePtr(), 0/*Offset*/,
                               ExitSU, CurState, ExitDepInfo);
 
   // If we have a trivial schedule graph that only containing entry and exit

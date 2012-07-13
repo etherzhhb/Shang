@@ -506,7 +506,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     OpSlot SchedSlot(A->getSlot(), A->isControl());
 
     // Insert the DiableFU instruction If necessary.
-    MachineInstr *RepMI = A->getRepresentativeInst();
+    MachineInstr *RepMI = A->getRepresentativePtr();
     if (RepMI) {
       FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
       MachineBasicBlock::iterator II = RepMI;
@@ -561,7 +561,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     }
 
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
-      MachineInstr *Inst = A->getInstrAt(i);
+      MachineInstr *Inst = A->getPtrAt(i);
       // Ignore the entry node marker (null) and implicit define.
       if (Inst && !Inst->isImplicitDef()) {
         if (Inst->isPHI())
@@ -821,6 +821,7 @@ static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
 
 void VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
+  MachineBasicBlock *MBB = getMachineBasicBlock();
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 

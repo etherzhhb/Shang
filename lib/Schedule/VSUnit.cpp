@@ -47,7 +47,7 @@ DisableMultiCyclesChain("vtm-disable-multi-cycles-chain",
 
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
-  MBB->dump();
+  getMachineBasicBlock()->dump();
 }
 
 void VSchedGraph::dump() const {
@@ -59,7 +59,7 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 
   if (!VInstrInfo::isBrCndLike(MI->getOpcode())) return false;
 
-  if (MI->getOperand(1).getMBB() != MBB) return false;
+  if (MI->getOperand(1).getMBB() != getMachineBasicBlock()) return false;
 
   // Ok, remember this instruction as self enable.
   LoopOp.setPointer(MI);
@@ -69,7 +69,7 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
   assert(MI->getOpcode() == VTM::VOpMvPhi && "Bad opcode!");
 
-  return MI->getOperand(2).getMBB() == MBB && enablePipeLine();
+  return MI->getOperand(2).getMBB() == getMachineBasicBlock() && enablePipeLine();
 }
 
 void VSchedGraph::verify() const {
@@ -105,7 +105,7 @@ void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
   assert(!Src->isEntry() && "Cannot replace entry!");
 
   for (unsigned i = 0, e = Src->num_instrs(); i != e; ++i) {
-    MachineInstr *MI = Src->getInstrAt(i);
+    MachineInstr *MI = Src->getPtrAt(i);
     int8_t IntraSULatency = i == 0 ? 0 : Src->getLatencyAt(i);
     IntraSULatency += Latency;
     Dst->addInstr(MI, IntraSULatency);
@@ -249,6 +249,7 @@ void VSchedGraph::scheduleLinear() {
 }
 
 void VSchedGraph::scheduleLoop() {
+  MachineBasicBlock *MBB = getMachineBasicBlock();
   DEBUG(dbgs() << "Try to pipeline MBB#" << MBB->getNumber()
                << " MF#" << MBB->getParent()->getFunctionNumber() << '\n');
   OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
@@ -295,10 +296,11 @@ void VSchedGraph::viewGraph() {
 }
 
 void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
+  MachineBasicBlock *MBB = getMachineBasicBlock();
   assert(U->isDatapath() && "Expected datapath operation!");
   assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
 
-  MachineInstr *MI = U->getRepresentativeInst();
+  MachineInstr *MI = U->getRepresentativePtr();
   const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = DLInfo.getDepLatInfo(MI);
   assert(DepLatInfo && "dependence latency information not available?");
 
@@ -437,7 +439,7 @@ unsigned VSUnit::countValUses() const {
 }
 
 unsigned VSUnit::getOpcode() const {
-  if (MachineInstr *I = getRepresentativeInst())
+  if (MachineInstr *I = getRepresentativePtr())
     return I->getOpcode();
 
   return VTM::INSTRUCTION_LIST_END;
@@ -449,14 +451,14 @@ void VSUnit::scheduledTo(unsigned slot) {
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {
-  if (MachineInstr *Instr = getRepresentativeInst())
+  if (MachineInstr *Instr = getRepresentativePtr())
     return VInstrInfo::getFUType(Instr->getOpcode());
 
   return VFUs::Trivial;
 }
 
 bool VSUnit::isDatapath() const {
-  if (MachineInstr *Instr = getRepresentativeInst())
+  if (MachineInstr *Instr = getRepresentativePtr())
     return VInstrInfo::isDatapath(Instr->getOpcode());
 
   return false;
@@ -470,7 +472,7 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
 
 int VSUnit::getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const{
   int Latency = SrcLatency;
-  if (SrcMI != getRepresentativeInst()) {
+  if (SrcMI != getRepresentativePtr()) {
     Latency += getLatencyFor(SrcMI);
   }
 
@@ -481,7 +483,7 @@ void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
   for (unsigned i = 0, e = num_instrs(); i < e; ++i)
-    if (MachineInstr *Instr = getInstrAt(i)) {
+    if (MachineInstr *Instr = getPtrAt(i)) {
       const TargetInstrInfo *TII = Instr->getParent()->getParent()->getTarget()
                                          .getInstrInfo();
       OS << TII->getName(Instr->getDesc().getOpcode()) << ' ';

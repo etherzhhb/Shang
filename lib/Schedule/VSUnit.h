@@ -199,7 +199,7 @@ class VSUnit {
 
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
-  SmallVector<MachineInstr*, 8> Instrs;
+  SmallVector<InstPtrTy, 8> Instrs;
   // Latency from representative instruction, the latency of the SUnit is store
   // in latencies[0].
   SmallVector<int8_t, 8> latencies;
@@ -207,14 +207,15 @@ class VSUnit {
   friend class VSchedGraph;
 
   // Create the entry node.
-  VSUnit(unsigned short Idx) : SchedSlot(0), InstIdx(Idx), FUNum(0) {
-    addInstr(0, 0);
+  VSUnit(MachineBasicBlock *MBB, unsigned short Idx) : SchedSlot(0),
+                                                       InstIdx(Idx), FUNum(0) {
+    addInstr(MBB, 0);
   }
 
   VSUnit(unsigned short Idx, unsigned fuid)
     : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(fuid) {}
 
-  void addInstr(MachineInstr *I, int8_t Latency) {
+  void addInstr(InstPtrTy I, int8_t Latency) {
     Instrs.push_back(I);
     latencies.push_back(Latency);
   }
@@ -326,14 +327,14 @@ public:
   unsigned countValUses() const;
 
   // Dirty Hack: Only return the first instruction.
-  MachineInstr *getRepresentativeInst() const {
+  InstPtrTy getRepresentativePtr() const {
     return Instrs.front();
   }
 
-  MachineInstr *getInstrAt(unsigned Idx) const { return Instrs[Idx]; }
+  InstPtrTy getPtrAt(unsigned Idx) const { return Instrs[Idx]; }
 
   bool isRepresentativeInst(MachineInstr *MI) const {
-    return MI == getRepresentativeInst();
+    return MI == getRepresentativePtr();
   }
 
   size_t num_instrs() const { return Instrs.size(); }
@@ -355,20 +356,22 @@ public:
   template<bool IsValDep>
   int getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const;
 
-  typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;
+  typedef SmallVectorImpl<InstPtrTy>::iterator instr_iterator;
 
   instr_iterator instr_begin() { return Instrs.begin(); }
   instr_iterator instr_end()   { return Instrs.end(); }
 
-  typedef SmallVectorImpl<MachineInstr*>::const_iterator const_instr_iterator;
+  typedef SmallVectorImpl<InstPtrTy>::const_iterator const_instr_iterator;
   const_instr_iterator instr_begin() const { return Instrs.begin(); }
   const_instr_iterator instr_end()   const { return Instrs.end(); }
 
   MachineInstr *instr_back() const { return Instrs.back(); }
 
   // If this Schedule Unit is just the place holder for the Entry node.
-  bool isEntry() const { return getRepresentativeInst() == 0; }
-  bool isPHI() const { return !isEntry() && getRepresentativeInst()->isPHI(); }
+  bool isEntry() const { return getRepresentativePtr().isMBB(); }
+  bool isPHI() const {
+    return !isEntry() && getRepresentativePtr().get_mi()->isPHI();
+  }
 
   unsigned getLatency() const {
     return latencies.front();
@@ -480,7 +483,6 @@ public:
   enum { NULL_SU_IDX = 0u };
   DetialLatencyInfo &DLInfo;
 private:
-  MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
   // The VSUnits to schedule.
   ArrayRef<VSUnit*> SUsToSched;
@@ -504,7 +506,7 @@ private:
 public:
   VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : DLInfo(DLInfo), MBB(MBB), Entry(new VSUnit(1)), Exit(0),
+    : DLInfo(DLInfo), Entry(new VSUnit(MBB, 1)), Exit(0),
       SUCount(/*We already have the entry node and a null node (index 0)*/2),
       startSlot(StartSlot), LoopOp(0, HaveLoopOp) {
     AllSUs.push_back(Entry);
@@ -604,7 +606,9 @@ public:
 
   bool isLoopPHIMove(MachineInstr *MI);
 
-  MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
+  MachineBasicBlock *getMachineBasicBlock() const {
+    return Entry->getRepresentativePtr().get_mbb();
+  }
 
   /// Mapping machine instruction to schedule unit, this will help us build the
   /// the dependences between schedule unit based on dependences between machine
@@ -695,7 +699,7 @@ template<bool IsValDep>
 int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
                          VSchedGraph &G) const {
   int Latency = G.getCtrlStepBetween<IsValDep>(SrcMI, DstMI);
-  if (SrcMI != getRepresentativeInst()) {
+  if (SrcMI != getRepresentativePtr()) {
     Latency += getLatencyFor(SrcMI);
   }
 
