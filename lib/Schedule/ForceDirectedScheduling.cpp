@@ -205,27 +205,6 @@ bool ASAPScheduler::scheduleState() {
   return true;
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdge() const {
-  ConflictListTy ConflictList;
-
-  typedef VSchedGraph::sched_iterator sched_it;
-  for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
-    VSUnit *U = *I;
-    FuncUnitId Id = U->getFUId();
-
-    // FIXME: Detect mutually exclusive predicate condition.
-    if (Id.isBound()) ConflictList[Id].push_back(U);
-  }
-
-  S.buildTimeFrame();
-
-  typedef ConflictListTy::iterator iterator;
-  for (iterator I = ConflictList.begin(), E = ConflictList.end(); I != E; ++I)
-    addLinOrdEdge(I->second);
-
-  S->topologicalSortScheduleUnits();
-}
-
 struct alap_less {
   SchedulingBase &Info;
   alap_less(SchedulingBase &s) : Info(s) {}
@@ -243,9 +222,43 @@ struct alap_less {
   }
 };
 
-void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
-  std::sort(SUs.begin(), SUs.end(), alap_less(S));
+void BasicLinearOrderGenerator::addLinOrdEdge() const {
+  ConflictListTy ConflictList;
 
+  typedef VSchedGraph::sched_iterator sched_it;
+  for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    FuncUnitId Id = U->getFUId();
+
+    // FIXME: Detect mutually exclusive predicate condition.
+    if (!Id.isBound()) continue;
+
+    if (Id.getFUType() == VFUs::MemoryBus || Id.getFUType() == VFUs::BRam)
+      // These operations need to be handled specially.
+      Id = FuncUnitId();
+
+    ConflictList[Id].push_back(U);
+  }
+
+  S.buildTimeFrame();
+
+  typedef ConflictListTy::iterator iterator;
+  for (iterator I = ConflictList.begin(), E = ConflictList.end(); I != E; ++I) {
+    std::vector<VSUnit*> &SUs = I->second;
+    std::sort(SUs.begin(), SUs.end(), alap_less(S));
+
+    // A trivial id means SUs contains the MemoryBus and BRam operations,
+    // which need to be handle carefully.
+    if (I->first == FuncUnitId())
+      addLinOrdEdgeForMemOp(SUs);
+    else
+      addLinOrdEdge(I->second);
+  }
+
+  S->topologicalSortScheduleUnits();
+}
+
+void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
   VSUnit *LaterSU = SUs.back();
   SUs.pop_back();
 
@@ -259,5 +272,34 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
     LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
 
     LaterSU = EalierSU;
+  }
+}
+
+void BasicLinearOrderGenerator::addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const {
+  std::map<int, VSUnit*> LastSUs;
+
+  while (!SUs.empty()) {
+    VSUnit *U = SUs.back();
+    SUs.pop_back();
+
+    FuncUnitId Id = U->getFUId();
+    int FUNum = Id.getFUNum();
+    bool IsMemBus = (Id.getFUType() == VFUs::MemoryBus);
+    if (IsMemBus) FUNum = - FUNum;
+
+    typedef std::map<int, VSUnit*>::iterator it;
+    for (it I = LastSUs.begin(), E = LastSUs.end(); I != E; ++I) {
+      // No need to add dependency edges between the same kind of operations.
+      // That is MemBus v.s. MemBus or BRam v.s. BRam
+      if ((I->first > 0) == (FUNum > 0)) continue;
+
+      I->second->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
+    }
+
+    VSUnit *&LaterSU = LastSUs[FUNum];
+    if (LaterSU)
+      LaterSU->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
+
+    LaterSU = U;
   }
 }

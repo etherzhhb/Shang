@@ -203,6 +203,7 @@ protected:
   SchedulingBase &S;
 
   void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
+  void addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const;
 
 public:
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
