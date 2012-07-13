@@ -322,6 +322,9 @@ public:
   size_t getNumUses() const { return UseList.size(); }
   //}
 
+  unsigned countValDeps() const;
+  unsigned countValUses() const;
+
   // Dirty Hack: Only return the first instruction.
   MachineInstr *getRepresentativeInst() const {
     return Instrs.front();

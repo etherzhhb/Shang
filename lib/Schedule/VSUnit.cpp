@@ -411,6 +411,31 @@ void VSUnit::dump() const {
 
 void VDEdge::print(raw_ostream &OS) const {}
 
+unsigned VSUnit::countValDeps() const {
+  unsigned DepCounter = 0;
+
+  for(const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
+    if(I.getEdge()->getEdgeType() != VDEdge::edgeValDep) continue;
+
+    ++DepCounter;
+  }
+
+  return DepCounter;
+}
+
+unsigned VSUnit::countValUses() const {
+  unsigned DepCounter = 0;
+
+  for(const_use_iterator I = use_begin(), E = use_end(); I != E; ++I){
+    const VSUnit* V =*I;
+    if(V->getEdgeFrom(this)->getEdgeType() != VDEdge::edgeValDep) continue;
+
+    ++DepCounter;
+  }
+
+  return DepCounter;
+}
+
 unsigned VSUnit::getOpcode() const {
   if (MachineInstr *I = getRepresentativeInst())
     return I->getOpcode();
