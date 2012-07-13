@@ -174,6 +174,8 @@ bool IterativeModuloScheduling::isAllSUnitScheduled() {
 
 bool ASAPScheduler::scheduleState() {
   State.getEntryRoot()->scheduledTo(State.getStartSlot());
+  buildTimeFrame();
+
   BasicLinearOrderGenerator BLOG(*this);
   BLOG.addLinOrdEdge();
 
@@ -239,8 +241,6 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
 
     ConflictList[Id].push_back(U);
   }
-
-  S.buildTimeFrame();
 
   typedef ConflictListTy::iterator iterator;
   for (iterator I = ConflictList.begin(), E = ConflictList.end(); I != E; ++I) {
