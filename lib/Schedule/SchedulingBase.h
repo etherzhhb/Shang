@@ -305,15 +305,6 @@ class SDCScheduler : public SchedulingBase {
 
     unsigned getComInNum(const VSUnit* Src, const VSUnit* Dst);
 
-    //Sort the vector in ASAP decreasing order.
-    void sortVector(BoundSUVec &Vec, Step2SUMap &Map, unsigned Idx);
-
-    unsigned countValDeps(const VSUnit* U);
-    unsigned countValUses(const VSUnit* U);
-
-    bool isOverlap(const VSUnit* Dst, const VSUnit* Src){
-      return getALAPStep(Src) >= getASAPStep(Dst);
-    }
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);
 
@@ -322,24 +313,6 @@ class SDCScheduler : public SchedulingBase {
 
     // The schedule should satisfy the dependences.
     void addDependencyConstraints(lprec *lp);
-
-    template<typename FuncTy>
-    static unsigned getMaxOrMinSlot(Step2SUMap &Map, unsigned InitVal, FuncTy F);
-
-    static unsigned getMaxSlot(Step2SUMap &Map) {
-      return getMaxOrMinSlot(Map, 0, std::max<unsigned>);
-    }
-
-    static unsigned getMinSlot(Step2SUMap &Map) {
-      return getMaxOrMinSlot(Map, VSUnit::MaxSlot, std::min<unsigned>);
-    }
-
-    // Avoid the resources conflict for the function units.
-    void PreBind();
-    // PreBind the Memory.
-    void PreBindSingleFU(unsigned FUType, Step2SUMap& Map);
-    // PreBind the FUs.
-    void PreBindMultiFU(unsigned FUType, Step2SUMap &Map);
 
     // Build the schedule object function.
     void buildASAPObject();
