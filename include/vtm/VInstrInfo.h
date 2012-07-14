@@ -364,6 +364,18 @@ struct InstPtrTy : public PointerUnion<MachineInstr*, MachineBasicBlock*> {
     return dyn_cast_mi();
   }
 
+  MachineInstr* operator ->() const {
+    return get_mi();
+  }
+
+  operator MachineBasicBlock*() const {
+    return dyn_cast_mbb();
+  }
+
+  MachineBasicBlock *getParent() const {
+    return isMBB() ? get_mbb() : get_mi()->getParent();
+  }
+
   bool operator< (InstPtrTy RHS) const {
     return getOpaqueValue() < RHS.getOpaqueValue();
   }

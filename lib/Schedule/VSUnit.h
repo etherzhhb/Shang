@@ -343,8 +343,7 @@ public:
   size_t num_instrs() const { return Instrs.size(); }
 
   MachineBasicBlock *getParentBB() const {
-    InstPtrTy Ptr = getRepresentativePtr();
-    return Ptr.isMBB() ? Ptr.get_mbb() : Ptr.get_mi()->getParent();
+    return getRepresentativePtr().getParent();
   }
 
   // Get the latency from RepresentativeInst to MI.
