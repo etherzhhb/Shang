@@ -378,7 +378,10 @@ public:
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return getRepresentativePtr().isMBB(); }
   bool isPHI() const {
-    return !isEntry() && getRepresentativePtr().get_mi()->isPHI();
+    if (MachineInstr *MI = getRepresentativePtr())
+      return MI->isPHI();
+
+    return false;
   }
 
   unsigned getLatency() const {
