@@ -722,12 +722,15 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // Ignore the dependency from other BB in local scheduling mode.
       if (SrcSU == 0) continue;
 
-      // Since there are some datapath between current schedule unit and the
-      // entry node, we cannot schedule current schedule unit to the same slot
-      // with the entry root.
-      Latency -= getCyclesToBB(SrcBB, CurMBB);
-      // Adjust the latency to avoid register/FU conflict.
-      Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
+      if (SrcSU == CurState.getEntryRoot()) {
+        // Since there are some datapath between current schedule unit and the
+        // entry node, we cannot schedule current schedule unit to the same slot
+        // with the entry root.
+        Latency -= getCyclesToBB(SrcBB, CurMBB);
+        // Adjust the latency to avoid register/FU conflict.
+        Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
+      }
+
       Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(SrcSU, Latency));
       continue;
@@ -852,7 +855,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (NumValDep == 0) {
-    A->addDep(VDCtrlDep::CreateDep(CurState.getEntryRoot(), 0));
+    A->addDep(VDCtrlDep::CreateDep(CurState.lookupSUnit(A->getParentBB()), 0));
     return;
   }
 
@@ -891,8 +894,12 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !isExit) {
-    unsigned Latency = calculateLatencyFromEntry(A);
-    A->addDep(VDCtrlDep::CreateDep(CurState.getEntryRoot(), Latency));
+    VSUnit *BBEntry = CurState.lookupSUnit(A->getParentBB());
+    unsigned Latency = 0;
+    if (BBEntry == CurState.getEntryRoot())
+      Latency = calculateLatencyFromEntry(A);
+
+    A->addDep(VDCtrlDep::CreateDep(BBEntry, Latency));
   }
 }
 
@@ -968,7 +975,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                SrcSU->getLatencyTo<true>(SrcMI, MI, CurState));
 
   // Merge it into the EntryRoot.
-  return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
+  return CurState.mapMI2SU(MI, CurState.lookupSUnit(MI->getParent()),
                            CurState.getStepsFromEntry(MI));
 }
 
@@ -1030,7 +1037,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   case VTM::PHI:
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!CurState.enablePipeLine()) {
-      CurState.mapMI2SU(MI, CurState.getEntryRoot(),
+      CurState.mapMI2SU(MI, CurState.lookupSUnit(MI->getParent()),
                         CurState.getStepsFromEntry(MI));
       return;
     }
