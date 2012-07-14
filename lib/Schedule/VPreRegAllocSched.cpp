@@ -853,10 +853,12 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
         if (CurState.isPipelined())
           // The iterate distance for back-edge to PHI is always 1.
           A->addDep(VDMemDep::CreateDep<1>(Dep, Latency));
-        else
+        else {
           // Else connect the schedule unit to exit root, since it is not
           // dangling.
-          CurState.getExitRoot()->addDep(VDCtrlDep::CreateDep(Dep, Latency));
+          VSUnit *CurTerminator = CurState.lookUpTerminator(A->getParentBB());
+          CurTerminator->addDep(VDCtrlDep::CreateDep(Dep, Latency));
+        }
       } else {
         A->addDep(VDValDep::CreateDep(Dep, Latency));
         ++NumValDep;
@@ -946,7 +948,8 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
                                               MachineBasicBlock *CurBB) {
   VSUnit *LoopOp = State.getLoopOp();
   assert(LoopOp && "Not in loop?");
-  assert(LoopOp != State.getExitRoot() && "Pipeline not enable!");
+  VSUnit *CurTerminator = State.lookUpTerminator(CurBB);
+  assert(LoopOp != CurTerminator && "Pipeline not enable!");
 
   for (instr_it I = CurBB->begin(), E = CurBB->end();I != E && I->isPHI(); ++I) {
     MachineInstr &PN = *I;
@@ -962,7 +965,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
     typedef VSUnit::use_iterator use_it;
     for (use_it UI = PHISU->use_begin(), UE = PHISU->use_end(); UI != UE; ++UI){
       VSUnit *PHIUser = *UI;
-      if (PHIUser != State.getExitRoot())
+      if (PHIUser != CurTerminator)
         PHISU->addDep(getMemDepEdge(PHIUser, 0, 1));
     }
 
