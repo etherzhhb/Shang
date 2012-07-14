@@ -1086,21 +1086,24 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 template<int AllowDangling>
 void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &CurState,
                                             VSUnit *Terminator) {
-  typedef VSchedGraph::sched_iterator it;
+  typedef MachineBasicBlock::instr_iterator it;
   MachineInstr *ExitMI = Terminator->getRepresentativePtr();
   assert(ExitMI && ExitMI->isTerminator() && "Unexpect instruction type!");
-  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
-    VSUnit *VSU = *I;
+  MachineBasicBlock *MBB = Terminator->getParentBB();
+
+  for (it I = MBB->instr_begin(), E = MBB->instr_end(); I != E; ++I) {
+    MachineInstr *MI = I;
+    VSUnit *VSU = CurState.lookupSUnit(MI);
 
     if (VSU->isScheduled()) continue;
 
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
     if (VSU->getNumUses() == 0 && VSU != Terminator) {
-      assert((AllowDangling || CurState.isLoopOp(VSU->getRepresentativePtr()))
-             && "Unexpected handing node!");
+      if (VSU->isDatapath()) continue;
 
-      if (VSU->isDatapath() && AllowDangling) continue;
+      if (!(AllowDangling || CurState.isLoopOp(VSU->getRepresentativePtr())))
+        llvm_unreachable("Unexpected handing node!");
 
       // A PHIMove can be scheduled to the same slot with the exit root.
       unsigned Latency = VSU->getMaxLatencyTo<false>(ExitMI, CurState);
@@ -1299,10 +1302,8 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State,
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
   State.prepareForDatapathSched();
-  for (su_it I = State.begin() + 1, E = State.end(); I != E; ++I) {
-    VSUnit *U = *I;
-    addValDep(State, U);
-  }
+  for (su_it I = State.begin() + 1, E = State.end(); I != E; ++I)
+    addValDep(State, *I);
 
   // Clear the dangling flag for all node that used (directly/indirectly) by
   // a scheduled node.

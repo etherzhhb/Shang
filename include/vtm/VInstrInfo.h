@@ -391,6 +391,8 @@ struct InstPtrTy : public PointerUnion<MachineInstr*, MachineBasicBlock*> {
     : Base(const_cast<MachineBasicBlock*>(MBB)) {
     assert(MBB && "Unexpected null pointer!");
   }
+
+  InstPtrTy() : Base(static_cast<MachineInstr*>(0)) {}
 };
 
 // Compute the detail ctrlop to ctrlop latency (in cycle ratio) infromation of
