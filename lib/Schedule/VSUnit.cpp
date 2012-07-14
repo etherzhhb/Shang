@@ -89,13 +89,14 @@ void VSchedGraph::verify() const {
   }  
 }
 
-VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
+VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
   VSUnit *SU = new VSUnit(SUCount, fuid);
   ++SUCount;
 
   AllSUs.push_back(SU);
 
-  bool mapped = mapMI2SU(I, SU, DLInfo.getStepsToFinish(I));
+  MachineInstr *MI = Ptr;
+  bool mapped = mapMI2SU(Ptr, SU, MI ? DLInfo.getStepsToFinish(MI) : 0);
   (void) mapped;
   assert(mapped && "Cannot add SU to the inst2su map!");
   return SU;

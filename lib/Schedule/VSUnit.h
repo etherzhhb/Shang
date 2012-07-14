@@ -216,10 +216,10 @@ class VSUnit {
   VSUnit(unsigned short Idx, unsigned fuid)
     : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(fuid) {}
 
-  void addInstr(const MachineInstr *I, int8_t Latency) {
-    assert((Instrs.empty() || getParentBB() == I->getParent())
+  void addPtr(InstPtrTy Ptr, int8_t Latency) {
+    assert((Instrs.empty() || getParentBB() == Ptr.getParent())
            && "Mixing instructions from different BB!");
-    Instrs.push_back(I);
+    Instrs.push_back(Ptr);
     latencies.push_back(Latency);
   }
 
@@ -498,7 +498,7 @@ private:
   SUnitVecTy AllSUs;
   // The VSUnits to schedule.
   ArrayRef<VSUnit*> SUsToSched;
-  VSUnit *Entry, *Exit;
+  VSUnit *Exit;
   // The number of schedule unit.
   unsigned SUCount;
 
@@ -510,7 +510,7 @@ private:
   void scheduleLinear();
   void scheduleLoop();
 
-  typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
+  typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
 
   bool trySetLoopOp(MachineInstr *MI);
@@ -520,11 +520,8 @@ private:
 public:
   VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : DLInfo(DLInfo), Entry(new VSUnit(MBB, 1)), Exit(0),
-      SUCount(/*We already have the entry node and a null node (index 0)*/2),
-      startSlot(StartSlot), LoopOp(0, HaveLoopOp) {
-    AllSUs.push_back(Entry);
-  }
+    : DLInfo(DLInfo), Exit(0), SUCount(1), startSlot(StartSlot),
+      LoopOp(0, HaveLoopOp) {}
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
@@ -577,15 +574,15 @@ public:
   void verify() const;
 
   // VSUnit Creating/Mapping/Merging
-  bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
-    if (SU->num_instrs()
-        && SU->isDatapath() != VInstrInfo::isDatapath(MI->getOpcode()))
+  bool mapMI2SU(InstPtrTy Ptr, VSUnit *SU, int8_t latency) {
+    if (SU->num_instrs() && Ptr.isMI()
+        && SU->isDatapath() != VInstrInfo::isDatapath(Ptr->getOpcode()))
       return false;
 
-    SU->addInstr(MI, latency);
+    SU->addPtr(Ptr, latency);
     SUnitMapType::iterator where;
     bool inserted;
-    tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
+    tie(where, inserted) = InstToSUnits.insert(std::make_pair(Ptr, SU));
     assert(inserted && "Mapping from I already exist!");
     return true;
   }
@@ -601,7 +598,7 @@ public:
 
   void topologicalSortScheduleUnits();
 
-  VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
+  VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
   void setExitRoot(VSUnit *exit) {
     assert(Exit == 0 && "ExitRoot already exist!");
     Exit = exit;
@@ -620,21 +617,20 @@ public:
 
   bool isLoopPHIMove(MachineInstr *MI);
 
-  MachineBasicBlock *getEntryBB() const {
-    return Entry->getParentBB();
-  }
-
   /// Mapping machine instruction to schedule unit, this will help us build the
   /// the dependences between schedule unit based on dependences between machine
   /// instructions.
-  VSUnit *lookupSUnit(const MachineInstr *MI) const {
-    SUnitMapType::const_iterator At = InstToSUnits.find(MI);
-    return At != InstToSUnits.end() ? At->second : 0;
+  VSUnit *lookupSUnit(InstPtrTy Ptr) const {
+    SUnitMapType::const_iterator at = InstToSUnits.find(Ptr);
+    return at == InstToSUnits.end() ? 0 : at->second;
   }
 
   /// @name Roots
   //{
-  VSUnit *getEntryRoot() const { return Entry; }
+  VSUnit *getEntryRoot() const { return AllSUs.front(); }
+  MachineBasicBlock *getEntryBB() const {
+    return getEntryRoot()->getParentBB();
+  }
   VSUnit *getExitRoot() const { return Exit; }
   //}
 
@@ -673,7 +669,10 @@ public:
 
   bool hasLoopOp() const { return LoopOp.getPointer() != 0; }
   VSUnit *getLoopOp() const {
-    return lookupSUnit(LoopOp.getPointer());
+    if (MachineInstr *MI = LoopOp.getPointer())
+      return lookupSUnit(MI);
+
+    return 0;
   }
 
   void print(raw_ostream &OS) const;

@@ -283,6 +283,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
       CurCyclesFromEntry = std::min(CurCyclesFromEntry, getCyclesFromEntry(*PI));
 
     VSchedGraph State(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
+    State.createVSUnit(MBB);
     buildControlPathGraph(State);
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
