@@ -172,15 +172,15 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void clear();
 
-  void buildMemDepEdges(VSchedGraph &CurState);
+  void buildMemDepEdges(VSchedGraph &CurState, MachineBasicBlock *MBB);
 
   bool couldBePipelined(const MachineBasicBlock *MBB);
 
   typedef VSchedGraph::iterator su_it;
-  void buildControlPathGraph(VSchedGraph &State);
+  void buildControlPathGraph(VSchedGraph &State, MachineBasicBlock *MBB);
   void buildDataPathGraph(VSchedGraph &State);
 
-  void buildPipeLineDepEdges(VSchedGraph &State);
+  void buildPipeLineDepEdges(VSchedGraph &State, MachineBasicBlock *MBB);
 
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator);
@@ -284,7 +284,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
     VSchedGraph State(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
     State.createVSUnit(MBB);
-    buildControlPathGraph(State);
+    buildControlPathGraph(State, MBB);
+
     VSUnit *ExitRoot = State.getOrCreateExitRoot();
     ExitRoot->addDep(VDCtrlDep::CreateDep(State.lookUpTerminator(MBB), 0));
     // Sort the schedule units after all units are built.
@@ -422,19 +423,17 @@ static inline bool mayAccessMemory(const MCInstrDesc &TID) {
   return TID.mayLoad() || TID.mayStore() || TID.isCall();
 }
 
-void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
+void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState,
+                                         MachineBasicBlock *MBB) {
   // The schedule unit and the corresponding memory operand.
   typedef std::vector<std::pair<MachineMemOperand*, VSUnit*> > MemOpMapTy;
   MemOpMapTy VisitedMemOps;
   Loop *IRL = IRLI->getLoopFor(CurState.getEntryBB()->getBasicBlock());
 
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
-    VSUnit *DstU = *I;
-    MachineInstr *DstMI = DstU->getRepresentativePtr();
+  typedef MachineBasicBlock::instr_iterator it;
+  for (it I = MBB->instr_begin(), E = MBB->instr_end(); I != E; ++I) {
+    MachineInstr *DstMI = I;
     // Skip the non-memory operation and non-call operation.
-    if (DstMI == 0) continue;
-
     if (!mayAccessMemory(DstMI->getDesc())) continue;
 
     bool isDstLoad = VInstrInfo::mayLoad(DstMI);
@@ -452,6 +451,9 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
                && "Unexpected frame stuffs!");
       }
     }
+
+    VSUnit *DstU = CurState.lookupSUnit(DstMI);
+    assert(DstU && "VSUnit for memory access not found!");
 
     for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
          I != E; ++I) {
@@ -940,8 +942,8 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   return FInfo->getInfo().enablePipeLine();
 }
 
-void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
-  MachineBasicBlock *CurBB = State.getEntryBB();
+void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
+                                              MachineBasicBlock *CurBB) {
   VSUnit *LoopOp = State.getLoopOp();
   assert(LoopOp && "Not in loop?");
   assert(LoopOp != State.getExitRoot() && "Pipeline not enable!");
@@ -1257,8 +1259,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   buildTerminatorDeps<false>(CurState, ExitSU);
 }
 
-void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
-  MachineBasicBlock *MBB = State.getEntryBB();
+void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State,
+                                              MachineBasicBlock *MBB) {
   instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
@@ -1289,14 +1291,10 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   buildExitRoot(State, BI);
 
   // Build loop edges if necessary.
-  if (State.enablePipeLine())
-    buildPipeLineDepEdges(State);
+  if (State.enablePipeLine()) buildPipeLineDepEdges(State, MBB);
 
   // Build the memory edges.
-  buildMemDepEdges(State);
-
-  // Verify the schedule graph.
-  State.verify();
+  buildMemDepEdges(State, MBB);
 }
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
