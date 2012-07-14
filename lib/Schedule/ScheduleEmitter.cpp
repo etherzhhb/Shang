@@ -827,6 +827,13 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 void VSchedGraph::emitSchedule() {
+  // Erase the virtual exit root right now, so that we can avoid the special
+  // code to handle it.
+  iterator exit_root_at = std::find(begin(), end(), getExitRoot());
+  assert(exit_root_at != end() && "Exit root not find!");
+  *exit_root_at = AllSUs.back();
+  AllSUs.resize(AllSUs.size() - 1);
+
   // Sort the SUs by parent BB and its schedule.
   std::sort(begin(), end(), top_sort_bb_and_slot);
 

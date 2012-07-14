@@ -270,6 +270,8 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
 
 void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
   MachineInstr *MI = U->getRepresentativePtr();
+  if (MI == 0) return;
+
   FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
   if (FU.isTrivial()) return;
 
@@ -318,6 +320,8 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
 
 bool SchedulingBase::hasSpareFU(VSUnit *U, unsigned step) {
   MachineInstr *MI = U->getRepresentativePtr();
+  if (MI == 0) return true;
+
   FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
   if (FU.isTrivial()) return true;
 

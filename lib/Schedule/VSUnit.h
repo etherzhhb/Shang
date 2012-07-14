@@ -526,6 +526,7 @@ public:
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
+    delete Exit;
   }
 
   // Forwarding function from DetialLatencyInfo.
@@ -652,7 +653,6 @@ public:
   MachineBasicBlock *getEntryBB() const {
     return getEntryRoot()->getParentBB();
   }
-
   VSUnit *getExitRoot() const { return Exit; }
   //}
 

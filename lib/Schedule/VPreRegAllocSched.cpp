@@ -813,6 +813,9 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
 }
 
 void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
+  // Ignore the virtual exit root.
+  if (A == CurState.getExitRoot()) return;
+
   typedef VSUnit::instr_iterator it;
   bool isCtrl = A->isControl();
   unsigned NumValDep = 0;
