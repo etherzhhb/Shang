@@ -276,29 +276,28 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
 }
 
 void BasicLinearOrderGenerator::addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const {
-  std::map<int, VSUnit*> LastSUs;
+  std::map<FuncUnitId, VSUnit*> LastSUs;
 
   while (!SUs.empty()) {
     VSUnit *U = SUs.back();
     SUs.pop_back();
 
     FuncUnitId Id = U->getFUId();
-    int FUNum = Id.getFUNum();
-    bool IsMemBus = (Id.getFUType() == VFUs::MemoryBus);
-    if (IsMemBus) FUNum = - FUNum;
+    VSUnit *&LaterSU = LastSUs[Id];
 
-    typedef std::map<int, VSUnit*>::iterator it;
-    for (it I = LastSUs.begin(), E = LastSUs.end(); I != E; ++I) {
-      // No need to add dependency edges between the same kind of operations.
-      // That is MemBus v.s. MemBus or BRam v.s. BRam
-      if ((I->first > 0) == (FUNum > 0)) continue;
+    if (LaterSU) {
+      typedef std::map<FuncUnitId, VSUnit*>::iterator it;
 
-      I->second->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
-    }
+      for (it I = LastSUs.begin(), E = LastSUs.end(); I != E; ++I) {
+        // No need to add dependency edge from same kind of operation to prevent
+        // the variable latency MemBusOps from breaking the BRAM pipeline.
+        if (I->first.getFUType() == Id.getFUType()) continue;
 
-    VSUnit *&LaterSU = LastSUs[FUNum];
-    if (LaterSU)
+        I->second->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
+      }
+
       LaterSU->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
+    }
 
     LaterSU = U;
   }
