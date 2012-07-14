@@ -706,7 +706,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   assert(MI && "Unexpected entry root!");
   // Dirt
   MIOffset = std::min(MIOffset, 0);
-  MachineBasicBlock *CurMBB = CurState.getEntryBB();
+  MachineBasicBlock *CurMBB = MI->getParent();
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
@@ -717,38 +717,43 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
 
     // LatencyInfo use a special marker to mark the current MI have some latency
     // from entry of the MBB.
-    if (!Src.isMI()) {
+    if (MachineBasicBlock *SrcBB = Src) {
+      VSUnit *SrcSU = CurState.lookupSUnit(SrcBB);
+      // Ignore the dependency from other BB in local scheduling mode.
+      if (SrcSU == 0) continue;
+
       // Since there are some datapath between current schedule unit and the
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
-      Latency -= getCyclesToBB(Src.get_mbb(), CurMBB);
+      Latency -= getCyclesToBB(SrcBB, CurMBB);
       // Adjust the latency to avoid register/FU conflict.
       Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
       Latency -= MIOffset;
-      A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
+      A->addDep(DepEdgeTy::CreateDep(SrcSU, Latency));
       continue;
     }
 
-    MachineInstr *SrcMI = const_cast<MachineInstr*>(Src.get_mi());
+    MachineInstr *SrcMI = Src.get_mi();
     // Step between MI and its dependent.
     unsigned MinCtrlDistance
       = CurState.getCtrlStepBetween<DepEdgeTy::IsValDep>(SrcMI, MI);
     // The the latency must bigger than the minimal latency between two control
     // operations.
     Latency = std::max(int(MinCtrlDistance), Latency);
+    VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
 
-    if (SrcMI->getParent() != CurMBB) {
+    if (SrcSU == 0) {
+      assert(SrcMI->getParent() != CurMBB && "SU for SrcMI not found!");
       // Now SrcMI is from other BasicBlock, try to make use of the steps from
       // SrcMI's schedule to the entry of current BB.
       Latency -= getCyclesToBB(SrcMI, CurMBB);
       // Adjust the latency to avoid register/FU conflict.
       Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
       Latency -= MIOffset;
-      A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
+      A->addDep(DepEdgeTy::CreateDep(CurState.lookupSUnit(CurMBB), Latency));
       continue;
     }
 
-    VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
