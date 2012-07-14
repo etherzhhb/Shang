@@ -102,24 +102,6 @@ VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
   return SU;
 }
 
-void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
-  assert(!Src->isEntry() && "Cannot replace entry!");
-
-  for (unsigned i = 0, e = Src->num_instrs(); i != e; ++i) {
-    MachineInstr *MI = Src->getPtrAt(i);
-    int8_t IntraSULatency = i == 0 ? 0 : Src->getLatencyAt(i);
-    IntraSULatency += Latency;
-    Dst->addInstr(MI, IntraSULatency);
-    InstToSUnits[MI] = Dst;
-  }
-
-  // Delete source and mark it as dead.
-  VSUnit *&SrcPos = AllSUs[Src->getIdx()];
-  assert(SrcPos == Src && "The index of Src not matches its position!");
-  delete SrcPos;
-  SrcPos = 0;
-}
-
 // Sort the schedule to place all control schedule unit at the beginning of the
 // AllSU vector.
 static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {

@@ -586,8 +586,6 @@ public:
     return true;
   }
 
-  // Merge Src into Dst with a given latency.
-  void mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency);
   void removeDeadSU();
   // Sort the schedule units to place control operations at the beginning of
   // the SU list, so we can only schedule the control operations
@@ -630,6 +628,7 @@ public:
   MachineBasicBlock *getEntryBB() const {
     return getEntryRoot()->getParentBB();
   }
+
   VSUnit *getExitRoot() const { return Exit; }
   //}
 
