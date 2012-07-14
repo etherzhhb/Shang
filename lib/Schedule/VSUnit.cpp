@@ -401,10 +401,10 @@ void VSchedGraph::scheduleDatapathASAP() {
 }
 
 
-void VSchedGraph::fixPHISchedules() {
+void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
   // Fix the schedule of PHI's so we can emit the incoming copies at a right
   // slot;
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+  for (iterator I = su_begin, E = su_end; I != E; ++I) {
     VSUnit *U = *I;
     if (!U->isPHI()) continue;
 

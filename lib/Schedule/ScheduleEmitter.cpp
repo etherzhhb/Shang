@@ -812,31 +812,59 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   return MO;
 }
 
-static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
+static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getSlot() != RHS->getSlot())
     return LHS->getSlot() < RHS->getSlot();
 
   return LHS->getIdx() < RHS->getIdx();
 }
 
+static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
+  if (LHS->getParentBB() != RHS->getParentBB())
+    return LHS->getParentBB()->getNumber() < RHS->getParentBB()->getNumber();
+
+  return top_sort_slot(LHS, RHS);
+}
+
 void VSchedGraph::emitSchedule() {
+  // Sort the SUs by parent BB and its schedule.
+  std::sort(begin(), end(), top_sort_bb_and_slot);
+
+  iterator to_emit_begin = begin();
+  MachineBasicBlock *PrevBB = (*to_emit_begin)->getParentBB();
+  for (iterator I = to_emit_begin, E = end(); I != E; ++I) {
+    MachineBasicBlock *CurBB = (*I)->getParentBB();
+    if (CurBB == PrevBB) continue;
+
+    // If we are entering a new BB, emit the SUs in the previous bb.
+    emitSchedule(to_emit_begin, I, PrevBB);
+    to_emit_begin = I;
+    PrevBB = CurBB;
+  }
+
+  // Dont forget the SUs in last BB.
+  emitSchedule(to_emit_begin, end(), PrevBB);
+}
+
+void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
+                               MachineBasicBlock *MBB) {
   unsigned CurSlot = startSlot;
-  MachineBasicBlock *MBB = getEntryBB();
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
-  if (enablePipeLine()) fixPHISchedules();
+  if (enablePipeLine()) {
+    fixPHISchedules(su_begin, su_end);
+    // Need to resort the schedule units after the schedule of PHIs are changed.
+    std::sort(su_begin, su_end, top_sort_slot);
+  }
 
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this, MBB);
-
-  std::sort(begin(), end(), top_sort_start);
   DEBUG(dbgs() << "Sorted AllSUs:\n";
-        for (iterator I = begin(), E = end(); I != E; ++I)
+        for (iterator I = su_begin, E = su_end; I != E; ++I)
           (*I)->dump(););
 
-
-  for (iterator I = begin(), E = end(); I != E; ++I) {
+  for (iterator I = su_begin, E = su_end; I != E; ++I) {
     VSUnit *A = *I;
     DEBUG(dbgs() << "Going to emit: "; A->dump());
     if (A->getSlot() != CurSlot)

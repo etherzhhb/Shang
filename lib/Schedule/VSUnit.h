@@ -491,6 +491,7 @@ typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
 class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
+  typedef SUnitVecTy::iterator iterator;
   enum { NULL_SU_IDX = 0u };
   DetialLatencyInfo &DLInfo;
 private:
@@ -514,6 +515,8 @@ private:
 
   bool trySetLoopOp(MachineInstr *MI);
 
+  void emitSchedule(iterator su_begin, iterator su_end, MachineBasicBlock *MBB);
+  void fixPHISchedules(iterator su_begin, iterator su_end);
 public:
   VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
               bool HaveLoopOp, unsigned short StartSlot)
@@ -636,7 +639,6 @@ public:
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
-  typedef SUnitVecTy::iterator iterator;
   iterator begin() { return AllSUs.begin(); }
   iterator end() { return AllSUs.end(); }
   size_t all_schedunits_size() const { return SUCount; }
@@ -686,7 +688,6 @@ public:
   void scheduleDatapath();
   void scheduleDatapathALAP();
   void scheduleDatapathASAP();
-  void fixPHISchedules();
   void emitSchedule();
   //}
 
