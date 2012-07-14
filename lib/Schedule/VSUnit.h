@@ -209,13 +209,16 @@ class VSUnit {
   // Create the entry node.
   VSUnit(MachineBasicBlock *MBB, unsigned short Idx) : SchedSlot(0),
                                                        InstIdx(Idx), FUNum(0) {
-    addInstr(MBB, 0);
+    Instrs.push_back(MBB);
+    latencies.push_back(0);
   }
 
   VSUnit(unsigned short Idx, unsigned fuid)
     : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(fuid) {}
 
-  void addInstr(InstPtrTy I, int8_t Latency) {
+  void addInstr(const MachineInstr *I, int8_t Latency) {
+    assert((Instrs.empty() || getParentBB() == I->getParent())
+           && "Mixing instructions from different BB!");
     Instrs.push_back(I);
     latencies.push_back(Latency);
   }
@@ -338,6 +341,11 @@ public:
   }
 
   size_t num_instrs() const { return Instrs.size(); }
+
+  MachineBasicBlock *getParentBB() const {
+    InstPtrTy Ptr = getRepresentativePtr();
+    return Ptr.isMBB() ? Ptr.get_mbb() : Ptr.get_mi()->getParent();
+  }
 
   // Get the latency from RepresentativeInst to MI.
   int8_t getLatencyFor(MachineInstr *MI) const;
@@ -607,7 +615,7 @@ public:
   bool isLoopPHIMove(MachineInstr *MI);
 
   MachineBasicBlock *getEntryBB() const {
-    return Entry->getRepresentativePtr().get_mbb();
+    return Entry->getParentBB();
   }
 
   /// Mapping machine instruction to schedule unit, this will help us build the
