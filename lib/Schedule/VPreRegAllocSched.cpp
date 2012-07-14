@@ -189,7 +189,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void clearDanglingFlagForTree(VSUnit *Root);
 
   template<int AllowDangling>
-  void buildExitDeps(VSchedGraph &CurState);
+  void buildTerminatorDeps(VSchedGraph &CurState, VSUnit *Terminator);
 
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
@@ -285,6 +285,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     VSchedGraph State(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
     State.createVSUnit(MBB);
     buildControlPathGraph(State);
+    VSUnit *ExitRoot = State.getOrCreateExitRoot();
+    ExitRoot->addDep(VDCtrlDep::CreateDep(State.lookUpTerminator(MBB), 0));
+    // Sort the schedule units after all units are built.
+    State.prepareForCtrlSched();
+    // Verify the schedule graph.
+    State.verify();
+
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
     buildDataPathGraph(State);
@@ -1072,10 +1079,11 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 }
 
 template<int AllowDangling>
-void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
+void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &CurState,
+                                            VSUnit *Terminator) {
   typedef VSchedGraph::sched_iterator it;
-  VSUnit *ExitRoot = CurState.getExitRoot();
-  MachineInstr *ExitMI = ExitRoot->getRepresentativePtr();
+  MachineInstr *ExitMI = Terminator->getRepresentativePtr();
+  assert(ExitMI && ExitMI->isTerminator() && "Unexpect instruction type!");
   for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *VSU = *I;
 
@@ -1083,7 +1091,7 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
 
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
-    if (VSU->getNumUses() == 0 && VSU != ExitRoot) {
+    if (VSU->getNumUses() == 0 && VSU != Terminator) {
       assert((AllowDangling || CurState.isLoopOp(VSU->getRepresentativePtr()))
              && "Unexpected handing node!");
 
@@ -1100,7 +1108,7 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
       //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
       //  --Latency;
 
-      ExitRoot->addDep(VDCtrlDep::CreateDep(VSU,  Latency));
+      Terminator->addDep(VDCtrlDep::CreateDep(VSU,  Latency));
     }
   }
 }
@@ -1154,8 +1162,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // We need wait all operation finish before the exit operation active, compute
   // the latency from operations need to wait to the exit operation.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
-  VSUnit *ExitSU = 0;
-  MachineBasicBlock *MBB = CurState.getEntryBB();
+  MachineBasicBlock *MBB = FirstTerminator->getParent();
 
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
@@ -1175,6 +1182,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     }
   }
   
+  VSUnit *ExitSU = CurState.createTerminator(MBB);
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
     // Ignore the VOpMvPhis, which are handled, and also ignore the looping-back
@@ -1183,16 +1191,11 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 
     // No need to wait the terminator.
     CurState.eraseFromWaitSet(MI);
-    
+
     // Build a exit root or merge the terminators into the exit root.
-    if (ExitSU == 0) {
-      ExitSU = CurState.createVSUnit(MI);
-      CurState.setExitRoot(ExitSU);
-    } else {
-      bool mapped = CurState.mapMI2SU(MI, ExitSU, 0);
-      (void) mapped;
-      assert(mapped && "Cannot merge terminators!");
-    }
+    bool mapped = CurState.mapMI2SU(MI, ExitSU, 0);
+    (void) mapped;
+    assert(mapped && "Cannot merge terminators!");
   }
 
   assert(ExitSU && "Terminator not found?");
@@ -1245,13 +1248,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     ExitSU->addDep(VDCtrlDep::CreateDep(Entry, L));
   }
 
-  // Sort the schedule units after all units are built.
-  CurState.prepareForCtrlSched();
-
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so dangling node
   // is not allow.
-  buildExitDeps<false>(CurState);
+  buildTerminatorDeps<false>(CurState, ExitSU);
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
@@ -1312,7 +1312,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
 
   // Build control dependence for exitroot, dangling node is allowed because we
   // do not handle them explicitly.
-  buildExitDeps<true>(State);
+  buildTerminatorDeps<true>(State, State.lookUpTerminator(State.getEntryBB()));
 
   scheduleDanglingDatapathOps(State);
 

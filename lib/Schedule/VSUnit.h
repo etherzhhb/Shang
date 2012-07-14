@@ -511,6 +511,8 @@ private:
 
   typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
+  typedef std::map<MachineBasicBlock*, VSUnit*> TerminatorMapTy;
+  TerminatorMapTy Terminators;
 
   bool trySetLoopOp(MachineInstr *MI);
 
@@ -595,10 +597,32 @@ public:
 
   void topologicalSortScheduleUnits();
 
+  VSUnit *createTerminator(MachineBasicBlock *MBB) {
+    VSUnit *&SU = Terminators[MBB];
+    assert(SU == 0 && "Terminator already exist!");
+    SU = new VSUnit(SUCount, 0);
+    ++SUCount;
+
+    AllSUs.push_back(SU);
+    return SU;
+  }
+
+  VSUnit *lookUpTerminator(MachineBasicBlock *MBB) const {
+    TerminatorMapTy::const_iterator at = Terminators.find(MBB);
+    return at == Terminators.end() ? 0 : at->second;
+  }
+
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
-  void setExitRoot(VSUnit *exit) {
-    assert(Exit == 0 && "ExitRoot already exist!");
-    Exit = exit;
+  VSUnit *getOrCreateExitRoot() {
+    if (Exit == 0) {
+      Exit = new VSUnit(SUCount, 0);
+      Exit->addPtr(InstPtrTy(), 0);
+      ++SUCount;
+
+      AllSUs.push_back(Exit);
+    }
+
+    return Exit;
   }
 
   bool isLoopOp(MachineInstr *MI) {
