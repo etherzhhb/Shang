@@ -32,7 +32,7 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
   static std::string getGraphName(const VSchedGraph *G) {
-    return G->getMachineBasicBlock()->getName();
+    return G->getEntryBB()->getName();
   }
 
   /// If you want to override the dot attributes printed for a particular

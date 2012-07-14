@@ -232,31 +232,31 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(VSchedGraph &S)
-  : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-    TII(*MBB.getParent()->getTarget().getInstrInfo()),
-    MRI(MBB.getParent()->getRegInfo()),
-    VFI(*MBB.getParent()->getInfo<VFInfo>())
+  MicroStateBuilder(VSchedGraph &S, MachineBasicBlock *MBB)
+  : State(S), MBB(*MBB), InsertPos(MBB->end()),
+    TII(*MBB->getParent()->getTarget().getInstrInfo()),
+    MRI(MBB->getParent()->getRegInfo()),
+    VFI(*MBB->getParent()->getInfo<VFInfo>())
   {
     // Build the instructions for mirco-states.
     unsigned StartSlot = State.getStartSlot();
     unsigned EndSlot = StartSlot + State.getII();
     MachineInstr *Start =
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlStart))
+      BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlStart))
         .addImm(StartSlot).addImm(0).addImm(0);
     MachineInstr *End =
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlEnd))
+      BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlEnd))
        .addImm(StartSlot).addImm(0).addImm(0);
     // Control Ops are inserted between Ctrl-Starts and Ctrl-Ends
     CtrlIPs.push_back(End);
 
     for (unsigned i = StartSlot + 1, e = EndSlot; i <= e; ++i) {
       // Build the header for datapath from in slot.
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
+      BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
         .addImm(i - 1).addImm(0).addImm(0);
-      Start = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlStart))
+      Start = BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlStart))
                 .addImm(i).addImm(0).addImm(0);
-      End = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlEnd))
+      End = BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlEnd))
               .addImm(i).addImm(0).addImm(0);
       // Datapath Ops are inserted between Ctrl-Ends and Ctrl-Starts
       DataPathIPs.push_back(Start);
@@ -264,7 +264,7 @@ struct MicroStateBuilder {
     }
 
     // Build Datapath bundle for dangling data-paths.
-    BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
+    BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
       .addImm(EndSlot).addImm(0).addImm(0);
   }
 
@@ -821,23 +821,14 @@ static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
 
 void VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
-  MachineBasicBlock *MBB = getMachineBasicBlock();
+  MachineBasicBlock *MBB = getEntryBB();
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
-  // Fix the schedule of PHI's so we can emit the incoming copies at a right
-  // slot;
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
-    VSUnit *U = *I;
-    if (!U->isPHI()) continue;
-
-    // Schedule the SU to the slot of the PHI Move.
-    U->scheduledTo(U->getSlot() + getII());
-    assert(U->getSlot() <= getEndSlot() && "Bad PHI schedule!");
-  }
+  if (enablePipeLine()) fixPHISchedules();
 
   // Build bundle from schedule units.
-  MicroStateBuilder StateBuilder(*this);
+  MicroStateBuilder StateBuilder(*this, MBB);
 
   std::sort(begin(), end(), top_sort_start);
   DEBUG(dbgs() << "Sorted AllSUs:\n";

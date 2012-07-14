@@ -256,7 +256,7 @@ bool SubGraph::findAllCircuits() {
   VSUnit *ExitRoot = G->getExitRoot();
   unsigned ExitIdx = ExitRoot->getIdx();
   DEBUG(dbgs() << "-------------------------------------\nFind all circuits in "
-               << G->getMachineBasicBlock()->getName()
+               << G->getEntryBB()->getName()
                << '\n');
 
   typedef std::vector<SubGraphNode*> SCCTy;
@@ -312,7 +312,7 @@ bool SubGraph::findAllCircuits() {
 
       // FIXME: Read the threshold from user script.
       if (complexity > UINT64_C(0x0020000000000000)) {
-        MachineBasicBlock *MBB = G->getMachineBasicBlock();
+        MachineBasicBlock *MBB = G->getEntryBB();
         errs() << "Cannot analysis RecII with complexity " << complexity
                << " in BB " << MBB->getName()
                << " in Function " << MBB->getParent()->getFunction()->getName()

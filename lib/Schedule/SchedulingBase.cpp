@@ -489,5 +489,5 @@ bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
 }
 
 void SchedulingBase::viewGraph() {
-  ViewGraph(this, State.getMachineBasicBlock()->getName());
+  ViewGraph(this, State.getEntryBB()->getName());
 }

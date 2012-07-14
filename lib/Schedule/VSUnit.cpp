@@ -47,7 +47,7 @@ DisableMultiCyclesChain("vtm-disable-multi-cycles-chain",
 
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
-  getMachineBasicBlock()->dump();
+  getEntryBB()->dump();
 }
 
 void VSchedGraph::dump() const {
@@ -59,7 +59,7 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 
   if (!VInstrInfo::isBrCndLike(MI->getOpcode())) return false;
 
-  if (MI->getOperand(1).getMBB() != getMachineBasicBlock()) return false;
+  if (MI->getOperand(1).getMBB() != getEntryBB()) return false;
 
   // Ok, remember this instruction as self enable.
   LoopOp.setPointer(MI);
@@ -69,7 +69,7 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
   assert(MI->getOpcode() == VTM::VOpMvPhi && "Bad opcode!");
 
-  return MI->getOperand(2).getMBB() == getMachineBasicBlock() && enablePipeLine();
+  return MI->getOperand(2).getMBB() == getEntryBB() && enablePipeLine();
 }
 
 void VSchedGraph::verify() const {
@@ -207,8 +207,8 @@ void VSchedGraph::resetSchedule(unsigned MII) {
     if (I->isPHI()) I.getEdge()->setLatency(MII);
 }
 
-static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
-  MachineFunction *F = G.getMachineBasicBlock()->getParent();
+static SchedulingBase *createLinearScheduler(VSchedGraph &G, MachineFunction *F)
+{
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
@@ -219,8 +219,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   return 0;
 }
 
-static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
-  MachineFunction *F = G.getMachineBasicBlock()->getParent();
+static SchedulingBase *createLoopScheduler(VSchedGraph &G, MachineFunction *F) {
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
   switch (I.getPipeLineAlgorithm()) {
   case SynSettings::IMS:
@@ -228,7 +227,7 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   case SynSettings::ILPMS:
     return new ILPScheduler(G);
   default:
-    return createLinearScheduler(G);
+    return createLinearScheduler(G, F);
   }
 }
 
@@ -240,7 +239,8 @@ void VSchedGraph::scheduleCtrl() {
 }
 
 void VSchedGraph::scheduleLinear() {
-  OwningPtr<SchedulingBase> Scheduler(createLinearScheduler(*this));
+  MachineFunction *F = getEntryBB()->getParent();
+  OwningPtr<SchedulingBase> Scheduler(createLinearScheduler(*this, F));
 
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
@@ -249,10 +249,11 @@ void VSchedGraph::scheduleLinear() {
 }
 
 void VSchedGraph::scheduleLoop() {
-  MachineBasicBlock *MBB = getMachineBasicBlock();
+  MachineBasicBlock *MBB = getEntryBB();
+  MachineFunction *F = MBB->getParent();
   DEBUG(dbgs() << "Try to pipeline MBB#" << MBB->getNumber()
-               << " MF#" << MBB->getParent()->getFunctionNumber() << '\n');
-  OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
+               << " MF#" << F->getFunctionNumber() << '\n');
+  OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this, F));
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenCriticalPath();
@@ -292,15 +293,15 @@ void VSchedGraph::scheduleLoop() {
 }
 
 void VSchedGraph::viewGraph() {
-  ViewGraph(this, this->getMachineBasicBlock()->getName());
+  ViewGraph(this, this->getEntryBB()->getName());
 }
 
 void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
-  MachineBasicBlock *MBB = getMachineBasicBlock();
   assert(U->isDatapath() && "Expected datapath operation!");
   assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
 
   MachineInstr *MI = U->getRepresentativePtr();
+  MachineBasicBlock *ParentMBB = MI->getParent();
   const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = DLInfo.getDepLatInfo(MI);
   assert(DepLatInfo && "dependence latency information not available?");
 
@@ -312,7 +313,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
     const MachineInstr *SrcMI = I->first;
 
     // Ignore the entry root.
-    if (SrcMI == 0 || SrcMI->getParent() != MBB)
+    if (SrcMI == 0 || SrcMI->getParent() != ParentMBB)
       continue;
 
     unsigned SrcOpC = SrcMI->getOpcode();
@@ -396,6 +397,20 @@ void VSchedGraph::scheduleDatapathASAP() {
     A->scheduledTo(Step);
 
     fixChainedDatapathRC(A);
+  }
+}
+
+
+void VSchedGraph::fixPHISchedules() {
+  // Fix the schedule of PHI's so we can emit the incoming copies at a right
+  // slot;
+  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (!U->isPHI()) continue;
+
+    // Schedule the SU to the slot of the PHI Move.
+    U->scheduledTo(U->getSlot() + getII());
+    assert(U->getSlot() <= getEndSlot() && "Bad PHI schedule!");
   }
 }
 

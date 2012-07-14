@@ -418,7 +418,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   // The schedule unit and the corresponding memory operand.
   typedef std::vector<std::pair<MachineMemOperand*, VSUnit*> > MemOpMapTy;
   MemOpMapTy VisitedMemOps;
-  Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
+  Loop *IRL = IRLI->getLoopFor(CurState.getEntryBB()->getBasicBlock());
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
@@ -705,7 +705,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   assert(MI && "Unexpected entry root!");
   // Dirt
   MIOffset = std::min(MIOffset, 0);
-  MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
+  MachineBasicBlock *CurMBB = CurState.getEntryBB();
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
@@ -761,7 +761,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
 
 void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurState){
   assert(PHISU->isPHI() && "Expect PHI in addIncomingDepForPHI!");
-  MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
+  MachineBasicBlock *CurMBB = CurState.getEntryBB();
 
   // Find the incoming copy.
   MachineInstr *IncomingCopy = PHISU->getPtrAt(1);
@@ -918,7 +918,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
-  MachineBasicBlock *CurBB = State.getMachineBasicBlock();
+  MachineBasicBlock *CurBB = State.getEntryBB();
   VSUnit *LoopOp = State.getLoopOp();
   assert(LoopOp && "Not in loop?");
   assert(LoopOp != State.getExitRoot() && "Pipeline not enable!");
@@ -1142,7 +1142,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // the latency from operations need to wait to the exit operation.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
   VSUnit *ExitSU = 0;
-  MachineBasicBlock *MBB = CurState.getMachineBasicBlock();
+  MachineBasicBlock *MBB = CurState.getEntryBB();
 
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
@@ -1242,7 +1242,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
-  MachineBasicBlock *MBB = State.getMachineBasicBlock();
+  MachineBasicBlock *MBB = State.getEntryBB();
   instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    

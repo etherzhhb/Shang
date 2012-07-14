@@ -606,7 +606,7 @@ public:
 
   bool isLoopPHIMove(MachineInstr *MI);
 
-  MachineBasicBlock *getMachineBasicBlock() const {
+  MachineBasicBlock *getEntryBB() const {
     return Entry->getRepresentativePtr().get_mbb();
   }
 
@@ -675,6 +675,7 @@ public:
   void scheduleDatapath();
   void scheduleDatapathALAP();
   void scheduleDatapathASAP();
+  void fixPHISchedules();
   void emitSchedule();
   //}
 
