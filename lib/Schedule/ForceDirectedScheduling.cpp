@@ -228,8 +228,17 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
   ConflictListTy ConflictList;
 
   typedef VSchedGraph::sched_iterator sched_it;
+  MachineBasicBlock *PrevBB = S.getState().getEntryBB();
+
   for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
     VSUnit *U = *I;
+    MachineBasicBlock *MBB = U->getParentBB();
+    if (MBB != PrevBB) {
+      addLinOrdEdge(ConflictList);
+      ConflictList.clear();
+      PrevBB = MBB;
+    }
+
     FuncUnitId Id = U->getFUId();
 
     // FIXME: Detect mutually exclusive predicate condition.
@@ -242,8 +251,14 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
     ConflictList[Id].push_back(U);
   }
 
+  addLinOrdEdge(ConflictList);
+
+  S->topologicalSortScheduleUnits();
+}
+
+void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List) const {
   typedef ConflictListTy::iterator iterator;
-  for (iterator I = ConflictList.begin(), E = ConflictList.end(); I != E; ++I) {
+  for (iterator I = List.begin(), E = List.end(); I != E; ++I) {
     std::vector<VSUnit*> &SUs = I->second;
     std::sort(SUs.begin(), SUs.end(), alap_less(S));
 
@@ -254,8 +269,6 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
     else
       addLinOrdEdge(I->second);
   }
-
-  S->topologicalSortScheduleUnits();
 }
 
 void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
