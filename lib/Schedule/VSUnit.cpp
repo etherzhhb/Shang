@@ -483,8 +483,9 @@ int VSUnit::getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const{
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
-  for (unsigned i = 0, e = num_instrs(); i < e; ++i)
-    if (MachineInstr *Instr = getPtrAt(i)) {
+  for (unsigned i = 0, e = num_instrs(); i < e; ++i) {
+    InstPtrTy Ptr = getPtrAt(i);
+    if (MachineInstr *Instr = Ptr.dyn_cast_mi()) {
       const TargetInstrInfo *TII = Instr->getParent()->getParent()->getTarget()
                                          .getInstrInfo();
       OS << TII->getName(Instr->getDesc().getOpcode()) << ' ';
@@ -493,7 +494,11 @@ void VSUnit::print(raw_ostream &OS) const {
       if (i) OS << ' ' << int(getLatencyAt(i));
       OS << '\n';
       DEBUG(OS << *Instr << '\n');
+      continue;
     }
+
+    OS << "MBB#" << Ptr.get_mbb()->getNumber() << '\n';
+  }
 
   OS << getFUId() << "\nAt slot: " << getSlot();
   if (isDangling()) OS << " <Dangling>";
