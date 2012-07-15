@@ -1129,8 +1129,6 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
 void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &G){
   typedef VSchedGraph::sched_iterator sched_it;
 
-  unsigned DanglingStep = G.getEndSlot(G.getEntryBB());
-
   // Schedule all dangling nodes to dangling step.
   for (sched_it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
     VSUnit *U = *I;
@@ -1138,7 +1136,7 @@ void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &G){
     if (!U->isDangling()) continue;
 
     assert(U->isDatapath() && "Unexpected dangling control operation.");
-    U->scheduledTo(DanglingStep);
+    U->scheduledTo(G.getEndSlot(U->getParentBB()));
     ++DanglingDatapath;
   }
 }
