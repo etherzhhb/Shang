@@ -286,8 +286,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     State.createVSUnit(MBB);
     buildControlPathGraph(State, MBB);
 
-    VSUnit *ExitRoot = State.getOrCreateExitRoot();
-    ExitRoot->addDep(VDCtrlDep::CreateDep(State.lookUpTerminator(MBB), 0));
+    State.createExitRoot();
     // Sort the schedule units after all units are built.
     State.prepareForCtrlSched();
     // Verify the schedule graph.

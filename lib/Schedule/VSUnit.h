@@ -614,14 +614,17 @@ public:
   }
 
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
-  VSUnit *getOrCreateExitRoot() {
-    if (Exit == 0) {
-      Exit = new VSUnit(SUCount, 0);
-      Exit->addPtr(InstPtrTy(), 0);
-      ++SUCount;
+  VSUnit *createExitRoot() {
+    assert (Exit == 0 && "Exit already created!");
+    Exit = new VSUnit(SUCount, 0);
+    Exit->addPtr(InstPtrTy(), 0);
+    ++SUCount;
 
-      AllSUs.push_back(Exit);
-    }
+    AllSUs.push_back(Exit);
+
+    typedef TerminatorMapTy::iterator it;
+    for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
+      Exit->addDep(VDCtrlDep::CreateDep(I->second, 0));
 
     return Exit;
   }
