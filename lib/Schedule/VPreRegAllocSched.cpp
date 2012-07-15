@@ -191,7 +191,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   template<int AllowDangling>
   void buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator);
 
-  void buildSUnit(MachineInstr *MI, VSchedGraph &G);
+  VSUnit *buildSUnit(MachineInstr *MI, VSchedGraph &G);
 
   void mergeDstMux(VSUnit *U, VSchedGraph &G);
 
@@ -1032,14 +1032,13 @@ void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &G) {
   }
 }
 
-void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
+VSUnit *VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   assert(!MI->getDesc().isTerminator() && "Unexpected terminator!");
 
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpMove:
-    if (mergeUnaryOp(MI, 1, G))
-      return;
+    if (mergeUnaryOp(MI, 1, G)) return 0;
     break;
   case VTM::VOpDisableFU: {
     MachineInstr *SrcMI = 0;
@@ -1050,25 +1049,25 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
     bool merged = G.mapMI2SU(MI, SrcSU, 1);
     assert(merged && "DisableFU not merged?");
     (void) merged;
-    return;
+    return 0;
   }
   case VTM::PHI:
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!G.enablePipeLine()) {
       G.mapMI2SU(MI, G.lookupSUnit(MI->getParent()),
                         G.getStepsFromEntry(MI));
-      return;
+      return 0;
     }
     break;
   case VTM::VOpReadReturn:
     if (mergeUnaryOp(MI, 1, G))
-      return;
+      return 0;
     break;
   case VTM::VOpMoveArg:
     G.mapMI2SU(MI, G.getEntryRoot(), 0);
-    return;
+    return 0;
   // The VOpDstMux should be merged to its user.
-  case VTM::VOpDstMux: return;
+  case VTM::VOpDstMux: return 0;
   case VTM::VOpMvPhi:
     if (G.isLoopPHIMove(MI)) {
       unsigned Reg = MI->getOperand(0).getReg();
@@ -1079,7 +1078,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
       assert(PHISU && "Schedule unit for PHI node not found!");
       G.mapMI2SU(MI, PHISU, 0);
     }
-    return;
+    return 0;
   }
 
   // TODO: Remember the register that live out this MBB.
@@ -1087,6 +1086,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VSUnit *U = G.createVSUnit(MI, Id.getFUNum());
   if (Id.isBound()) mergeDstMux(U, G);
+  return U;
 }
 
 template<int AllowDangling>
@@ -1282,17 +1282,20 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
                                               MachineBasicBlock *MBB) {
   instr_it BI = MBB->begin();
+  std::vector<VSUnit*> SUs;
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
     G.addInstr(MI);
-    buildSUnit(MI, G);
+    if (VSUnit *U = buildSUnit(MI, G))
+      SUs.push_back(U);
+
     ++BI;
   }
   G.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
-  typedef VSchedGraph::iterator it;
-  for (it I = G.begin() + 1, E = G.end(); I != E; ++I)
+  typedef std::vector<VSUnit*>::iterator it;
+  for (it I = SUs.begin(), E = SUs.end(); I != E; ++I)
     if ((*I)->isControl()) addSchedDepForSU(*I, G);
 
   // Merge the loop PHI moves into the PHI Node, after the intra iteration
