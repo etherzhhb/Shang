@@ -822,8 +822,8 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &G){
 }
 
 void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
-  // Ignore the virtual exit root.
-  if (A == G.getExitRoot()) return;
+  // Ignore the basic block entry.
+  if (A->getRepresentativePtr().isMBB()) return;
 
   typedef VSUnit::instr_iterator it;
   bool isCtrl = A->isControl();
