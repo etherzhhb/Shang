@@ -276,6 +276,7 @@ struct MicroStateBuilder {
     unsigned Slot = S.getSlot();
     bool IsControl = S.isControl();
 
+    assert(Slot >= ScheduleStartSlot && "Bad slot!");
     unsigned Idx = Slot -  ScheduleStartSlot;
     if (isMBBPipelined) {
       Idx %= II;
@@ -875,9 +876,11 @@ unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
 
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this, MBB, StartSlot);
-  DEBUG(dbgs() << "Sorted AllSUs:\n";
-        for (iterator I = su_begin, E = su_end; I != E; ++I)
-          (*I)->dump(););
+  DEBUG(dbgs() << "\nEmitting schedule in MBB#" << MBB->getNumber() << '\n';
+        dbgs() << "Sorted AllSUs:\n";
+              for (iterator I = su_begin, E = su_end; I != E; ++I)
+                (*I)->dump();
+        );
 
   for (iterator I = su_begin, E = su_end; I != E; ++I) {
     VSUnit *A = *I;
