@@ -729,7 +729,7 @@ public:
   void scheduleDatapath();
   void scheduleDatapathALAP();
   void scheduleDatapathASAP();
-  void emitSchedule();
+  unsigned emitSchedule();
   //}
 
   // If a datapath operation is chained with a non-trivial control operation,

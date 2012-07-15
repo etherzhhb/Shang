@@ -835,7 +835,7 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
   return top_sort_slot(LHS, RHS);
 }
 
-void VSchedGraph::emitSchedule() {
+unsigned VSchedGraph::emitSchedule() {
   // Sort the SUs by parent BB and its schedule.
   std::sort(begin(), end(), top_sort_bb_and_slot);
   // Erase the virtual exit root right now, so that we can avoid the special
@@ -857,7 +857,8 @@ void VSchedGraph::emitSchedule() {
   }
 
   // Dont forget the SUs in last BB.
-  emitSchedule(to_emit_begin, end(), MBBStartSlot, PrevBB);
+  MBBStartSlot = emitSchedule(to_emit_begin, end(), MBBStartSlot, PrevBB);
+  return MBBStartSlot;
 }
 
 unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
