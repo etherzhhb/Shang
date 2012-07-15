@@ -1148,6 +1148,7 @@ void VPreRegAllocSched::clearDanglingFlagForTree(VSUnit *Root) {
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
   WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
   Root->setIsDangling(false);
+  MachineBasicBlock *RootBB = Root->getParentBB();
 
   while (!WorkStack.empty()) {
     VSUnit *U = WorkStack.back().first;
@@ -1161,7 +1162,7 @@ void VPreRegAllocSched::clearDanglingFlagForTree(VSUnit *Root) {
     VSUnit *ChildNode = *ChildIt;
     ++WorkStack.back().second;
 
-    if (!ChildNode->isDangling()) continue;
+    if (!ChildNode->isDangling() || ChildNode->getParentBB() != RootBB) continue;
 
     // If the node is reachable from exit, then it is not dangling.
     ChildNode->setIsDangling(false);
