@@ -176,6 +176,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   bool couldBePipelined(const MachineBasicBlock *MBB);
 
   typedef VSchedGraph::iterator su_it;
+  void addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU);
   void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB);
   void buildDataPathGraph(VSchedGraph &G);
 
@@ -282,7 +283,9 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
       CurCyclesFromEntry = std::min(CurCyclesFromEntry, getCyclesFromEntry(*PI));
 
     VSchedGraph G(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
-    G.createVSUnit(MBB);
+    VSUnit *CurEntry = G.createVSUnit(MBB);
+    addDepsForBBEntry(G, CurEntry);
+
     buildControlPathGraph(G, MBB);
 
     G.createExitRoot();
@@ -1157,6 +1160,19 @@ void VPreRegAllocSched::clearDanglingFlagForTree(VSUnit *Root) {
     // If the node is reachable from exit, then it is not dangling.
     ChildNode->setIsDangling(false);
     WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+  }
+}
+
+void VPreRegAllocSched::addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU) {
+  MachineBasicBlock *MBB = EntrySU->getRepresentativePtr();
+  assert(MBB && "Bad entry node type!");
+
+  typedef MachineBasicBlock::pred_iterator pred_iterator;
+  for (pred_iterator I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
+    VSUnit *PredTerminator = G.lookUpTerminator(*I);
+    // Ignore the terminator that is not yet created, which mean we are ignoring
+    // the loop back edges.
+    if (PredTerminator) EntrySU->addDep(VDCtrlDep::CreateDep(PredTerminator, 0));    
   }
 }
 
