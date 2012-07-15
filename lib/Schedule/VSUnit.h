@@ -614,10 +614,10 @@ public:
   }
 
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
-  VSUnit *createExitRoot() {
+  VSUnit *createExitRoot(MachineBasicBlock *MBB) {
     assert (Exit == 0 && "Exit already created!");
     Exit = new VSUnit(SUCount, 0);
-    Exit->addPtr(InstPtrTy(), 0);
+    Exit->addPtr(MBB, 0);
     ++SUCount;
 
     AllSUs.push_back(Exit);

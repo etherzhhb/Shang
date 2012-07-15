@@ -264,6 +264,9 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   LI = &getAnalysis<MachineLoopInfo>();
   IRLI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
+  // Create a place holder for the virtual exit for the scheduling graph.
+  MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
+  VirtualExit->setNumber(MF.size());
 
   MachineBasicBlock *Entry = MF.begin();
   ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
@@ -288,7 +291,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
     buildControlPathGraph(G, MBB);
 
-    G.createExitRoot();
+    G.createExitRoot(VirtualExit);
     // Sort the schedule units after all units are built.
     G.prepareForCtrlSched();
     // Verify the schedule graph.
@@ -309,6 +312,9 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     if (TotalSlots) TotalSlots -= 1;    
     CurCyclesFromEntry += TotalSlots;
   }
+
+  // Erase the virtual exit block.
+  MF.DeleteMachineBasicBlock(VirtualExit);
 
   FInfo->setTotalSlots(totalCycle);
   cleanUpSchedule();
