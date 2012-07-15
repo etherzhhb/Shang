@@ -408,10 +408,16 @@ struct MicroStateBuilder {
                                             VInstrInfo::getBitWidth(MO),
                                             false))
           .addOperand(VInstrInfo::CreatePredicate()).addImm(0);
-    VInstrInfo::setInstrSlotNum(DefPHI, InsertSlot);
+
+    setInstrSlotNum(DefPHI, InsertSlot);
 
     // Update the MO of the Original PHI.
     MO.ChangeToRegister(NewReg, true);
+  }
+
+  void setInstrSlotNum(MachineInstr * MI, unsigned ScheduleSlot) {
+    unsigned Slot = ScheduleSlot - ScheduleStartSlot + StartSlot;
+    VInstrInfo::setInstrSlotNum(MI, Slot);
   }
 
   // Build PHI nodes to preserve anti-dependence for pipelined BB.
@@ -724,7 +730,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Also set the slot of datapath if we need.
   DEBUG_WITH_TYPE("vtm-debug-datapath-slot", InstrSlot = SchedSlot.getSlot());
 
-  VInstrInfo::setInstrSlotNum(&Inst, InstrSlot);
+  setInstrSlotNum(&Inst, InstrSlot);
   // Move the instruction to the right place.
   InsertPosTy IP = getMIAt(SchedSlot);
   Inst.removeFromParent();
@@ -769,7 +775,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       // Add the operand to hold the schedule.
       Builder.addImm(0);
       // Set the slot number.
-      VInstrInfo::setInstrSlotNum(Builder, Slot);
+      setInstrSlotNum(Builder, Slot);
     }
   }
 }
@@ -837,6 +843,7 @@ void VSchedGraph::emitSchedule() {
   assert(AllSUs.back() == getExitRoot() && "Exitroot at an unexpected position!");
   AllSUs.resize(AllSUs.size() - 1);
 
+  unsigned MBBStartSlot = EntrySlot;
   iterator to_emit_begin = begin();
   MachineBasicBlock *PrevBB = (*to_emit_begin)->getParentBB();
   for (iterator I = to_emit_begin, E = end(); I != E; ++I) {
@@ -844,17 +851,17 @@ void VSchedGraph::emitSchedule() {
     if (CurBB == PrevBB) continue;
 
     // If we are entering a new BB, emit the SUs in the previous bb.
-    emitSchedule(to_emit_begin, I, PrevBB);
+    MBBStartSlot = emitSchedule(to_emit_begin, I, MBBStartSlot, PrevBB);
     to_emit_begin = I;
     PrevBB = CurBB;
   }
 
   // Dont forget the SUs in last BB.
-  emitSchedule(to_emit_begin, end(), PrevBB);
+  emitSchedule(to_emit_begin, end(), MBBStartSlot, PrevBB);
 }
 
-void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
-                               MachineBasicBlock *MBB) {
+unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
+                                   unsigned StartSlot, MachineBasicBlock *MBB) {
   unsigned CurSlot = getStartSlot(MBB);
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
@@ -866,7 +873,7 @@ void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   }
 
   // Build bundle from schedule units.
-  MicroStateBuilder StateBuilder(*this, MBB, CurSlot);
+  MicroStateBuilder StateBuilder(*this, MBB, StartSlot);
   DEBUG(dbgs() << "Sorted AllSUs:\n";
         for (iterator I = su_begin, E = su_end; I != E; ++I)
           (*I)->dump(););
@@ -890,6 +897,8 @@ void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   DEBUG(dump());
   DEBUG(dbgs() << '\n');
   // Remember the schedule information.
-  VFI->rememberTotalSlot(MBB, getStartSlot(MBB), getTotalSlot(MBB),
-                         getLoopOpSlot(MBB));
+  unsigned LoopOpSlot = StartSlot + getLoopOpSlot(MBB) - getStartSlot(MBB);
+  VFI->rememberTotalSlot(MBB, StartSlot, getTotalSlot(MBB), LoopOpSlot);
+  // Advance 1 slots after the endslot.
+  return StartSlot + getTotalSlot(MBB) + 1;
 }

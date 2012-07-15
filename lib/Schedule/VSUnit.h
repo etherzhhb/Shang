@@ -515,7 +515,8 @@ private:
 
   bool trySetLoopOp(MachineInstr *MI);
 
-  void emitSchedule(iterator su_begin, iterator su_end, MachineBasicBlock *MBB);
+  unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
+                        MachineBasicBlock *MBB);
   void fixPHISchedules(iterator su_begin, iterator su_end);
 public:
   const unsigned EntrySlot;
