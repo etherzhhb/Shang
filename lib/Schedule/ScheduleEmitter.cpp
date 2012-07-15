@@ -159,6 +159,9 @@ struct MicroStateBuilder {
 
   VSchedGraph &State;
   MachineBasicBlock &MBB;
+  const unsigned ScheduleStartSlot, ScheduleLoopOpSlot, ScheduleEndSlot, II,
+                 StartSlot;
+  const bool isMBBPipelined;
   typedef MachineInstr *InsertPosTy;
   InsertPosTy InsertPos;
 
@@ -200,10 +203,9 @@ struct MicroStateBuilder {
     // Compute the loop boundary, the last slot before starting a new loop,
     // which is at the same time with the first slot of next iteration.
     unsigned LoopBoundarySlot = copySlot.getSlot();
-    if (!State.isPipelined())
-      LoopBoundarySlot = State.getLoopOpSlot();
+    if (!isMBBPipelined)
+      LoopBoundarySlot = ScheduleLoopOpSlot;
     else {
-      unsigned II = State.getII();
       // For a PHI node, we do not need to insert new PHI for those read simply
       // wrap around to preserve SSA form. But we need a copy to pipeline the
       // value to preserve the dependence.
@@ -211,13 +213,13 @@ struct MicroStateBuilder {
       // else {
         // Otherwise, we need to insert a PHI node to preserve SSA form, by
         // avoiding use before define, which occur if the read is wrap around.
-        LoopBoundarySlot -= State.getStartSlot();
+        LoopBoundarySlot -= ScheduleStartSlot;
         LoopBoundarySlot = RoundUpToAlignment(LoopBoundarySlot, II);
-        LoopBoundarySlot += State.getStartSlot();
+        LoopBoundarySlot += ScheduleStartSlot;
       //}
     }
     
-    assert((LoopBoundarySlot > State.getStartSlot() || defSlot == copySlot)
+    assert((LoopBoundarySlot > ScheduleStartSlot || defSlot == copySlot)
            && LoopBoundarySlot >= unsigned(copySlot.getSlot())
            && "LoopBoundary should bigger than start slot and copyt slot!");
     return WireDef(WireNum, Pred, MO, defSlot, copySlot, OpSlot(LoopBoundarySlot, true));
@@ -232,15 +234,17 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(VSchedGraph &S, MachineBasicBlock *MBB)
-  : State(S), MBB(*MBB), InsertPos(MBB->end()),
+  MicroStateBuilder(VSchedGraph &S, MachineBasicBlock *MBB, unsigned StartSlot)
+  : State(S), MBB(*MBB), ScheduleStartSlot(S.getStartSlot(MBB)),
+    ScheduleLoopOpSlot(S.getLoopOpSlot(MBB)), ScheduleEndSlot(S.getEndSlot(MBB)),
+    II(S.getII(MBB)), StartSlot(StartSlot), isMBBPipelined(S.isPipelined(MBB)),
+    InsertPos(MBB->end()),
     TII(*MBB->getParent()->getTarget().getInstrInfo()),
     MRI(MBB->getParent()->getRegInfo()),
     VFI(*MBB->getParent()->getInfo<VFInfo>())
   {
     // Build the instructions for mirco-states.
-    unsigned StartSlot = State.getStartSlot();
-    unsigned EndSlot = StartSlot + State.getII();
+    unsigned EndSlot = StartSlot + II;
     MachineInstr *Start =
       BuildMI(*MBB, InsertPos, DebugLoc(), TII.get(VTM::CtrlStart))
         .addImm(StartSlot).addImm(0).addImm(0);
@@ -272,9 +276,8 @@ struct MicroStateBuilder {
     unsigned Slot = S.getSlot();
     bool IsControl = S.isControl();
 
-    unsigned Idx = Slot -  State.getStartSlot();
-    if (State.isPipelined()) {
-      unsigned II = State.getII();
+    unsigned Idx = Slot -  ScheduleStartSlot;
+    if (isMBBPipelined) {
       Idx %= II;
       // Move the entry of non-first stage to the last slot, so
       // Stage 0: Entry,    state1,        ... state(II - 1),
@@ -284,7 +287,7 @@ struct MicroStateBuilder {
       // Stage 0: Entry,    state1,        ... state(II - 1),   stateII,
       // Stage 1:           state(II + 1), ... state(2II - 1),  state2II,
       // Stage 2:           state(2II + 1), ... state(3II - 1),
-      if (IsControl && Idx == 0 && Slot >= State.getLoopOpSlot())
+      if (IsControl && Idx == 0 && Slot >= ScheduleLoopOpSlot)
         Idx = II;
     }
 
@@ -390,7 +393,7 @@ struct MicroStateBuilder {
   void emitPHIDef(MachineInstr *PN) {
     // FIXME: Place the PHI define at the right slot to avoid the live interval
     // of registers in the PHI overlap. 
-    unsigned InsertSlot = /*Slot ? Slot :*/ State.getStartSlot();
+    unsigned InsertSlot = /*Slot ? Slot :*/ ScheduleStartSlot;
     MachineOperand &MO = PN->getOperand(0);
     unsigned PHIReg = MO.getReg();
     assert(MRI.getRegClass(PHIReg) == &VTM::DRRegClass
@@ -482,7 +485,7 @@ struct MicroStateBuilder {
     // previous atoms.
     // Note that SUnitsToEmit is empty now, so we do not emitting any new
     // atoms.
-    while (CurSlot < TargetSlot && CurSlot < State.getEndSlot())
+    while (CurSlot < TargetSlot && CurSlot < ScheduleEndSlot)
       buildMicroState(CurSlot++);
 
     return CurSlot;
@@ -630,7 +633,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   int WrappedDistance = getModuloSlot(CopySlot) - getModuloSlot(SchedSlot);
   int Distance = CopySlot.getSlot() - SchedSlot.getSlot();
   bool WrappedAround = (WrappedDistance != Distance);
-  assert((!WrappedAround || State.isPipelined())
+  assert((!WrappedAround || isMBBPipelined)
          && "Live intervals are only wrapped in pipelined block d!");
   // FIX the opcode of terminators.
   if (Inst.isTerminator()) {
@@ -783,7 +786,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   while (isReadWrapAround(ReadSlot, WD)) {
     // Because the result of wireops will be copied to register at loop boundary
     // only extend the live interval of its operand to the first loop boundary.
-    if (isImplicit && WD.LoopBoundary > WD.DefSlot + State.getII())
+    if (isImplicit && WD.LoopBoundary > WD.DefSlot + II)
       break;
 
     // Emit the PHI at loop boundary, but do not emit the copy if the wire is
@@ -801,7 +804,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
 
     // Update the register.
     WD.CopySlot = WD.LoopBoundary;
-    WD.LoopBoundary += State.getII();
+    WD.LoopBoundary += II;
     assert(WD.CopySlot <= ReadSlot && "Broken PHI Slot!");
   }
 
@@ -852,7 +855,7 @@ void VSchedGraph::emitSchedule() {
 
 void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
                                MachineBasicBlock *MBB) {
-  unsigned CurSlot = startSlot;
+  unsigned CurSlot = getStartSlot(MBB);
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
@@ -863,7 +866,7 @@ void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   }
 
   // Build bundle from schedule units.
-  MicroStateBuilder StateBuilder(*this, MBB);
+  MicroStateBuilder StateBuilder(*this, MBB, CurSlot);
   DEBUG(dbgs() << "Sorted AllSUs:\n";
         for (iterator I = su_begin, E = su_end; I != E; ++I)
           (*I)->dump(););
@@ -887,5 +890,6 @@ void VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   DEBUG(dump());
   DEBUG(dbgs() << '\n');
   // Remember the schedule information.
-  VFI->rememberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
+  VFI->rememberTotalSlot(MBB, getStartSlot(MBB), getTotalSlot(MBB),
+                         getLoopOpSlot(MBB));
 }

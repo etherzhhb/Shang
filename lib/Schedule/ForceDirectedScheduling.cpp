@@ -173,7 +173,7 @@ bool IterativeModuloScheduling::isAllSUnitScheduled() {
 }
 
 bool ASAPScheduler::scheduleState() {
-  State.getEntryRoot()->scheduledTo(State.getStartSlot());
+  State.getEntryRoot()->scheduledTo(State.EntrySlot);
   buildTimeFrame();
 
   BasicLinearOrderGenerator BLOG(*this);

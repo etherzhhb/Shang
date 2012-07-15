@@ -426,11 +426,11 @@ void SchedulingBase::verifyFUUsage() {
 
 unsigned SchedulingBase::computeStepKey(unsigned step) const {
   if (MII != 0) {
-    int offset = int(step - StartSlot) % int(MII);
+    int offset = int(step - EntrySlot) % int(MII);
     // Wrap the offset if necessary.
     if (offset < 0) offset = MII + offset;
 
-    step = StartSlot + offset;
+    step = EntrySlot + offset;
   }
 
   return step;

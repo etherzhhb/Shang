@@ -32,7 +32,7 @@ typedef _lprec lprec;
 namespace llvm {
 class SchedulingBase {
   // MII in modulo schedule.
-  const unsigned StartSlot;
+  const unsigned EntrySlot;
   unsigned MII, CriticalPathEnd;
   // Time Frame {asap step, alap step }
 public:
@@ -70,7 +70,7 @@ protected:
   VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
-    : StartSlot(S.getStartSlot()), MII(0), CriticalPathEnd(0),
+    : EntrySlot(S.EntrySlot), MII(0), CriticalPathEnd(0),
       State(S) {}
 
 public:
@@ -156,10 +156,10 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   void shortenCriticalPath() { --CriticalPathEnd; }
   unsigned getCriticalPathLength() {
-    return CriticalPathEnd - State.getStartSlot();
+    return CriticalPathEnd - State.EntrySlot;
   }
   void setCriticalPathLength(unsigned L) {
-    CriticalPathEnd = State.getStartSlot() + L;
+    CriticalPathEnd = State.EntrySlot + L;
   }
 
   void viewGraph();

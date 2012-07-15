@@ -179,11 +179,11 @@ void VSchedGraph::resetSchedule(unsigned MII) {
     U->resetSchedule();
   }
 
-  getEntryRoot()->scheduledTo(startSlot);
+  getEntryRoot()->scheduledTo(EntrySlot);
   // Also schedule the LoopOp to MII step.
   if (MII) {
     assert(hasLoopOp() && "MII provided but LoopOp not exist!");
-    getLoopOp()->scheduledTo(startSlot + MII);
+    getLoopOp()->scheduledTo(EntrySlot + MII);
   }
 
   // Make sure the PHI copy emit before the BB jump to other BBs.
@@ -271,10 +271,10 @@ void VSchedGraph::scheduleLoop() {
   }
 
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
-               << " Latency: " << getTotalSlot() << '\n');
-  assert(getII() == Scheduler->getMII()
+               << " Latency: " << getTotalSlot(MBB) << '\n');
+  assert(getII(MBB) == Scheduler->getMII()
          && "LoopOp was not scheduled to the right slot!");
-  assert(getLoopOpSlot() <= getEndSlot()
+  assert(getLoopOpSlot(MBB) <= getEndSlot(MBB)
          && "Expect MII is not bigger then critical path length!");
 }
 
@@ -328,21 +328,22 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
 }
 
 void VSchedGraph::scheduleDatapathALAP() {
-  unsigned EndSlot = getEndSlot(), II = getII();
-
   typedef SUnitVecTy::reverse_iterator rev_it;
   for (rev_it I = AllSUs.rbegin(), E = AllSUs.rend(); I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled()) continue;
 
-    unsigned Step = EndSlot;
+    MachineBasicBlock *MBB = A->getParentBB();
+    unsigned Step = getEndSlot(MBB);
+
     for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
       const VSUnit *Use = *UI;
       VDEdge *UseEdge = Use->getEdgeFrom(A);
       assert(Use->isScheduled() && "Expect use scheduled!");
 
-      unsigned UseSlot = Use->getSlot() + (II * UseEdge->getItDst());
+      unsigned UseSlot = Use->getSlot();
+      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge->getItDst());
       unsigned CurStep = UseSlot - UseEdge->getLatency();
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot
@@ -352,7 +353,7 @@ void VSchedGraph::scheduleDatapathALAP() {
       Step = std::min(CurStep, Step);
     }
 
-    assert(Step < EndSlot && Step >= getStartSlot()
+    assert(Step < getEndSlot(MBB) && Step >= getStartSlot(MBB)
            && "Bad schedule for datapath SU!");
 
     // Schedule As late as possible to reduce register usage.
@@ -363,21 +364,23 @@ void VSchedGraph::scheduleDatapathALAP() {
 }
 
 void VSchedGraph::scheduleDatapathASAP() {
-  unsigned StartSlot = getStartSlot(), II = getII();
   for (iterator I = AllSUs.begin(), E = AllSUs.end(); I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled()) continue;
 
-    unsigned Step = StartSlot;
+    MachineBasicBlock *MBB = A->getParentBB();
+    unsigned Step = getStartSlot(getEntryBB());
     for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
          DI != DE; ++DI) {
       VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      Step = std::max(Step, DepSU->getSlot() + DI.getEdge()->getLatency()
-                            - II * DI.getEdge()->getItDst());
+      unsigned NewStep = DepSU->getSlot() + DI.getEdge()->getLatency();
+      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getEdge()->getItDst();
+
+      Step = std::max(Step, NewStep);
     }
 
-    assert(Step < getEndSlot() && Step >= getStartSlot()
+    assert(Step < getEndSlot(MBB) && Step >= getStartSlot(MBB)
            && "Bad schedule for datapath SU!");
     // Schedule As soon as possible.
     A->scheduledTo(Step);
@@ -394,9 +397,10 @@ void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
     VSUnit *U = *I;
     if (!U->isPHI()) continue;
 
+    MachineBasicBlock *MBB = U->getParentBB();
     // Schedule the SU to the slot of the PHI Move.
-    U->scheduledTo(U->getSlot() + getII());
-    assert(U->getSlot() <= getEndSlot() && "Bad PHI schedule!");
+    U->scheduledTo(U->getSlot() + getII(MBB));
+    assert(U->getSlot() <= getEndSlot(MBB) && "Bad PHI schedule!");
   }
 }
 

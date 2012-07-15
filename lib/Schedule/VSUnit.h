@@ -501,7 +501,6 @@ private:
   // The number of schedule unit.
   unsigned SUCount;
 
-  const unsigned startSlot;
   // The schedule unit that jump back to current fsm state.
   PointerIntPair<MachineInstr*, 1, bool> LoopOp;
 
@@ -519,10 +518,12 @@ private:
   void emitSchedule(iterator su_begin, iterator su_end, MachineBasicBlock *MBB);
   void fixPHISchedules(iterator su_begin, iterator su_end);
 public:
+  const unsigned EntrySlot;
+
   VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
-              bool HaveLoopOp, unsigned short StartSlot)
-    : DLInfo(DLInfo), Exit(0), SUCount(1), startSlot(StartSlot),
-      LoopOp(0, HaveLoopOp) {}
+              bool HaveLoopOp, unsigned short EntrySlot)
+    : DLInfo(DLInfo), Exit(0), SUCount(1), LoopOp(0, HaveLoopOp),
+      EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
@@ -671,22 +672,37 @@ public:
   VSUnit *getCtrlAt(unsigned Idx) const { return SUsToSched[Idx]; }
   void resetSchedule(unsigned MII);
 
-  unsigned getStartSlot() const { return startSlot; }
-  unsigned getEndSlot() const { return getExitRoot()->getSlot(); }
-  unsigned getTotalSlot() const { return getEndSlot() - getStartSlot(); }
-
-  // II for Modulo schedule
-  bool isPipelined() const {
-    return getII() < getTotalSlot();
+  unsigned getStartSlot(MachineBasicBlock *MBB) const {
+    VSUnit *EntrySU = lookupSUnit(MBB);
+    assert(EntrySU && "Cannot find entry!");
+    return EntrySU->getSlot();
   }
 
-  unsigned getLoopOpSlot() const {
+  unsigned getEndSlot(MachineBasicBlock *MBB) const {
+    VSUnit *Terminator = lookUpTerminator(MBB);
+    assert(Terminator && "Cannot find terminator!");
+    return Terminator->getSlot();
+  }
+
+  unsigned getTotalSlot(MachineBasicBlock *MBB) const {
+    return getEndSlot(MBB) - getStartSlot(MBB);
+  }
+
+  // II for Modulo schedule
+  bool isPipelined(MachineBasicBlock *MBB) const {
+    return getII(MBB) < getTotalSlot(MBB);
+  }
+
+  unsigned getLoopOpSlot(MachineBasicBlock *MBB) const {
     if (VSUnit *SE = getLoopOp())
       return SE->getSlot();
 
-    return getEndSlot();
+    return getEndSlot(MBB);
   }
-  unsigned getII() const { return getLoopOpSlot() - getStartSlot(); }
+
+  unsigned getII(MachineBasicBlock *MBB) const {
+    return getLoopOpSlot(MBB) - getStartSlot(MBB);
+  }
 
   bool enablePipeLine() const {
     return LoopOp.getInt();

@@ -149,7 +149,7 @@ void SDCScheduler::buildSchedule(lprec *lp) {
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
     DEBUG(dbgs() << "the row is:" << TotalRows + Offset + 1
                  <<"the result is:" << j << "\n");
-    U->scheduledTo(j + State.getStartSlot());
+    U->scheduledTo(j + State.EntrySlot);
   }
 }
 

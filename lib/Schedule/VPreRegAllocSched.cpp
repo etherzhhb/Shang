@@ -302,13 +302,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     buildDataPathGraph(G);
     DEBUG(G.viewGraph());
     G.scheduleDatapath();
-    setTotalCycle(G.getEndSlot() + 1);
+    setTotalCycle(G.getEndSlot(MBB) + 1);
     DEBUG(G.viewGraph());
     G.emitSchedule();
     // Compute the shortest distance from the entry to the end of this BB, note
     // that the last slot is in fact alias with the first slot of its successors,
     // so do not include the last slot when computing distance.
-    unsigned TotalSlots = G.getTotalSlot();
+    unsigned TotalSlots = G.getTotalSlot(MBB);
     if (TotalSlots) TotalSlots -= 1;    
     CurCyclesFromEntry += TotalSlots;
   }
@@ -857,7 +857,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         assert(A->getRepresentativePtr().get_mi()->isPHI()
                && "Expected backedge for PHI!");
         // Cross iteration dependences do not make sense in normal loops.
-        if (G.isPipelined())
+        if (G.isPipelined(A->getParentBB()))
           // The iterate distance for back-edge to PHI is always 1.
           A->addDep(VDMemDep::CreateDep<1>(Dep, Latency));
         else {
@@ -881,7 +881,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   }
 
   // For pipelined loop, take care of the Anti-dependence from PHI.
-  if (G.isPipelined() && !isCtrl) {
+  if (G.isPipelined(A->getParentBB()) && !isCtrl) {
     typedef VSUnit::dep_iterator it;
     for (it I = A->dep_begin(), E = A->dep_end(); I != E; ++I) {
       VSUnit *DepSU = *I;
@@ -1129,7 +1129,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
 void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &G){
   typedef VSchedGraph::sched_iterator sched_it;
 
-  unsigned DanglingStep = G.getEndSlot();
+  unsigned DanglingStep = G.getEndSlot(G.getEntryBB());
 
   // Schedule all dangling nodes to dangling step.
   for (sched_it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
