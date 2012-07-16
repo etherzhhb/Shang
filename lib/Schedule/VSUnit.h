@@ -340,6 +340,8 @@ public:
     return MI == getRepresentativePtr();
   }
 
+  bool isBBEntry() const { return getRepresentativePtr().isMBB(); }
+
   size_t num_instrs() const { return Instrs.size(); }
 
   MachineBasicBlock *getParentBB() const {
