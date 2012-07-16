@@ -43,8 +43,14 @@ private:
   TFMapTy SUnitToTF;
 
   typedef SmallVector<MachineInstr*, 4> InstSetTy;
-  static InstSetTy::iterator findConflictedInst(InstSetTy &Set, MachineInstr *MI);
-  bool hasConflictedInst(InstSetTy &Set, MachineInstr *MI) {
+  static InstSetTy::const_iterator findConflictedInst(const InstSetTy &Set,
+                                                      MachineInstr *MI);
+  static MachineInstr *getConflictedInst(const InstSetTy &S, MachineInstr *MI) {
+    InstSetTy::const_iterator at = findConflictedInst(S, MI);
+    return at != S.end() ? *at : 0;
+  }
+
+  bool hasConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
     // Nothing to conflict if the set is empty.
     if (Set.empty()) return false;
 
@@ -61,8 +67,8 @@ private:
   RTType RT;
 
   // Do not mixing pipeline stage with variable latency FUs.
-  typedef DenseMap<unsigned, unsigned> PipelineStatusMap;
-  PipelineStatusMap PipelineStageStatus, PipelineBreakerStatus;
+  typedef DenseMap<unsigned, InstSetTy> PipelineStatusMap;
+  PipelineStatusMap PipeFUs, PipeBreakerFUs;
 protected:
   /// @name PriorityQueue
   //{
@@ -121,8 +127,8 @@ public:
     for (RTType::iterator I = RT.begin(), E = RT.end(); I != E; ++I)
       I->second.clear();
 
-    PipelineBreakerStatus.clear();
-    PipelineStageStatus.clear();
+    PipeBreakerFUs.clear();
+    PipeFUs.clear();
   }
 
   InstSetTy &getRTFor(unsigned Step, FuncUnitId FU) {
@@ -134,9 +140,9 @@ public:
   void revertFUUsage(VSUnit *U, unsigned step);
   void takeFU(VSUnit *U, unsigned step);
   void takeFU(MachineInstr *MI, unsigned step, unsigned Latency, FuncUnitId FU);
-  bool hasSpareFU(MachineInstr *MI, unsigned step, unsigned Latency,
-                  FuncUnitId FU);
-  bool hasSpareFU(VSUnit *U, unsigned step);
+  MachineInstr *getConflictedInst(MachineInstr *MI, unsigned step,
+                                  unsigned Latency, FuncUnitId FU);
+  MachineInstr *getConflictedInst(VSUnit *U, unsigned step);
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);

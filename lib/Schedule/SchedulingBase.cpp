@@ -234,9 +234,9 @@ void SchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-SchedulingBase::InstSetTy::iterator
-SchedulingBase::findConflictedInst(InstSetTy &Set, MachineInstr *MI) {
-  typedef InstSetTy::iterator it;
+SchedulingBase::InstSetTy::const_iterator
+SchedulingBase::findConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
+  typedef InstSetTy::const_iterator it;
   it I = Set.begin(), E = Set.end();
 
   while (I != E) {
@@ -257,14 +257,19 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
     InstSetTy &InstSet = getRTFor(s, FU);
     assert(!hasConflictedInst(InstSet, MI) && "FU conflict detected!");
     InstSet.push_back(MI);
-    // Also take the un-predicated channel.
-    //if (PredReg) getRTFor(PredicatedChannel, FU).set(s - StartSlot);
 
     // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency".
-    if (Ty == VFUs::BRam)
-      ++PipelineStageStatus[computeStepKey(i + 1)];
-    else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN)
-      ++PipelineBreakerStatus[s];
+    if (Ty == VFUs::BRam) {
+      InstSetTy &InstSet = PipeFUs[s];
+      assert(std::find(InstSet.begin(), InstSet.end(), MI) == InstSet.end()
+             && "FU conflict detected!");
+      InstSet.push_back(MI);
+    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
+      InstSetTy &InstSet = PipeBreakerFUs[s];
+      assert(std::find(InstSet.begin(), InstSet.end(), MI) == InstSet.end()
+             && "FU conflict detected!");
+      InstSet.push_back(MI);
+    }
   }
 }
 
@@ -287,62 +292,72 @@ void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
   //}
 }
 
-bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
-                                FuncUnitId FU) {
+MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
+                                                unsigned Latency, FuncUnitId FU) {
   VFUs::FUTypes Ty = FU.getFUType();
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
-    unsigned s = computeStepKey(i);
-    InstSetTy &InstSet = getRTFor(s, FU);
-    if (hasConflictedInst(InstSet, MI)) return false;
+    unsigned CurSlot = computeStepKey(i);
+    InstSetTy &InstSet = getRTFor(CurSlot, FU);
+    if (MachineInstr *OtherMI = getConflictedInst(InstSet, MI))
+      return OtherMI;
     //// Do not conflict with the predicated channel as well.
     //if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
     //  return false;
     //// Do not conflict with the un-predicated channel as well.
     //if (PredReg && getRTFor(0, FU).test(s - StartSlot))
     //  return false;
-
-    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency".
+    // Pipeline conflict:
+    // Pipeline FU | Pipeline Breaker
+    // Op0
+    // Op1         | Op2
+    // ...Pipeline Stall...
+    // Read Op0
+    // Read Op1
+    // Because the pipeline breaker, i.e. op2 has a variable latency,
+    // We may read the result of Op1 when we suppose read the result Op0 in the
+    // above example.
+    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency",
     if (Ty == VFUs::BRam) {
       // Dont schedule Pipeline FU here, if the pipeline cannot flush before
       // any pipeline breaker.
       // FIXME: Should test the the status from start interval + 1 to latency.
-      if (PipelineBreakerStatus.lookup(computeStepKey(i + 1)))
-        return false;
-    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN)
+      unsigned NextSlot = computeStepKey(i + 1);
+      if (hasConflictedInst(PipeBreakerFUs.lookup(NextSlot), MI))
+        if (MachineInstr *OtherMI = getConflictedInst(getRTFor(NextSlot, FU), MI))
+          return OtherMI;
+
+      if (hasConflictedInst(PipeBreakerFUs.lookup(s), MI)) {
+        unsigned PrevSlot = computeStepKey(i - 1);
+        if (MachineInstr *OtherMI = getConflictedInst(getRTFor(PrevSlot, FU), MI))
+          return OtherMI;
+      }
+    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
       // We need to flush the pipeline before issue these operations.
-      if (PipelineStageStatus.lookup(s))
-        return false;
+      if (MachineInstr *PipeLineMI = getConflictedInst(PipeFUs.lookup(s), MI)) {
+        unsigned PrevSlot = computeStepKey(i - 1);
+        FuncUnitId PipeFU = VInstrInfo::getPreboundFUId(PipeLineMI);
+        if (hasConflictedInst(getRTFor(PrevSlot, PipeFU), MI))
+          return PipeLineMI;
+      }
+    }
   }
 
-  return true;
+  return 0;
 }
 
-bool SchedulingBase::hasSpareFU(VSUnit *U, unsigned step) {
+MachineInstr *SchedulingBase::getConflictedInst(VSUnit *U, unsigned step) {
   MachineInstr *MI = U->getRepresentativePtr();
-  if (MI == 0) return true;
+  if (MI == 0) return 0;
 
   FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
-  if (FU.isTrivial()) return true;
+  if (FU.isTrivial()) return 0;
 
-  if (!hasSpareFU(MI, step, U->getLatency(), FU))
-    return false;
-
-  // Take the FU of DstMux.
-  //for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
-  //  MI = U->getInstrAt(i);
-  //  FU = VInstrInfo::getPreboundFUId(MI);
-  //  if (FU.getFUType() != VFUs::Mux) continue;
-
-  //  if (!hasSpareFU(MI, step + U->getLatencyAt(i), 1, FU))
-  //    return false;
-  //}
-
-  return true;
+  return getConflictedInst(MI, step, U->getLatency(), FU);
 }
 
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
-  if (!hasSpareFU(U, step)) return false;
+  if (getConflictedInst(U, step)) return false;
 
   takeFU(U, step);
 
@@ -350,7 +365,8 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
 }
 
 void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
-  assert(hasSpareFU(U, step) && "Cannot schedule VSUnit to the given step!");
+  assert(getConflictedInst(U, step) == 0
+         && "Cannot schedule VSUnit to the given step!");
   U->scheduledTo(step);
 
   takeFU(U, step);
@@ -368,13 +384,15 @@ void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
     InstSet.erase(at);
 
     if (Ty == VFUs::BRam) {
-      unsigned &Status = PipelineStageStatus[computeStepKey(i + 1)];
-      assert(Status && "Pipeline stage not used!");
-      --Status;
+      InstSetTy &PipeSet = PipeFUs[computeStepKey(i)];
+      InstSetTy::iterator at = std::find(PipeSet.begin(), PipeSet.end(), MI);
+      assert(at != PipeSet.end() && "MI not exist in FU table!");
+      PipeSet.erase(at);
     } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
-      unsigned &Status = PipelineBreakerStatus[s];
-      assert(Status && "Pipeline breaker not used!");
-      --Status;
+      InstSetTy &BreakerSet = PipeBreakerFUs[computeStepKey(i)];
+      InstSetTy::iterator at = std::find(BreakerSet.begin(), BreakerSet.end(), MI);
+      assert(at != BreakerSet.end() && "MI not exist in FU table!");
+      BreakerSet.erase(at);
     }
   }
 }
