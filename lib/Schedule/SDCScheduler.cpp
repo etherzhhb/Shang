@@ -80,10 +80,10 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
     // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= 0.
     typedef VSUnit::const_use_iterator use_it;
     for (use_it DI = U->use_begin(), DE = U->use_end(); DI != DE;++DI) {
-      const VSUnit *depIn = *DI;
-      const VDEdge *Edge = depIn->getEdgeFrom(U);
+      const VSUnit *Dep = *DI;
+      const VDEdge *Edge = Dep->getEdgeFrom(U);
       unsigned SrcEndIdx =  SUIdx[U] + Edge->getLatency();
-      unsigned DstStartIdx = SUIdx[depIn];
+      unsigned DstStartIdx = SUIdx[Dep];
 
       // Build the LP.
       Col[0] = 1 + SrcEndIdx;

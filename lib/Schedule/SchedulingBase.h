@@ -277,19 +277,16 @@ class SDCScheduler : public SchedulingBase {
     bool scheduleState();
   private:
     lprec *lp;
-    // Total step variables count.
-    int NumVars;
-    // Total instructions count.
-    int NumInst;
+    // The number of step variables.
+    unsigned NumVars;
+    // The number of VSUnits to schedule.
+    unsigned NumInst;
     // Total rows in LP.
     unsigned TotalRows;
     // The table of the index of the VSUnits and the column number in LP.
     typedef std::map<const VSUnit*, unsigned> SUIdx2LPColMap;
     typedef SUIdx2LPColMap::iterator SUIdxIt;
     SUIdx2LPColMap SUIdx;
-    // The table of the slots and the VSUnits.
-    typedef std::vector<const VSUnit*> BoundSUVec;
-    typedef std::map<unsigned, BoundSUVec> Step2SUMap;
 
     // Get the MaxLatency of the VSUnit.
     unsigned getMaxLatency(const VSUnit* U){
@@ -303,8 +300,6 @@ class SDCScheduler : public SchedulingBase {
       }
       return FinLatency;
     }
-
-    unsigned getComInNum(const VSUnit* Src, const VSUnit* Dst);
 
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);
@@ -321,7 +316,6 @@ class SDCScheduler : public SchedulingBase {
 
     // Build the schedule form the result of ILP.
     void buildSchedule(lprec *lp);
-
 };
 
 
