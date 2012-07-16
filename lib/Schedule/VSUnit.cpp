@@ -82,10 +82,18 @@ void VSchedGraph::verify() const {
   for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
     VSUnit *SU = *I;
     typedef VSUnit::dep_iterator dep_it;
-    for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI)
+
+    bool IsBBEntry = SU->getRepresentativePtr().isMBB();
+
+    for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
       assert((DI.getEdge()->getEdgeType() == VDEdge::edgeMemDep
               || SU->getIdx() > DI->getIdx())
              && "Bad value dependent edge!");
+      assert((!IsBBEntry
+              || (DI->getRepresentativePtr()->isTerminator()
+                  && DI.getLatency() == 0))
+             && "Bad inter BB dependent edge.");
+    }
   }  
 }
 
