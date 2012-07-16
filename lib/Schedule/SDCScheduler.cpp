@@ -130,6 +130,30 @@ void SDCScheduler::buildSchedule(lprec *lp) {
   }
 }
 
+// Helper function
+static const char *transSolveResult(int result) {
+  if (result == -2) return "NOMEMORY";
+  else if (result > 13) return "Unknown result!";
+
+  static const char *ResultTable[] = {
+    "OPTIMAL",
+    "SUBOPTIMAL",
+    "INFEASIBLE",
+    "UNBOUNDED",
+    "DEGENERATE",
+    "NUMFAILURE",
+    "USERABORT",
+    "TIMEOUT",
+    "PRESOLVED",
+    "PROCFAIL",
+    "PROCBREAK",
+    "FEASFOUND",
+    "NOFEASFOUND"
+  };
+
+  return ResultTable[result];
+}
+
 bool SDCScheduler::scheduleState() {
   buildTimeFrameAndResetSchedule(true);
 
@@ -161,7 +185,26 @@ bool SDCScheduler::scheduleState() {
   set_verbose(lp, CRITICAL);
   DEBUG(set_verbose(lp, FULL));
 
+  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_COLS | PRESOLVE_LINDEP
+                   | PRESOLVE_IMPLIEDFREE | PRESOLVE_REDUCEGCD
+                   | PRESOLVE_PROBEFIX | PRESOLVE_PROBEREDUCE
+                   | PRESOLVE_ROWDOMINATE /*| PRESOLVE_COLDOMINATE lpsolve bug*/
+                   | PRESOLVE_MERGEROWS
+                   | PRESOLVE_BOUNDS,
+               get_presolveloops(lp));
+
+  DEBUG(write_lp(lp, "log.lp"));
+
+  TotalRows = get_Nrows(lp);
+  DEBUG(dbgs() << "The model has " << NumVars
+               << "x" << TotalRows << '\n');
+
+  DEBUG(dbgs() << "Timeout is set to " << get_timeout(lp) << "secs.\n");
+
   int result = solve(lp);
+
+  DEBUG(dbgs() << "ILP result is: "<< transSolveResult(result) << "\n");
+  DEBUG(dbgs() << "Time elapsed: " << time_elapsed(lp) << "\n");
 
   switch (result) {
   case INFEASIBLE:
@@ -173,8 +216,10 @@ bool SDCScheduler::scheduleState() {
   case PRESOLVED:
     break;
   default:
-    report_fatal_error(Twine("SDCScheduler Schedule fail: "));
+    report_fatal_error(Twine("ILPScheduler Schedule fail: ")
+                       + Twine(transSolveResult(result)));
   }
+
   // Schedule the state with the ILP result.
   buildSchedule(lp);
 
