@@ -244,7 +244,8 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
     // FIXME: Detect mutually exclusive predicate condition.
     if (!Id.isBound()) continue;
 
-    if (Id.getFUType() == VFUs::MemoryBus || Id.getFUType() == VFUs::BRam)
+    VFUs::FUTypes FUTy = Id.getFUType();
+    if (FUTy == VFUs::MemoryBus || FUTy == VFUs::BRam || FUTy == VFUs::CalleeFN)
       // These operations need to be handled specially.
       Id = FuncUnitId();
 
