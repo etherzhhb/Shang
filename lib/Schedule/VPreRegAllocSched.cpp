@@ -828,6 +828,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   typedef VSUnit::instr_iterator it;
   bool isCtrl = A->isControl();
   unsigned NumValDep = 0;
+  MachineBasicBlock *ParentBB = A->getParentBB();
 
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);
@@ -839,7 +840,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       const MachineOperand &MO = MI->getOperand(i);
       VSUnit *Dep = getDefSU(MO, G, DepSrc);
       // Avoid self-edge
-      if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;
+      if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isScheduled()))
+        continue;
 
       // Dirty Hack: Get the detail latency.
       float DetailLatency = G.getChainingLatency(DepSrc, MI);
@@ -857,19 +859,25 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         assert(A->getRepresentativePtr().get_mi()->isPHI()
                && "Expected backedge for PHI!");
         // Cross iteration dependences do not make sense in normal loops.
-        if (G.isPipelined(A->getParentBB()))
+        if (G.isPipelined(ParentBB))
           // The iterate distance for back-edge to PHI is always 1.
           A->addDep(VDMemDep::CreateDep<1>(Dep, Latency));
         else {
           // Else connect the schedule unit to exit root, since it is not
           // dangling.
-          VSUnit *CurTerminator = G.lookUpTerminator(A->getParentBB());
+          VSUnit *CurTerminator = G.lookUpTerminator(ParentBB);
           CurTerminator->addDep(VDCtrlDep::CreateDep(Dep, Latency));
         }
-      } else {
-        A->addDep(VDValDep::CreateDep(Dep, Latency));
-        ++NumValDep;
+        continue;
       }
+
+      A->addDep(VDValDep::CreateDep(Dep, Latency));
+
+      // Constraint the schedule unit by the entry of the parent BB.
+      if (Dep->getParentBB() != ParentBB)
+        A->addDep(VDCtrlDep::CreateDep(G.lookupSUnit(ParentBB), 0));
+
+      ++NumValDep;
     }
   }
 
@@ -881,7 +889,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   }
 
   // For pipelined loop, take care of the Anti-dependence from PHI.
-  if (G.isPipelined(A->getParentBB()) && !isCtrl) {
+  if (G.isPipelined(ParentBB) && !isCtrl) {
     typedef VSUnit::dep_iterator it;
     for (it I = A->dep_begin(), E = A->dep_end(); I != E; ++I) {
       VSUnit *DepSU = *I;
