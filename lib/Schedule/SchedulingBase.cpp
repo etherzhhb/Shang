@@ -319,25 +319,31 @@ MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
     // above example.
     // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency",
     if (Ty == VFUs::BRam) {
-      // Dont schedule Pipeline FU here, if the pipeline cannot flush before
-      // any pipeline breaker.
-      // FIXME: Should test the the status from start interval + 1 to latency.
       unsigned NextSlot = computeStepKey(i + 1);
-      if (hasConflictedInst(PipeBreakerFUs.lookup(NextSlot), MI))
-        if (MachineInstr *OtherMI = getConflictedInst(getRTFor(NextSlot, FU), MI))
-          return OtherMI;
+      const InstSetTy &NextBreakers = PipeBreakerFUs.lookup(NextSlot);
+      if (MachineInstr *BreakerMI = getConflictedInst(NextBreakers, MI)) {
+        // Cannot support II = 1
+        if (NextSlot == CurSlot) return BreakerMI;
 
-      if (hasConflictedInst(PipeBreakerFUs.lookup(s), MI)) {
+        InstSetTy &NextPipe = getRTFor(NextSlot, FU);
+        if (MachineInstr *OtherMI = getConflictedInst(NextPipe, MI))
+          return OtherMI;
+      }
+
+      if (hasConflictedInst(PipeBreakerFUs.lookup(CurSlot), MI)) {
         unsigned PrevSlot = computeStepKey(i - 1);
+        // Already detected by previous code.
+        //if (PrevSlot == CurSlot) return BreakerMI;
         if (MachineInstr *OtherMI = getConflictedInst(getRTFor(PrevSlot, FU), MI))
           return OtherMI;
       }
     } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
-      // We need to flush the pipeline before issue these operations.
-      if (MachineInstr *PipeLineMI = getConflictedInst(PipeFUs.lookup(s), MI)) {
+      const InstSetTy &CurPipes = PipeFUs.lookup(CurSlot);
+      if (MachineInstr *PipeLineMI = getConflictedInst(CurPipes, MI)) {
         unsigned PrevSlot = computeStepKey(i - 1);
         FuncUnitId PipeFU = VInstrInfo::getPreboundFUId(PipeLineMI);
-        if (hasConflictedInst(getRTFor(PrevSlot, PipeFU), MI))
+        if (PrevSlot == CurSlot // Cannot support II = 1
+            || hasConflictedInst(getRTFor(PrevSlot, PipeFU), MI))
           return PipeLineMI;
       }
     }
