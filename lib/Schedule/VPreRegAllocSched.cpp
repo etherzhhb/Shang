@@ -177,6 +177,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   ~VPreRegAllocSched();
   bool runOnMachineFunction(MachineFunction &MF);
 
+  void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
+                                  MachineBasicBlock *VExit);
+
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   bool cleanUpRegisterClass(unsigned RegNum, const TargetRegisterClass *RC);
@@ -228,29 +231,10 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   VirtualExit->setNumber(MF.size());
 
-  MachineBasicBlock *Entry = MF.begin();
-  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
-  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
-
   DetialLatencyInfo DLInfo(*MRI, false);
-  VSchedGraph G(DLInfo, Entry, false, 1);
+  VSchedGraph G(DLInfo, false, 1);
 
-
-  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
-    MachineBasicBlock *MBB = *I;
-    DLInfo.resetExitSet();
-
-    VSUnit *CurEntry = G.createVSUnit(MBB);
-    addDepsForBBEntry(G, CurEntry);
-
-    buildControlPathGraph(G, MBB);
-  }
-
-  G.createExitRoot(VirtualExit);
-  // Sort the schedule units after all units are built.
-  G.prepareForCtrlSched();
-  // Verify the schedule graph.
-  G.verify();
+  buildGlobalSchedulingGraph(G, MF.begin(), VirtualExit);
 
   DEBUG(G.viewGraph());
   G.scheduleCtrl();
@@ -1134,6 +1118,29 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
 
   scheduleDanglingDatapathOps(G);
 
+  // Verify the schedule graph.
+  G.verify();
+}
+
+void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
+                                                   MachineBasicBlock *Entry,
+                                                   MachineBasicBlock *VExit) {
+  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
+  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+
+  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
+    MachineBasicBlock *MBB = *I;
+    G.DLInfo.resetExitSet();
+
+    VSUnit *CurEntry = G.createVSUnit(MBB);
+    addDepsForBBEntry(G, CurEntry);
+
+    buildControlPathGraph(G, MBB);
+  }
+
+  G.createExitRoot(VExit);
+  // Sort the schedule units after all units are built.
+  G.prepareForCtrlSched();
   // Verify the schedule graph.
   G.verify();
 }

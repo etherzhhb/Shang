@@ -438,9 +438,8 @@ private:
 public:
   const unsigned EntrySlot;
 
-  VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
-              bool HaveLoopOp, unsigned short EntrySlot)
-    : DLInfo(DLInfo), Exit(0), NextSUIdx(FirstSUIdx), LoopOp(0, HaveLoopOp),
+  VSchedGraph(DetialLatencyInfo &DLInfo, bool EnablePipeline, unsigned EntrySlot)
+    : DLInfo(DLInfo), Exit(0), NextSUIdx(FirstSUIdx), LoopOp(0, EnablePipeline),
       EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
