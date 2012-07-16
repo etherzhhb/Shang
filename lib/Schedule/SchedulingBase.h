@@ -304,9 +304,6 @@ class SDCScheduler : public SchedulingBase {
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);
 
-    // Build the intrinsic constraints for LP variables.
-    void addStepConstraints(lprec *lp);
-
     // The schedule should satisfy the dependences.
     void addDependencyConstraints(lprec *lp);
 

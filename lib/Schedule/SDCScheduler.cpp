@@ -36,35 +36,12 @@ void SDCScheduler::createStepVariables(lprec *lp) {
     const VSUnit* U = *I;
     // Set up the scheduling variables for VSUnits.
     SUIdx[U] = NumVars;
-    for(unsigned i = 0, j = getMaxLatency(U); i <= j; ++i){
-      std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start" + utostr_32(i);
-      DEBUG(dbgs()<<"the col is"<<Col<<"the colName is"<<SVStart<<"\n");
-      set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
-      set_int(lp,Col,TRUE);
-      ++Col;
-      ++NumVars;
-    }
-  }
-}
-
-void SDCScheduler::addStepConstraints(lprec *lp){
-  int Col[2];
-  REAL Val[2];
-  //Build the constraints for LP Variables as SVXStart1 - SVXstart0 = 1.
-  for(SUIdxIt EI = SUIdx.begin(), EE = SUIdx.end(); EI != EE; ++EI){
-    unsigned Idx = EI->second;
-    const VSUnit* U = EI->first;
-    unsigned MaxLatency = getMaxLatency(U);
-    if(MaxLatency < 1) continue;
-    for(unsigned i = 0, j = MaxLatency; i < j; ++i){
-      Col[0] = 1 + Idx + i;
-      Val[0] = -1.0;
-      Col[1] = 1 + Idx + i + 1;
-      Val[1] = 1.0;
-      if(!add_constraintex(lp, 2, Val, Col, EQ, 1.0))
-        report_fatal_error("SDCScheduler: Can NOT step Variable Constraints"
-                           " at VSUnit " + utostr_32(U->getIdx()) );
-    }
+    std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start";
+    DEBUG(dbgs() <<"the col is" << Col << "the colName is" <<SVStart << "\n");
+    set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
+    set_int(lp,Col,TRUE);
+    ++Col;
+    ++NumVars;
   }
 }
 
@@ -76,13 +53,13 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath in scheduler!");
+    unsigned SrcEndIdx = SUIdx[U];
 
-    // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= 0.
+    // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
     typedef VSUnit::const_use_iterator use_it;
     for (use_it DI = U->use_begin(), DE = U->use_end(); DI != DE;++DI) {
       const VSUnit *Dep = *DI;
       const VDEdge *Edge = Dep->getEdgeFrom(U);
-      unsigned SrcEndIdx =  SUIdx[U] + Edge->getLatency();
       unsigned DstStartIdx = SUIdx[Dep];
 
       // Build the LP.
@@ -90,7 +67,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
       Val[0] = -1.0;
       Col[1] = 1 + DstStartIdx;
       Val[1] = 1.0;
-      if(!add_constraintex(lp, 2, Val, Col, GE, 0.0))
+      if(!add_constraintex(lp, 2, Val, Col, GE, Edge->getLatency()))
         report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
                            " at VSUnit " + utostr_32(U->getIdx()) );
     }
@@ -173,7 +150,6 @@ bool SDCScheduler::scheduleState() {
   createStepVariables(lp);
 
   // Build the constraints.
-  addStepConstraints(lp);
   addDependencyConstraints(lp);
 
   // Turn off the add rowmode and start to solve the model.
