@@ -108,9 +108,6 @@ static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->isControl() != RHS->isControl())
     return LHS->isControl();
 
-  if (LHS->getParentBB() != RHS->getParentBB())
-    return LHS->getParentBB()->getNumber() < RHS->getParentBB()->getNumber();
-
   return LHS->getIdx() < RHS->getIdx();
 }
 
