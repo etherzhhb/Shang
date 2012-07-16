@@ -177,6 +177,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   ~VPreRegAllocSched();
   bool runOnMachineFunction(MachineFunction &MF);
 
+  void scheduleWholeFunctionBySDC(VSchedGraph &G);
+
   void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
                                   MachineBasicBlock *VExit);
 
@@ -237,7 +239,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   buildGlobalSchedulingGraph(G, MF.begin(), VirtualExit);
 
   DEBUG(G.viewGraph());
-  G.scheduleCtrl();
+  scheduleWholeFunctionBySDC(G);
+
   buildDataPathGraph(G);
   DEBUG(G.viewGraph());
   G.scheduleDatapath();
@@ -1143,6 +1146,14 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   G.prepareForCtrlSched();
   // Verify the schedule graph.
   G.verify();
+}
+
+void VPreRegAllocSched::scheduleWholeFunctionBySDC(VSchedGraph &G) {
+  SDCScheduler Scheduler(G);
+
+  bool success = Scheduler.scheduleState();
+  assert(success && "SDCScheduler fail!");
+  (void) success;
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
