@@ -155,17 +155,9 @@ static const char *transSolveResult(int result) {
 
 bool SDCScheduler::scheduleState() {
   buildTimeFrameAndResetSchedule(true);
-
-  BasicLinearOrderGenerator BLOG(*this);
-  BLOG.addLinOrdEdge();
+  BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
   DEBUG(viewGraph());
-  //Ensure there is no resource conflict in critical path.
-  if (!scheduleCriticalPath(false))
-    return false;
-
-  if (allNodesSchedued()) return true;
-
   lp = make_lp(0, NumVars);
   set_add_rowmode(lp, TRUE);
 

@@ -148,8 +148,7 @@ bool ASAPScheduler::scheduleState() {
   State.getEntryRoot()->scheduledTo(State.EntrySlot);
   buildTimeFrame();
 
-  BasicLinearOrderGenerator BLOG(*this);
-  BLOG.addLinOrdEdge();
+  BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin() + 1, E = State.sched_end(); I != E; ++I) {
@@ -173,6 +172,7 @@ bool ASAPScheduler::scheduleState() {
     while (!tryTakeResAtStep(A, NewStep))
       ++NewStep;
 
+    //scheduleSU(A, NewStep);
     A->scheduledTo(NewStep);
   }
 

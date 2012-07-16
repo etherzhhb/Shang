@@ -212,10 +212,14 @@ protected:
   void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
   void addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const;
 
-public:
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
 
   virtual void addLinOrdEdge() const;
+public:
+
+  static void addLinOrdEdge(SchedulingBase &S) {
+    BasicLinearOrderGenerator(S).addLinOrdEdge();
+  }
 };
 
 class ILPScheduler : public SchedulingBase {
