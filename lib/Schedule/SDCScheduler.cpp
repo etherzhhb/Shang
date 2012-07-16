@@ -53,21 +53,20 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath in scheduler!");
-    unsigned SrcEndIdx = SUIdx[U];
+    unsigned DstStartIdx = SUIdx[U];
 
     // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
-    typedef VSUnit::const_use_iterator use_it;
-    for (use_it DI = U->use_begin(), DE = U->use_end(); DI != DE;++DI) {
+    typedef VSUnit::const_dep_iterator dep_it;
+    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE;++DI) {
       const VSUnit *Dep = *DI;
-      const VDEdge *Edge = Dep->getEdgeFrom(U);
-      unsigned DstStartIdx = SUIdx[Dep];
+      unsigned SrcStartIdx = SUIdx[Dep];
 
       // Build the LP.
-      Col[0] = 1 + SrcEndIdx;
+      Col[0] = 1 + SrcStartIdx;
       Val[0] = -1.0;
       Col[1] = 1 + DstStartIdx;
       Val[1] = 1.0;
-      if(!add_constraintex(lp, 2, Val, Col, GE, Edge->getLatency()))
+      if(!add_constraintex(lp, 2, Val, Col, GE, DI.getLatency()))
         report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
                            " at VSUnit " + utostr_32(U->getIdx()) );
     }
