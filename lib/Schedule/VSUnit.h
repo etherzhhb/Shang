@@ -626,7 +626,8 @@ public:
 
     typedef TerminatorMapTy::iterator it;
     for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
-      Exit->addDep(VDCtrlDep::CreateDep(I->second, 0));
+      if (I->second->getNumUses() == 0)
+        Exit->addDep(VDCtrlDep::CreateDep(I->second, 0));
 
     return Exit;
   }
