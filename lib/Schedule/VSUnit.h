@@ -578,6 +578,7 @@ public:
 
   // Verify the schedule graph, should be call after the graph is built.
   void verify() const;
+  void verifySU(const VSUnit *SU) const;
 
   // VSUnit Creating/Mapping/Merging
   bool mapMI2SU(InstPtrTy Ptr, VSUnit *SU, int8_t latency) {

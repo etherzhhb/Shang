@@ -79,22 +79,30 @@ void VSchedGraph::verify() const {
     llvm_unreachable("Exit root should not have any use!");
   // TODO: Other verification.
 
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
-    VSUnit *SU = *I;
-    typedef VSUnit::dep_iterator dep_it;
+  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I)
+    verifySU(*I);
+}
 
-    bool IsBBEntry = SU->getRepresentativePtr().isMBB();
+void VSchedGraph::verifySU(const VSUnit *SU) const {
+  typedef VSUnit::const_dep_iterator dep_it;
 
-    for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
-      assert((DI.getEdge()->getEdgeType() == VDEdge::edgeMemDep
-              || SU->getIdx() > DI->getIdx())
-             && "Bad value dependent edge!");
-      assert((!IsBBEntry
-              || (DI->getRepresentativePtr()->isTerminator()
-                  && DI.getLatency() == 0))
-             && "Bad inter BB dependent edge.");
-    }
-  }  
+  bool IsBBEntry = SU->getRepresentativePtr().isMBB();
+  MachineBasicBlock *ParentMBB = SU->getParentBB();
+  bool AnyDepFromTheSameParent = IsBBEntry;
+
+  for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
+    const VSUnit *Dep = *DI;
+    assert((DI.getEdge()->getEdgeType() == VDEdge::edgeMemDep
+            || SU->getIdx() > Dep->getIdx())
+           && "Bad value dependent edge!");
+    assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
+                           && DI.getLatency() == 0))
+           && "Bad inter BB dependent edge.");
+    AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
+  }
+
+  assert((SU->isScheduled() || AnyDepFromTheSameParent)
+         && "Find SU not constrainted by the BB entry!");
 }
 
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
@@ -490,7 +498,7 @@ int VSUnit::getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const{
 }
 
 void VSUnit::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] ";
+  OS << "[" << getIdx() << "] MBB#" << getParentBB()->getNumber() << ' ';
 
   for (unsigned i = 0, e = num_instrs(); i < e; ++i) {
     InstPtrTy Ptr = getPtrAt(i);
@@ -503,10 +511,7 @@ void VSUnit::print(raw_ostream &OS) const {
       if (i) OS << ' ' << int(getLatencyAt(i));
       OS << '\n';
       DEBUG(OS << *Instr << '\n');
-      continue;
     }
-
-    OS << "MBB#" << Ptr.get_mbb()->getNumber() << '\n';
   }
 
   OS << getFUId() << "\nAt slot: " << getSlot();
