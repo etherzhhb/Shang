@@ -169,8 +169,10 @@ bool ASAPScheduler::scheduleState() {
       NewStep = std::max(Step, NewStep);
     }
 
-    while (!tryTakeResAtStep(A, NewStep))
+    while (!tryTakeResAtStep(A, NewStep)) {
+      llvm_unreachable("Linear order generator should avoid this!");
       ++NewStep;
+    }
 
     //scheduleSU(A, NewStep);
     A->scheduledTo(NewStep);
@@ -198,6 +200,7 @@ struct alap_less {
 
 void BasicLinearOrderGenerator::addLinOrdEdge() const {
   ConflictListTy ConflictList;
+  std::vector<VSUnit*> PipeBreakers;
 
   typedef VSchedGraph::sched_iterator sched_it;
   MachineBasicBlock *PrevBB = S.getState().getEntryBB();
@@ -206,8 +209,9 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
     VSUnit *U = *I;
     MachineBasicBlock *MBB = U->getParentBB();
     if (MBB != PrevBB) {
-      addLinOrdEdge(ConflictList);
+      addLinOrdEdge(ConflictList, PipeBreakers);
       ConflictList.clear();
+      PipeBreakers.clear();
       PrevBB = MBB;
     }
 
@@ -215,30 +219,32 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
 
     // FIXME: Detect mutually exclusive predicate condition.
     if (!Id.isBound()) continue;
-
-    VFUs::FUTypes FUTy = Id.getFUType();
-    if (FUTy == VFUs::MemoryBus || FUTy == VFUs::BRam || FUTy == VFUs::CalleeFN)
-      // These operations need to be handled specially.
-      Id = FuncUnitId();
+    if (Id.getFUType() == VFUs::MemoryBus || Id.getFUType() == VFUs::CalleeFN)
+      PipeBreakers.push_back(U);
 
     ConflictList[Id].push_back(U);
   }
 
-  addLinOrdEdge(ConflictList);
+  addLinOrdEdge(ConflictList, PipeBreakers);
 
   S->topologicalSortScheduleUnits();
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List) const {
+void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
+                                              std::vector<VSUnit*> &PipeBreakers)
+                                              const {
   typedef ConflictListTy::iterator iterator;
   for (iterator I = List.begin(), E = List.end(); I != E; ++I) {
     std::vector<VSUnit*> &SUs = I->second;
+    if (I->first.getFUType() == VFUs::BRam)
+      SUs.insert(SUs.end(), PipeBreakers.begin(), PipeBreakers.end());
+
     std::sort(SUs.begin(), SUs.end(), alap_less(S));
 
     // A trivial id means SUs contains the MemoryBus and BRam operations,
     // which need to be handle carefully.
-    if (I->first == FuncUnitId())
-      addLinOrdEdgeForMemOp(SUs);
+    if (I->first == VFUs::BRam)
+      addLinOrdEdgeForPipeOp(SUs);
     else
       addLinOrdEdge(I->second);
   }
@@ -261,30 +267,20 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
   }
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const {
-  std::map<FuncUnitId, VSUnit*> LastSUs;
+void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(std::vector<VSUnit*> &SUs)
+                                                                         const {
+  VSUnit *LaterSU = SUs.back();
+  SUs.pop_back();
 
   while (!SUs.empty()) {
-    VSUnit *U = SUs.back();
+    VSUnit *EalierSU = SUs.back();
     SUs.pop_back();
 
-    FuncUnitId Id = U->getFUId();
-    VSUnit *&LaterSU = LastSUs[Id];
+    // Build a dependence edge from EalierSU to LaterSU.
+    // TODO: Add an new kind of edge: Constraint Edge, and there should be
+    // hard constraint and soft constraint.
+    LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
 
-    if (LaterSU) {
-      typedef std::map<FuncUnitId, VSUnit*>::iterator it;
-
-      for (it I = LastSUs.begin(), E = LastSUs.end(); I != E; ++I) {
-        // No need to add dependency edge from same kind of operation to prevent
-        // the variable latency MemBusOps from breaking the BRAM pipeline.
-        if (I->first.getFUType() == Id.getFUType()) continue;
-
-        I->second->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
-      }
-
-      LaterSU->addDep(VDCtrlDep::CreateDep(U, U->getLatency()));
-    }
-
-    LaterSU = U;
+    LaterSU = EalierSU;
   }
 }

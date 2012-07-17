@@ -208,9 +208,10 @@ protected:
   typedef std::map<FuncUnitId, std::vector<VSUnit*> > ConflictListTy;
   SchedulingBase &S;
 
-  void addLinOrdEdge(ConflictListTy &ConflictList) const;
+  void addLinOrdEdge(ConflictListTy &ConflictList,
+                     std::vector<VSUnit*> &PipeBreakers) const;
   void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
-  void addLinOrdEdgeForMemOp(std::vector<VSUnit*> &SUs) const;
+  void addLinOrdEdgeForPipeOp(std::vector<VSUnit*> &SUs) const;
 
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
 
