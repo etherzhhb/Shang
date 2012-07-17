@@ -17,7 +17,7 @@ set(SYNC ${LLVM_TOOLS_BINARY_DIR}/sync)
 set(LLC ${LLVM_TOOLS_BINARY_DIR}/llc)
 set(LLI ${LLVM_TOOLS_BINARY_DIR}/lli)
 set(LLVM_AS ${LLVM_TOOLS_BINARY_DIR}/llvm-as)
-set(LLVM_LD ${LLVM_TOOLS_BINARY_DIR}/llvm-ld)
+set(LLVM_LINK ${LLVM_TOOLS_BINARY_DIR}/llvm-link)
 
 
 set(SYNTHESIS_DUT OFF CACHE BOOL "Also synthesis the design in testsuite")
@@ -168,11 +168,10 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
     COMMAND ${FRONTEND} ${TEST_SRC}
             -O0 -c -emit-llvm
             -o ${MAIN_ORIG_BC}
-    COMMAND ${LLVM_LD} -disable-inlining -disable-opt -disable-internalize
-            ${MAIN_ORIG_BC}
-            ${VTS_SOURCE_ROOT}/liblegup.a
-            -b=${MAIN_ORIG_BC}
-    DEPENDS ${TEST_SRC} ${LLVM_LD}
+    COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
+            ${VTS_SOURCE_ROOT}/liblegup.bc
+            -o=${MAIN_ORIG_BC}
+    DEPENDS ${TEST_SRC} ${LLVM_LINK}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Compiling ${TEST_SRC} to ${MAIN_ORIG_BC}"
   )
@@ -334,11 +333,10 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
     COMMAND ${FRONTEND} ${TEST_SRC}
             -O0 -c -emit-llvm
             -o ${MAIN_ORIG_BC}
-    COMMAND ${LLVM_LD} -disable-inlining -disable-opt -disable-internalize
-            ${MAIN_ORIG_BC}
-            ${VTS_SOURCE_ROOT}/liblegup.a
-            -b=${MAIN_ORIG_BC}
-    DEPENDS ${TEST_SRC} ${LLVM_LD}
+    COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
+            ${VTS_SOURCE_ROOT}/liblegup.bc
+            -o=${MAIN_ORIG_BC}
+    DEPENDS ${TEST_SRC} ${LLVM_LINK}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Compiling ${TEST_SRC} to ${MAIN_ORIG_BC}"
   )
