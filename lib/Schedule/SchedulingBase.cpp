@@ -236,9 +236,11 @@ SchedulingBase::InstSetTy::const_iterator
 SchedulingBase::findConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
   typedef InstSetTy::const_iterator it;
   it I = Set.begin(), E = Set.end();
+  MachineBasicBlock *MIParent = MI->getParent();
 
   while (I != E) {
-    if (!VInstrInfo::isPredicateMutex(MI, *I)) return I;
+    if (MIParent == (*I)->getParent() && !VInstrInfo::isPredicateMutex(MI, *I))
+      return I;
 
     ++I;
   }
