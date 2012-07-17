@@ -211,7 +211,7 @@ protected:
   void addLinOrdEdge(ConflictListTy &ConflictList,
                      std::vector<VSUnit*> &PipeBreakers) const;
   void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
-  void addLinOrdEdgeForPipeOp(std::vector<VSUnit*> &SUs) const;
+  void addLinOrdEdgeForPipeOp(FuncUnitId Id, std::vector<VSUnit*> &SUs) const;
 
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
 

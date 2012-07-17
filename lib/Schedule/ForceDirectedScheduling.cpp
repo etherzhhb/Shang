@@ -236,7 +236,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
   typedef ConflictListTy::iterator iterator;
   for (iterator I = List.begin(), E = List.end(); I != E; ++I) {
     std::vector<VSUnit*> &SUs = I->second;
-    if (I->first.getFUType() == VFUs::BRam)
+    if (I->first.getFUType() == VFUs::BRam && SUs.size() > 1)
       SUs.insert(SUs.end(), PipeBreakers.begin(), PipeBreakers.end());
 
     std::sort(SUs.begin(), SUs.end(), alap_less(S));
@@ -244,7 +244,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
     // A trivial id means SUs contains the MemoryBus and BRam operations,
     // which need to be handle carefully.
     if (I->first == VFUs::BRam)
-      addLinOrdEdgeForPipeOp(SUs);
+      addLinOrdEdgeForPipeOp(I->first, SUs);
     else
       addLinOrdEdge(I->second);
   }
@@ -267,8 +267,9 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
   }
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(std::vector<VSUnit*> &SUs)
-                                                                         const {
+void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
+                                                       std::vector<VSUnit*> &SUs)
+                                                       const {
   VSUnit *LaterSU = SUs.back();
   SUs.pop_back();
 
@@ -279,7 +280,8 @@ void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(std::vector<VSUnit*> &SUs
     // Build a dependence edge from EalierSU to LaterSU.
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
-    LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
+    if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id)
+      LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
 
     LaterSU = EalierSU;
   }
