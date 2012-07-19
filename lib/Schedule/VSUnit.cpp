@@ -431,6 +431,27 @@ void VSUnit::dump() const {
 
 void VDEdge::print(raw_ostream &OS) const {}
 
+// TODO: Implement edge bundle, calculate the edge for
+void llvm::VSUnit::addDep(VDEdge *NewE) {
+  VSUnit *Src = NewE->getSrc();
+  for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
+    VDEdge *CurE = *I;
+    if (CurE->getSrc() == Src) {
+      // If the new dependency constraint tighter?
+      if (NewE->getItDst() <= CurE->getItDst()
+          && NewE->getLatency() > CurE->getLatency()) {
+        delete CurE;
+        *I = NewE;
+      }
+
+      return;
+    }
+  }
+
+  Src->addToUseList(this);
+  Deps.push_back(NewE);
+}
+
 unsigned VSUnit::countValDeps() const {
   unsigned DepCounter = 0;
 

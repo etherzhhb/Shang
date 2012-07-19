@@ -254,25 +254,7 @@ public:
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
-  void addDep(VDEdge *NewE) {
-    VSUnit *Src = NewE->getSrc();
-    for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
-      VDEdge *CurE = *I;
-      if (CurE->getSrc() == Src) {
-        // If the new dependency constraint tighter?
-        if (NewE->getItDst() <= CurE->getItDst()
-            && NewE->getLatency() > CurE->getLatency()) {
-          delete CurE;
-          *I = NewE;
-        }
-
-        return;
-      }
-    }
-
-    Src->addToUseList(this);
-    Deps.push_back(NewE);
-  }
+  void addDep(VDEdge *NewE);
 
   VDEdge &getDep(unsigned i) const { return *Deps[i]; }
 
