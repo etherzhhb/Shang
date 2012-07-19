@@ -1274,10 +1274,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
 
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
-  VSUnit *Entry = G.getEntryRoot();
-  if (Entry->use_empty()) {
+  if (ExitSU->dep_empty()) {
     unsigned L = calculateLatencyFromEntry(ExitSU);
-    ExitSU->addDep(VDCtrlDep::CreateDep(Entry, L));
+    ExitSU->addDep(VDCtrlDep::CreateDep(G.lookupSUnit(MBB), L));
   }
 
   // If there is still schedule unit not connect to exit, connect it now, but
