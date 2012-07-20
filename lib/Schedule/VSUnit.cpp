@@ -443,6 +443,9 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
 
   VDEdge &CurE = at->second;
   // If the new dependency constraint tighter?
+  assert((NewE.getDistance() == 0 || CurE.getDistance() == 0
+          || CurE.getDistance() == NewE.getDistance())
+         && "Unexpected multiple loop carried dependencies!");
   if (NewE.getDistance() <= CurE.getDistance()
       && NewE.getLatency() > CurE.getLatency()) {
     CurE = NewE;
