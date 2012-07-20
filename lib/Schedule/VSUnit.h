@@ -167,14 +167,9 @@ class VSUnit {
   friend class VSchedGraph;
 
   // Create the entry node.
-  VSUnit(MachineBasicBlock *MBB, unsigned short Idx) : SchedSlot(0),
-                                                       InstIdx(Idx), FUNum(0) {
-    Instrs.push_back(MBB);
-    latencies.push_back(0);
-  }
+  VSUnit(MachineBasicBlock *MBB, unsigned short Idx);
 
-  VSUnit(unsigned short Idx, unsigned fuid)
-    : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(fuid) {}
+  VSUnit(unsigned short Idx, unsigned FUNum);
 
   void addPtr(InstPtrTy Ptr, int8_t Latency) {
     assert((Instrs.empty() || getParentBB() == Ptr.getParent())
@@ -183,10 +178,7 @@ class VSUnit {
     latencies.push_back(Latency);
   }
 
-  VSUnit *updateIdx(unsigned short Idx) {
-    InstIdx = Idx;
-    return this;
-  }
+  VSUnit *updateIdx(unsigned short Idx);
 
   void cleanDeps() { Deps.clear(); }
 public:
@@ -416,7 +408,7 @@ class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
   typedef SUnitVecTy::iterator iterator;
-  enum { NULL_SU_IDX = 0u };
+  enum { NullSUIdx = 0u, FirstSUIdx = 1u };
   DetialLatencyInfo &DLInfo;
 private:
   SUnitVecTy AllSUs;
@@ -424,7 +416,7 @@ private:
   ArrayRef<VSUnit*> SUsToSched;
   VSUnit *Exit;
   // The number of schedule unit.
-  unsigned SUCount;
+  unsigned NextSUIdx;
 
   // The schedule unit that jump back to current fsm state.
   PointerIntPair<MachineInstr*, 1, bool> LoopOp;
@@ -448,7 +440,7 @@ public:
 
   VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
               bool HaveLoopOp, unsigned short EntrySlot)
-    : DLInfo(DLInfo), Exit(0), SUCount(1), LoopOp(0, HaveLoopOp),
+    : DLInfo(DLInfo), Exit(0), NextSUIdx(FirstSUIdx), LoopOp(0, HaveLoopOp),
       EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
@@ -529,8 +521,7 @@ public:
   VSUnit *createTerminator(MachineBasicBlock *MBB) {
     VSUnit *&SU = Terminators[MBB];
     assert(SU == 0 && "Terminator already exist!");
-    SU = new VSUnit(SUCount, 0);
-    ++SUCount;
+    SU = new VSUnit(NextSUIdx++, 0);
 
     AllSUs.push_back(SU);
     return SU;
@@ -544,9 +535,8 @@ public:
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
   VSUnit *createExitRoot(MachineBasicBlock *MBB) {
     assert (Exit == 0 && "Exit already created!");
-    Exit = new VSUnit(SUCount, 0);
+    Exit = new VSUnit(NextSUIdx++, 0);
     Exit->addPtr(MBB, 0);
-    ++SUCount;
 
     AllSUs.push_back(Exit);
 
@@ -591,12 +581,11 @@ public:
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
   iterator begin() { return AllSUs.begin(); }
   iterator end() { return AllSUs.end(); }
-  size_t all_schedunits_size() const { return SUCount; }
   typedef ArrayRef<VSUnit*>::iterator sched_iterator;
   sched_iterator sched_begin()  const { return SUsToSched.begin(); }
   sched_iterator sched_end()    const { return SUsToSched.end(); }
   size_t num_scheds() const { return SUsToSched.size(); }
-  //size_t getNumSUnits() const { return AllSUs.size(); }
+  unsigned getNextSUIdx() const { return NextSUIdx; }
   VSUnit *getCtrlAt(unsigned Idx) const { return SUsToSched[Idx]; }
   void resetSchedule(unsigned MII);
 

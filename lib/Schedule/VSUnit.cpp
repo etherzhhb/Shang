@@ -106,8 +106,7 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
 }
 
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
-  VSUnit *SU = new VSUnit(SUCount, fuid);
-  ++SUCount;
+  VSUnit *SU = new VSUnit(NextSUIdx++, fuid);
 
   AllSUs.push_back(SU);
 
@@ -128,17 +127,17 @@ static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 void VSchedGraph::removeDeadSU() {
-  unsigned Idx = 0;
+  unsigned Idx = FirstSUIdx;
   for (unsigned i = 0, e = AllSUs.size(); i != e; ++i) {
     if (AllSUs[i]) {
       // Also update InstIdx.
-      AllSUs[Idx] = AllSUs[i]->updateIdx(Idx);
+      AllSUs[Idx - FirstSUIdx] = AllSUs[i]->updateIdx(Idx);
       ++Idx;
     }
   }
 
-  AllSUs.resize(Idx);
-  SUCount = Idx;
+  AllSUs.resize(Idx - FirstSUIdx);
+  NextSUIdx = Idx;
 }
 
 void VSchedGraph::topologicalSortScheduleUnits() {
@@ -450,6 +449,25 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
       && NewE.getLatency() > CurE.getLatency()) {
     CurE = NewE;
   }
+}
+
+VSUnit::VSUnit(unsigned short Idx, unsigned FUNum)
+  : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(FUNum) {
+  assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
+}
+
+VSUnit::VSUnit(MachineBasicBlock *MBB, unsigned short Idx)
+  : SchedSlot(0), InstIdx(Idx), FUNum(0) {
+  assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
+  Instrs.push_back(MBB);
+  latencies.push_back(0);
+}
+
+VSUnit *VSUnit::updateIdx(unsigned short Idx) {
+  assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
+
+  InstIdx = Idx;
+  return this;
 }
 
 unsigned VSUnit::countValDeps() const {
