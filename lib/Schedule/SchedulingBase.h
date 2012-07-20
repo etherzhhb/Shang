@@ -299,19 +299,6 @@ class SDCScheduler : public SchedulingBase {
     typedef SUIdx2LPColMap::iterator SUIdxIt;
     SUIdx2LPColMap SUIdx;
 
-    // Get the MaxLatency of the VSUnit.
-    unsigned getMaxLatency(const VSUnit* U){
-      typedef std::list<VSUnit*>::const_iterator const_use_iterator;
-      unsigned FinLatency = U->getLatency();
-      for(const_use_iterator EI = U->use_begin(),EE = U->use_end();
-        EI != EE; ++EI){
-          const VSUnit* Use = *EI;
-          const VDEdge* Edge = Use->getEdgeFrom(U);
-          FinLatency = std::max<unsigned>(FinLatency, ((*Edge).getLatency()));
-      }
-      return FinLatency;
-    }
-
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);
 

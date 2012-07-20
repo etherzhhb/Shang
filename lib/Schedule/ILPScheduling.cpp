@@ -245,7 +245,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
     for (VSUnit::const_dep_iterator DI = DstU->edge_begin(),
          DE = DstU->dep_end(); DI != DE;++DI) {
       const VSUnit *SrcU = *DI;
-      VDEdge *Edge = DI.getEdge();
+      VDEdge Edge = DI.getEdge();
 
       assert(SrcU->isControl() && "Unexpected datapath in scheduler!");
       // Get the index of first step variable of U.
@@ -265,7 +265,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, int(Edge->getLatency()) - int((getMII() *  Edge->getDistance()))))
+                            GE, int(Edge.getLatency()) - int((getMII() *  Edge.getDistance()))))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
                            " of schedule unit " + utostr_32(DstU->getIdx()) +
                            " to " + utostr_32(SrcU->getIdx()));

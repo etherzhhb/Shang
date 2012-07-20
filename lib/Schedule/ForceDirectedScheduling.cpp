@@ -159,12 +159,12 @@ bool ASAPScheduler::scheduleState() {
     for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
          DI != DE; ++DI) {
       // Ignore the loop carried edges.
-      if (DI.getEdge()->isLoopCarried()) continue;
+      if (DI.isLoopCarried()) continue;
 
       const VSUnit *Dep = *DI;
 
       assert(Dep->isScheduled() && "Dependence SU not scheduled!");
-      unsigned Step = Dep->getSlot() + DI.getEdge()->getLatency();
+      unsigned Step = Dep->getSlot() + DI.getLatency();
 
       NewStep = std::max(Step, NewStep);
     }
@@ -261,7 +261,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
     // Build a dependence edge from EalierSU to LaterSU.
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
-    LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
+    LaterSU->addDep(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
 
     LaterSU = EalierSU;
   }
@@ -281,7 +281,7 @@ void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
     if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id)
-      LaterSU->addDep(VDCtrlDep::CreateDep(EalierSU, EalierSU->getLatency()));
+      LaterSU->addDep(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
 
     LaterSU = EalierSU;
   }

@@ -56,23 +56,17 @@ public:
     edgeCtrlDep
   };
 private:
-  PointerIntPair<VSUnit*, 2, VDEdgeTypes> Src;
+  VDEdgeTypes EdgeType : 2;
   // Iterate distance.
-  const unsigned short Distance;
+  uint16_t Distance : 14;
   // The latancy of this edge.
-  unsigned short Latancy;
+  uint16_t Latancy;
 
-  VDEdge(const VDEdge &);            // DO NOT IMPLEMENT
-  void operator=(const VDEdge &);    // DO NOT IMPLEMENT
 protected:
-  VDEdge(enum VDEdgeTypes T, VSUnit *src, unsigned latancy, unsigned Dst)
-    : Src(src, T), Distance(Dst), Latancy(latancy) {}
+  VDEdge(enum VDEdgeTypes T, unsigned latancy, unsigned Dst)
+    : EdgeType(T), Distance(Dst), Latancy(latancy) {}
 public:
-  // The referenced value.
-  VSUnit *getSrc() const { return Src.getPointer(); }
-  VSUnit* operator->() const { return getSrc(); }
-  //VSUnit* operator*() const { return getSrc(); }
-  unsigned getEdgeType() const { return Src.getInt(); }
+  unsigned getEdgeType() const { return EdgeType; }
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
     return int(Latancy) - int(II) * int(getDistance());
@@ -83,6 +77,28 @@ public:
   bool isLoopCarried() const { return getDistance() > 0; }
 
   void print(raw_ostream &OS) const;
+
+  template<int DISTANCE>
+  static VDEdge CreateMemDep(unsigned Latency) {
+    return VDEdge(edgeMemDep, Latency, DISTANCE);
+  }
+
+  static VDEdge CreateMemDep(unsigned Latency, unsigned Distance) {
+    return VDEdge(edgeMemDep, Latency, Distance);
+  }
+
+  static VDEdge CreateValDep(unsigned Latency) {
+    return VDEdge(edgeValDep, Latency, 0);
+  }
+
+  static VDEdge CreateCtrlDep(unsigned Latency) {
+    return VDEdge(edgeCtrlDep, Latency, 0);
+  }
+
+  template<bool IsCtrl>
+  static VDEdge CreateCtrlOrValDep(unsigned Latency) {
+    return VDEdge(IsCtrl ? edgeCtrlDep : edgeValDep, Latency, 0);
+  }
 };
 
 template<class IteratorType, bool IsConst>
@@ -98,7 +114,7 @@ public:
 
   NodeType *operator->() const { return operator*(); }
 
-  VDEdge *getEdge() const { return IteratorType::operator->()->second; }
+  VDEdge getEdge() const { return IteratorType::operator->()->second; }
 
   Self& operator++() {                // Preincrement
     IteratorType::operator++();
@@ -111,65 +127,12 @@ public:
 
 
   // Forwarding the function from the Edge.
+  unsigned getEdgeType() const { return getEdge().getEdgeType(); }
   inline unsigned getLatency(unsigned II = 0) const {
-    return getEdge()->getLatency(II);
+    return getEdge().getLatency(II);
   }
-  unsigned isLoopCarried() const { return getEdge()->isLoopCarried(); }
-  unsigned getDistance() const { return getEdge()->getDistance(); }
-};
-
-/// @brief Value Dependence Edge.
-class VDValDep : public VDEdge {
-public:
-  VDValDep(VSUnit *Src, unsigned latancy)
-    : VDEdge(edgeValDep, Src, latancy,  0) {}
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VDValDep *A) { return true; }
-  static inline bool classof(const VDEdge *A) {
-    return A->getEdgeType() == edgeValDep;
-  }
-
-  enum { IsValDep = true };
-
-  static VDValDep *CreateDep(VSUnit *Src, unsigned Latency) {
-    return new VDValDep(Src, Latency);
-  }
-};
-
-class VDCtrlDep : public VDEdge {
-public:
-  VDCtrlDep(VSUnit *Src, unsigned latancy)
-    : VDEdge(edgeCtrlDep, Src, latancy, 0) {}
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VDCtrlDep *A) { return true; }
-  static inline bool classof(const VDEdge *A) {
-    return A->getEdgeType() == edgeCtrlDep;
-  }
-
-  enum { IsValDep = false };
-
-  static VDCtrlDep *CreateDep(VSUnit *Src, unsigned Latency) {
-    return new VDCtrlDep(Src, Latency);
-  }
-};
-
-class VDMemDep : public VDEdge {
-public:
-  VDMemDep(VSUnit *Src, unsigned latancy, unsigned Dist)
-    : VDEdge(edgeMemDep, Src, latancy, Dist) {}
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VDCtrlDep *A) { return true; }
-  static inline bool classof(const VDEdge *A) {
-    return A->getEdgeType() == edgeMemDep;
-  }
-
-  template<int DIFF>
-  static VDMemDep *CreateDep(VSUnit *Src, unsigned Latency) {
-    return new VDMemDep(Src, Latency, DIFF);
-  }
+  unsigned isLoopCarried() const { return getEdge().isLoopCarried(); }
+  unsigned getDistance() const { return getEdge().getDistance(); }
 };
 
 /// @brief Base Class of all hardware atom.
@@ -181,7 +144,7 @@ class VSUnit {
   unsigned short FUNum;
 
   // Remember the dependencies of the scheduling unit.
-  typedef DenseMap<VSUnit*, VDEdge*> DepSet;
+  typedef DenseMap<VSUnit*, VDEdge> DepSet;
   DepSet Deps;
 
   // The atoms that using this atom.
@@ -225,13 +188,9 @@ class VSUnit {
     return this;
   }
 
-  void cleanDeps() {
-    DeleteContainerSeconds(Deps);
-  }
+  void cleanDeps() { Deps.clear(); }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
-
-  ~VSUnit() { cleanDeps(); }
 
   unsigned short getIdx() const { return InstIdx; }
   bool isDangling() const { return IsDangling; }
@@ -248,7 +207,7 @@ public:
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
-  void addDep(VDEdge *NewE);
+  void addDep(VSUnit *Src, VDEdge NewE);
 
   typedef VSUnitDepIterator<edge_iterator, false> dep_iterator;
   dep_iterator dep_begin() { return Deps.begin(); }
@@ -268,7 +227,7 @@ public:
     return Deps.find(const_cast<VSUnit*>(A));
   }
 
-  VDEdge *getEdgeFrom(const VSUnit *A) const {
+  VDEdge getEdgeFrom(const VSUnit *A) const {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }
@@ -594,7 +553,7 @@ public:
     typedef TerminatorMapTy::iterator it;
     for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
       if (I->second->getNumUses() == 0)
-        Exit->addDep(VDCtrlDep::CreateDep(I->second, 0));
+        Exit->addDep(I->second, VDEdge::CreateCtrlDep(0));
 
     return Exit;
   }

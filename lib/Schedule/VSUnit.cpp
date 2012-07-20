@@ -92,7 +92,7 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
 
   for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
-    assert((DI.getEdge()->getEdgeType() == VDEdge::edgeMemDep
+    assert((DI.getEdgeType() == VDEdge::edgeMemDep
             || SU->getIdx() > Dep->getIdx())
            && "Bad value dependent edge!");
     assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
@@ -203,7 +203,7 @@ void VSchedGraph::resetSchedule(unsigned MII) {
   typedef VSUnit::dep_iterator dep_it;
   VSUnit *ExitRoot = getExitRoot();
   for (dep_it I = ExitRoot->dep_begin(), E = ExitRoot->dep_end(); I != E; ++I)
-    if (I->isPHI()) I.getEdge()->setLatency(MII);
+    if (I->isPHI()) I.getEdge().setLatency(MII);
 }
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G, MachineFunction *F)
@@ -352,12 +352,12 @@ void VSchedGraph::scheduleDatapathALAP() {
     for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
       const VSUnit *Use = *UI;
-      VDEdge *UseEdge = Use->getEdgeFrom(A);
+      VDEdge UseEdge = Use->getEdgeFrom(A);
       assert(Use->isScheduled() && "Expect use scheduled!");
 
       unsigned UseSlot = Use->getSlot();
-      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge->getDistance());
-      unsigned CurStep = UseSlot - UseEdge->getLatency();
+      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge.getDistance());
+      unsigned CurStep = UseSlot - UseEdge.getLatency();
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot
       // with the control operation.
@@ -387,8 +387,8 @@ void VSchedGraph::scheduleDatapathASAP() {
          DI != DE; ++DI) {
       const VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      unsigned NewStep = DepSU->getSlot() + DI.getEdge()->getLatency();
-      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getEdge()->getDistance();
+      unsigned NewStep = DepSU->getSlot() + DI.getLatency();
+      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getDistance();
 
       Step = std::max(Step, NewStep);
     }
@@ -432,8 +432,7 @@ void VSUnit::dump() const {
 void VDEdge::print(raw_ostream &OS) const {}
 
 // TODO: Implement edge bundle, calculate the edge for
-void llvm::VSUnit::addDep(VDEdge *NewE) {
-  VSUnit *Src = NewE->getSrc();
+void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   edge_iterator at = Deps.find(Src);
 
   if (at == Deps.end()) {
@@ -442,23 +441,19 @@ void llvm::VSUnit::addDep(VDEdge *NewE) {
     return;
   }
 
-  VDEdge *&CurE = at->second;
+  VDEdge &CurE = at->second;
   // If the new dependency constraint tighter?
-  if (NewE->getDistance() <= CurE->getDistance()
-      && NewE->getLatency() > CurE->getLatency()) {
-    delete CurE;
+  if (NewE.getDistance() <= CurE.getDistance()
+      && NewE.getLatency() > CurE.getLatency()) {
     CurE = NewE;
-    return;
   }
-
-  delete NewE;
 }
 
 unsigned VSUnit::countValDeps() const {
   unsigned DepCounter = 0;
 
   for(const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
-    if(I.getEdge()->getEdgeType() != VDEdge::edgeValDep) continue;
+    if(I.getEdgeType() != VDEdge::edgeValDep) continue;
 
     ++DepCounter;
   }
@@ -471,7 +466,7 @@ unsigned VSUnit::countValUses() const {
 
   for(const_use_iterator I = use_begin(), E = use_end(); I != E; ++I){
     const VSUnit* V =*I;
-    if(V->getEdgeFrom(this)->getEdgeType() != VDEdge::edgeValDep) continue;
+    if(V->getEdgeFrom(this).getEdgeType() != VDEdge::edgeValDep) continue;
 
     ++DepCounter;
   }
