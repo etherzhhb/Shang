@@ -868,12 +868,6 @@ unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
-  if (enablePipeLine()) {
-    fixPHISchedules(su_begin, su_end);
-    // Need to resort the schedule units after the schedule of PHIs are changed.
-    std::sort(su_begin, su_end, top_sort_slot);
-  }
-
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this, MBB, StartSlot);
   DEBUG(dbgs() << "\nEmitting schedule in MBB#" << MBB->getNumber() << '\n';

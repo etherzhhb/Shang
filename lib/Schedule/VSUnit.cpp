@@ -288,6 +288,8 @@ void VSchedGraph::scheduleLoop() {
          && "LoopOp was not scheduled to the right slot!");
   assert(getLoopOpSlot(MBB) <= getEndSlot(MBB)
          && "Expect MII is not bigger then critical path length!");
+
+  fixPHISchedules(begin(), begin() + num_scheds());
 }
 
 void VSchedGraph::viewGraph() {
@@ -355,7 +357,10 @@ void VSchedGraph::scheduleDatapathALAP() {
       assert(Use->isScheduled() && "Expect use scheduled!");
 
       unsigned UseSlot = Use->getSlot();
-      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge.getDistance());
+      // We had already adjusted the schedule the PHI, so do not add the II
+      // to UseSlot again.
+      if (isPipelined(MBB) && !Use->isPHI())
+        UseSlot += (getII(MBB) * UseEdge.getDistance());
       unsigned CurStep = UseSlot - UseEdge.getLatency();
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot
