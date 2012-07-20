@@ -265,7 +265,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, int(Edge->getLatency()) - int((getMII() *  Edge->getItDst()))))
+                            GE, int(Edge->getLatency()) - int((getMII() *  Edge->getDistance()))))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
                            " of schedule unit " + utostr_32(DstU->getIdx()) +
                            " to " + utostr_32(SrcU->getIdx()));

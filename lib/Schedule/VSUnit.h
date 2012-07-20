@@ -58,7 +58,7 @@ public:
 private:
   PointerIntPair<VSUnit*, 2, VDEdgeTypes> Src;
   // Iterate distance.
-  const unsigned short ItDst;
+  const unsigned short Distance;
   // The latancy of this edge.
   unsigned short Latancy;
 
@@ -66,18 +66,21 @@ private:
   void operator=(const VDEdge &);    // DO NOT IMPLEMENT
 protected:
   VDEdge(enum VDEdgeTypes T, VSUnit *src, unsigned latancy, unsigned Dst)
-    : Src(src, T), ItDst(Dst), Latancy(latancy) {}
+    : Src(src, T), Distance(Dst), Latancy(latancy) {}
 public:
   // The referenced value.
   VSUnit *getSrc() const { return Src.getPointer(); }
   VSUnit* operator->() const { return getSrc(); }
   //VSUnit* operator*() const { return getSrc(); }
   unsigned getEdgeType() const { return Src.getInt(); }
-  unsigned getLatency() const { return Latancy; }
+  // Compute the latency considering the distance between iterations in a loop.
+  inline int getLatency(unsigned II = 0) const {
+    return int(Latancy) - int(II) * int(getDistance());
+  }
   void setLatency(unsigned latency) { Latancy = latency; }
-
-  unsigned getItDst() const { return ItDst; }
-  bool isLoopCarried() const { return getItDst() > 0; }
+  // Get the distance between iterations in a loop.
+  unsigned getDistance() const { return Distance; }
+  bool isLoopCarried() const { return getDistance() > 0; }
 
   void print(raw_ostream &OS) const;
 };
@@ -108,9 +111,11 @@ public:
 
 
   // Forwarding the function from the Edge.
-  unsigned getLatency() const { return getEdge()->getLatency(); }
+  inline unsigned getLatency(unsigned II = 0) const {
+    return getEdge()->getLatency(II);
+  }
   unsigned isLoopCarried() const { return getEdge()->isLoopCarried(); }
-  unsigned getItDst() const { return getEdge()->getItDst(); }
+  unsigned getDistance() const { return getEdge()->getDistance(); }
 };
 
 /// @brief Value Dependence Edge.

@@ -356,7 +356,7 @@ void VSchedGraph::scheduleDatapathALAP() {
       assert(Use->isScheduled() && "Expect use scheduled!");
 
       unsigned UseSlot = Use->getSlot();
-      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge->getItDst());
+      if (isPipelined(MBB)) UseSlot += (getII(MBB) * UseEdge->getDistance());
       unsigned CurStep = UseSlot - UseEdge->getLatency();
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot
@@ -388,7 +388,7 @@ void VSchedGraph::scheduleDatapathASAP() {
       const VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
       unsigned NewStep = DepSU->getSlot() + DI.getEdge()->getLatency();
-      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getEdge()->getItDst();
+      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getEdge()->getDistance();
 
       Step = std::max(Step, NewStep);
     }
@@ -444,7 +444,7 @@ void llvm::VSUnit::addDep(VDEdge *NewE) {
 
   VDEdge *&CurE = at->second;
   // If the new dependency constraint tighter?
-  if (NewE->getItDst() <= CurE->getItDst()
+  if (NewE->getDistance() <= CurE->getDistance()
       && NewE->getLatency() > CurE->getLatency()) {
     delete CurE;
     CurE = NewE;

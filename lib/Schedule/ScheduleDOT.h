@@ -58,7 +58,7 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
     const VSUnit *Use = *EI;
     VDEdge *UseEdge = Use->getEdgeFrom(Node);
 
-    return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getItDst());
+    return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getDistance());
   }
 
   std::string getNodeLabel(const VSUnit *Node, const VSchedGraph *Graph) {

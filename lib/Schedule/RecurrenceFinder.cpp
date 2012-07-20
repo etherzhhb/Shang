@@ -223,8 +223,8 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
 
     if (!SCC.test(N->getIdx())) continue;
 
-    unsigned LatIncr = I.getEdge()->getLatency();
-    unsigned DistIncr = I.getEdge()->getItDst();
+    unsigned LatIncr = I.getLatency();
+    unsigned DistIncr = I.getDistance();
     AkV.push_back(N);
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
