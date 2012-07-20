@@ -82,44 +82,35 @@ public:
   void print(raw_ostream &OS) const;
 };
 
-template<class IteratorType, class NodeType>
-class VSUnitDepIterator : public std::iterator<std::forward_iterator_tag,
-                                               NodeType*, ptrdiff_t> {
-    IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
-    typedef VSUnitDepIterator<IteratorType, NodeType> Self;
+template<class IteratorType, bool IsConst>
+class VSUnitDepIterator : public IteratorType {
+  typedef VSUnitDepIterator<IteratorType, IsConst> Self;
+  typedef typename conditional<IsConst, const VSUnit, VSUnit>::type NodeType;
 public:
-  VSUnitDepIterator(IteratorType i) : I(i) {}
+  VSUnitDepIterator(IteratorType i) : IteratorType(i) {}
 
-  bool operator==(const Self RHS) const { return I == RHS.I; }
-  bool operator!=(const Self RHS) const { return I != RHS.I; }
-
-  const Self &operator=(const Self &RHS) {
-    I = RHS.I;
-    return *this;
+  NodeType *operator*() const {
+    return IteratorType::operator->()->first;
   }
 
-  NodeType* operator*() const {
-    return (*I)->getSrc();
-  }
-  NodeType* operator->() const { return operator*(); }
+  NodeType *operator->() const { return operator*(); }
+
+  VDEdge *getEdge() const { return IteratorType::operator->()->second; }
 
   Self& operator++() {                // Preincrement
-    ++I;
+    IteratorType::operator++();
     return *this;
   }
-  VSUnitDepIterator operator++(int) { // Postincrement
-    VSUnitDepIterator tmp = *this;
-    ++*this;
-    return tmp;
+
+  Self operator++(int) { // Postincrement
+    return IteratorType::operator++(0);
   }
 
-  VDEdge *getEdge() { return *I; }
-  const VDEdge *getEdge() const { return *I; }
 
   // Forwarding the function from the Edge.
-  unsigned getLatency() const { return (*I)->getLatency(); }
-  unsigned isLoopCarried() const { return (*I)->isLoopCarried(); }
-  unsigned getItDst() const { return (*I)->getItDst(); }
+  unsigned getLatency() const { return getEdge()->getLatency(); }
+  unsigned isLoopCarried() const { return getEdge()->isLoopCarried(); }
+  unsigned getItDst() const { return getEdge()->getItDst(); }
 };
 
 /// @brief Value Dependence Edge.
@@ -184,8 +175,9 @@ class VSUnit {
   unsigned short InstIdx;
   unsigned short FUNum;
 
-  /// First of all, we schedule all atom base on dependence
-  SmallVector<VDEdge*, 4> Deps;
+  // Remember the dependencies of the scheduling unit.
+  typedef DenseMap<VSUnit*, VDEdge*> DepSet;
+  DepSet Deps;
 
   // The atoms that using this atom.
   std::list<VSUnit*> UseList;
@@ -229,10 +221,7 @@ class VSUnit {
   }
 
   void cleanDeps() {
-    while (!Deps.empty())
-      delete Deps.pop_back_val();
-
-    UseList.clear();
+    DeleteContainerSeconds(Deps);
   }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
@@ -243,11 +232,11 @@ public:
   bool isDangling() const { return IsDangling; }
   void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
-  typedef SmallVectorImpl<VDEdge*>::iterator edge_iterator;
+  typedef DepSet::iterator edge_iterator;
   edge_iterator edge_begin() { return Deps.begin(); }
   edge_iterator edge_end() { return Deps.end(); }
 
-  typedef SmallVectorImpl<VDEdge*>::const_iterator const_edge_iterator;
+  typedef DepSet::const_iterator const_edge_iterator;
   const_edge_iterator edge_begin() const { return Deps.begin(); }
   const_edge_iterator edge_end() const { return Deps.end(); }
 
@@ -256,36 +245,24 @@ public:
   // Add a new depencence edge to the atom.
   void addDep(VDEdge *NewE);
 
-  VDEdge &getDep(unsigned i) const { return *Deps[i]; }
-
-  typedef VSUnitDepIterator<SmallVectorImpl<VDEdge*>::iterator, VSUnit>
-    dep_iterator;
-  typedef VSUnitDepIterator<SmallVectorImpl<VDEdge*>::const_iterator, const VSUnit>
-    const_dep_iterator;
-
+  typedef VSUnitDepIterator<edge_iterator, false> dep_iterator;
   dep_iterator dep_begin() { return Deps.begin(); }
   dep_iterator dep_end() { return Deps.end(); }
+
+  typedef VSUnitDepIterator<const_edge_iterator, true> const_dep_iterator;
   const_dep_iterator dep_begin() const { return Deps.begin(); }
   const_dep_iterator dep_end() const { return Deps.end(); }
 
-  size_t getNumDeps() const { return Deps.size(); }
+  size_t num_deps() const { return Deps.size(); }
   bool dep_empty() const { return Deps.empty(); }
   // If the current atom depend on A?
   bool isDepOn(const VSUnit *A) const { return getDepIt(A) != dep_end(); }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
   const_dep_iterator getDepIt(const VSUnit *A) const {
-    return std::find(dep_begin(), dep_end(), A);
+    return Deps.find(const_cast<VSUnit*>(A));
   }
 
-  dep_iterator getDepIt(const VSUnit *A) {
-    return std::find(dep_begin(), dep_end(), A);
-  }
-
-  VDEdge *getEdgeFrom(const VSUnit *A) {
-    assert(isDepOn(A) && "Current atom not depend on A!");
-    return getDepIt(A).getEdge();
-  }
   VDEdge *getEdgeFrom(const VSUnit *A) const {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();

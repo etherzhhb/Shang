@@ -73,7 +73,7 @@ bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
 }
 
 void VSchedGraph::verify() const {
-  if (getEntryRoot()->getNumDeps())
+  if (getEntryRoot()->num_deps())
     llvm_unreachable("Entry root should not have any dependence!");
   if (getExitRoot()->getNumUses())
     llvm_unreachable("Exit root should not have any use!");
@@ -385,7 +385,7 @@ void VSchedGraph::scheduleDatapathASAP() {
     unsigned Step = getStartSlot(getEntryBB());
     for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
          DI != DE; ++DI) {
-      VSUnit *DepSU = *DI;
+      const VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
       unsigned NewStep = DepSU->getSlot() + DI.getEdge()->getLatency();
       if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getEdge()->getItDst();
@@ -434,22 +434,24 @@ void VDEdge::print(raw_ostream &OS) const {}
 // TODO: Implement edge bundle, calculate the edge for
 void llvm::VSUnit::addDep(VDEdge *NewE) {
   VSUnit *Src = NewE->getSrc();
-  for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
-    VDEdge *CurE = *I;
-    if (CurE->getSrc() == Src) {
-      // If the new dependency constraint tighter?
-      if (NewE->getItDst() <= CurE->getItDst()
-          && NewE->getLatency() > CurE->getLatency()) {
-        delete CurE;
-        *I = NewE;
-      }
+  edge_iterator at = Deps.find(Src);
 
-      return;
-    }
+  if (at == Deps.end()) {
+    Deps.insert(std::make_pair(Src, NewE));
+    Src->addToUseList(this);
+    return;
   }
 
-  Src->addToUseList(this);
-  Deps.push_back(NewE);
+  VDEdge *&CurE = at->second;
+  // If the new dependency constraint tighter?
+  if (NewE->getItDst() <= CurE->getItDst()
+      && NewE->getLatency() > CurE->getLatency()) {
+    delete CurE;
+    CurE = NewE;
+    return;
+  }
+
+  delete NewE;
 }
 
 unsigned VSUnit::countValDeps() const {
