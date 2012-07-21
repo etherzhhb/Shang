@@ -263,8 +263,9 @@ public:
   }
 
   bool isBBEntry() const { return getRepresentativePtr().isMBB(); }
-
-  size_t num_instrs() const { return Instrs.size(); }
+  bool isTerminator() const {
+    return !isBBEntry() && getRepresentativePtr()->isTerminator();
+  }
 
   MachineBasicBlock *getParentBB() const {
     return getRepresentativePtr().getParent();
@@ -289,6 +290,7 @@ public:
 
   typedef SmallVectorImpl<InstPtrTy>::iterator instr_iterator;
 
+  size_t num_instrs() const { return Instrs.size(); }
   instr_iterator instr_begin() { return Instrs.begin(); }
   instr_iterator instr_end()   { return Instrs.end(); }
 

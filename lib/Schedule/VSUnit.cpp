@@ -169,6 +169,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
       continue;
     }
 
+    // All scheduled control SU has fixed a timing constraint.
     U->setHasFixedTiming();
 
     // Do not add loop.
