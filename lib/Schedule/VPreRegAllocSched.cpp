@@ -113,9 +113,11 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
 
+  template<bool CrossBBOnly>
   void addSchedDepForSU(VSUnit *A, VSchedGraph &G);
+
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
-  template<bool IsCtrl>
+  template<bool IsCtrl, bool CrossBBOnly>
   void addSchedDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
                         VSchedGraph &G, DepLatInfoTy &LatInfo);
   // Add the dependence from the incoming value of PHI to PHI.
@@ -499,7 +501,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
 }
 
 //===----------------------------------------------------------------------===//
-template<bool IsCtrl>
+template<bool IsCtrl, bool CrossBBOnly>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
                                          VSUnit *A, VSchedGraph &G,
                                          DepLatInfoTy &LatInfo) {
@@ -507,6 +509,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   // Dirt
   MIOffset = std::min(MIOffset, 0);
   MachineBasicBlock *CurMBB = MI->getParent();
+
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
@@ -522,9 +525,12 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // Ignore the dependency from other BB in local scheduling mode.
       if (SrcSU == 0) continue;
 
-      Latency -= MIOffset;
-      A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<IsCtrl>(Latency));
-      if (SrcBB != CurMBB) {
+      if (SrcBB != CurMBB || !CrossBBOnly)
+        A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<IsCtrl>(Latency - MIOffset));
+
+      // If we are only adding cross basic block dependencies, do not add the
+      // control dependencies from the entry of the same BB.
+      if (SrcBB != CurMBB && !CrossBBOnly) {
         // Add the cross dependent edge from the BBEntry if SrcMI is from others
         // BB, because we may need to adjust its latency during scheduling.
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
@@ -537,29 +543,42 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
     }
 
     MachineInstr *SrcMI = Src.get_mi();
+    VSUnit *SrcSU = G.lookupSUnit(SrcMI);
+
     if (SrcMI->getParent() != CurMBB) {
-      VSUnit *BBEntry = G.lookupSUnit(CurMBB);
-      // Add the cross dependent edge from the BBEntry if SrcMI is from others
-      // BB, because we may need to adjust its latency during scheduling.
-      unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI);
-      LatencyFromBBEntry -= MIOffset;
-      // FIXME: The latency of this constraint will be changed during scheduling.
-      A->addDep(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
+      // If we are only adding cross basic block dependencies, do not add the
+      // control dependencies from the entry of the same BB.
+      if (!CrossBBOnly) {
+        VSUnit *BBEntry = G.lookupSUnit(CurMBB);
+        // Add the cross dependent edge from the BBEntry if SrcMI is from others
+        // BB, because we may need to adjust its latency during scheduling.
+        unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI);
+        LatencyFromBBEntry -= MIOffset;
+        // FIXME: The latency of this constraint will be changed during
+        // scheduling.
+        A->addDep(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
+      }
 
       // Note that the dangling node are not chained with its depending control
       // operations, so for the scheduled instruction that has nozero latency,
       // the result is written to register, so the result will available 1 slot
       // later than it is expected when we are computing the original latency.
-      if (!VInstrInfo::isCopyLike(SrcMI->getOpcode()))
-        Latency += 1;
+      if (!VInstrInfo::isCopyLike(SrcMI->getOpcode())) Latency += 1;
+
+      // We are in local scheduling mode.
+      if (SrcSU == 0) continue;
     }
 
-    // Step between MI and its dependent.
+    // If we are adding cross basic block dependencies only, do not add the
+    // intra-basic-block dependencies.
+    if (CrossBBOnly && SrcMI->getParent() == CurMBB)
+      continue;
+
+    // Get the minimal steps between MI and its dependency.
     unsigned MinCtrlDistance = G.getCtrlStepBetween<!IsCtrl>(SrcMI, MI);
     // The the latency must bigger than the minimal latency between two control
     // operations.
     Latency = std::max(int(MinCtrlDistance), Latency);
-    VSUnit *SrcSU = G.lookupSUnit(SrcMI);
 
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
@@ -693,6 +712,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   }
 }
 
+template<bool CrossBBOnly>
 void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
   // Build the dependence edge.
   typedef VSUnit::instr_iterator it;
@@ -702,10 +722,13 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
     assert(DepLat && "Operand latency information not available!");
-    addSchedDepForMI<false>(MI, I ? A->getLatencyAt(I) : 0, A, G, *DepLat);
+    int MIOffset = I ? A->getLatencyAt(I) : 0;
+    addSchedDepForMI<false, CrossBBOnly>(MI, MIOffset, A, G, *DepLat);
   }
 
-  if (!A->dep_empty()) return;
+  // If we are only adding cross basic block dependencies, do not add the
+  // control dependencies from the entry of the same BB.
+  if (!A->dep_empty() || CrossBBOnly) return;
 
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
@@ -999,7 +1022,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     // Build the schedule unit for loop back operation.
     if (G.isLoopOp(I)) {
       VSUnit *LoopOp = G.createVSUnit(MI);
-      addSchedDepForSU(LoopOp, G);
+      addSchedDepForSU<false>(LoopOp, G);
       continue;
     }
   }
@@ -1031,7 +1054,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
         // can always finish in time.
         const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
         assert(DepLat && "Operand latency information not available!");
-        addSchedDepForMI<true>(MI, 0/*Offset*/, ExitSU, G, *DepLat);
+        addSchedDepForMI<true, false>(MI, 0/*Offset*/, ExitSU, G, *DepLat);
         // Add the dependence from PHISU to ExitSU, we will constraint the PHI
         // so it will schedule before the last stage of a pipeline BB.
         VSUnit *PHISU = G.lookupSUnit(MI);
@@ -1055,10 +1078,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   }
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI<true>(ExitSU->getRepresentativePtr(), 0/*Offset*/,
-                         ExitSU, G, ExitDepInfo);
+  addSchedDepForMI<true, false>(ExitSU->getRepresentativePtr(), 0/*Offset*/,
+                                ExitSU, G, ExitDepInfo);
   // Add the dependence of exit root.
-  addSchedDepForSU(ExitSU, G);
+  addSchedDepForSU<false>(ExitSU, G);
 
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so dangling node
@@ -1078,12 +1101,11 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 
     ++BI;
   }
-  G.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   typedef std::vector<VSUnit*>::iterator it;
   for (it I = SUs.begin(), E = SUs.end(); I != E; ++I)
-    if ((*I)->isControl()) addSchedDepForSU(*I, G);
+    if ((*I)->isControl()) addSchedDepForSU<false>(*I, G);
 
   // Merge the loop PHI moves into the PHI Node, after the intra iteration
   // dependence edge added. If we merge the PHI moves into the PHI schedule
