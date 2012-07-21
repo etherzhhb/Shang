@@ -510,7 +510,6 @@ public:
     return true;
   }
 
-  void removeDeadSU();
   // Sort the schedule units to place control operations at the beginning of
   // the SU list, so we can only schedule the control operations
   void prepareForCtrlSched();

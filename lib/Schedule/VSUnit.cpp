@@ -125,19 +125,7 @@ static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
   return LHS->getIdx() < RHS->getIdx();
 }
 
-void VSchedGraph::removeDeadSU() {
-  unsigned Idx = FirstSUIdx;
-  for (unsigned i = 0, e = AllSUs.size(); i != e; ++i) {
-    if (AllSUs[i]) {
-      // Also update InstIdx.
-      AllSUs[Idx - FirstSUIdx] = AllSUs[i]->updateIdx(Idx);
-      ++Idx;
-    }
-  }
 
-  AllSUs.resize(Idx - FirstSUIdx);
-  NextSUIdx = Idx;
-}
 
 void VSchedGraph::topologicalSortScheduleUnits() {
   unsigned Idx = 0;
