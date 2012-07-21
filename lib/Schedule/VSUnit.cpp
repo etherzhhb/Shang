@@ -100,8 +100,10 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
     AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
   }
 
-  assert((SU->isScheduled() || AnyDepFromTheSameParent)
-         && "Find SU not constrainted by the BB entry!");
+  assert((SU->isScheduled() || !SU->use_empty() || SU == getExitRoot())
+          && "Unexpected deteched SU!");
+  assert((SU->isScheduled() || SU->hasFixedTiming() || AnyDepFromTheSameParent)
+         && "Find SU not constrained by the BB entry!");
 }
 
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
@@ -125,7 +127,73 @@ static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
   return LHS->getIdx() < RHS->getIdx();
 }
 
+VSchedGraph::iterator
+VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
+  // 1. Merge the MI2SU map.
+  // Prevent the virtual exit root from being inserted to the current MI2SU map.
+  SubGraph.InstToSUnits.erase(SubGraph.getExitRoot()->getRepresentativePtr());
 
+  InstToSUnits.insert(SubGraph.InstToSUnits.begin(),
+                      SubGraph.InstToSUnits.end());
+
+  // 2. Add the SUs in subgraph to the SU list of current SU list.
+  unsigned NewIdxBase = NextSUIdx;
+  assert(AllSUs.size() == NextSUIdx - FirstSUIdx && "Index mis-matched!");
+  VSUnit *Terminator = SubGraph.lookUpTerminator(SubGraph.getEntryBB());
+  assert(Terminator && "Terminator SU not found!");
+  // We need to clear the dependencies of the terminator before we adding
+  // local schedule constraint.
+  Terminator->cleanDepAndUse();
+  unsigned TerminatorSlot = Terminator->getSlot();
+
+  for (iterator I = SubGraph.begin(), E = SubGraph.end(); I != E; ++I) {
+    VSUnit *U = *I;
+
+    // Ignore the virtual exit root.
+    if (U == SubGraph.getExitRoot()) continue;
+
+    // Update the index of the scheduled SU.
+    AllSUs.push_back(U->updateIdx(NewIdxBase + U->getIdx() - FirstSUIdx));
+    ++NextSUIdx;
+
+    // We may need to build a fixed timing dependencies according to the
+    // schedule of U.
+    unsigned USlot = U->getSlot();
+    U->resetSchedule();
+
+    // Do not add the edge from a data-path SU, which is not scheduled yet.
+    // And do not add self-loop to the terminator.
+    if (U->isDatapath()) {
+      assert(U->num_deps() == 0 && U->num_uses() == 0
+             && "Unexpected data-path dependencies!");
+      continue;
+    }
+
+    U->setHasFixedTiming();
+
+    // Do not add loop.
+    if (U == Terminator) continue;
+
+    assert(USlot && "Unexpected unscheduled SU!");
+    unsigned ScheduleOffset = TerminatorSlot - USlot;
+    // We need to build the new dependencies.
+    U->cleanDepAndUse();
+    // A dependencies to constrain the SU with local schedule.
+    Terminator->addDep(U, VDEdge::CreateFixTimingConstraint(ScheduleOffset));
+  }
+
+  SubGraph.AllSUs.clear();
+
+  // 3. Merge the II Map.
+  IIMap.insert(SubGraph.IIMap.begin(), SubGraph.IIMap.end());
+
+  //4. Merge the terminator map.
+  Terminators.insert(SubGraph.Terminators.begin(), SubGraph.Terminators.end());
+
+  // No need to subtract by FirstSUIdx because we need to skip the entry node
+  // of the block.
+  return AllSUs.begin() + NewIdxBase/*- FirstSUIdx*/;
+}
 
 void VSchedGraph::topologicalSortScheduleUnits() {
   unsigned Idx = 0;
@@ -397,7 +465,6 @@ void VSchedGraph::scheduleDatapathASAP() {
   }
 }
 
-
 void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
   // Fix the schedule of PHI's so we can emit the incoming copies at a right
   // slot;
@@ -447,13 +514,15 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   }
 }
 
-VSUnit::VSUnit(unsigned short Idx, unsigned FUNum)
-  : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(FUNum) {
+VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)
+  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
+    FUNum(FUNum) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
 }
 
-VSUnit::VSUnit(MachineBasicBlock *MBB, unsigned short Idx)
-  : SchedSlot(0), InstIdx(Idx), FUNum(0) {
+VSUnit::VSUnit(MachineBasicBlock *MBB, uint16_t Idx)
+  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
+    FUNum(0) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
   Instrs.push_back(MBB);
   latencies.push_back(0);
@@ -501,6 +570,7 @@ unsigned VSUnit::getOpcode() const {
 void VSUnit::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
   SchedSlot = slot;
+  // TODO: Assert the schedule is not locked?
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {

@@ -207,6 +207,10 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
 
   for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
     VSUnit *U = *I;
+    // No need to assign the linear order for the SU which already has a fixed
+    // timing constraint.
+    if (U->hasFixedTiming()) continue;
+
     MachineBasicBlock *MBB = U->getParentBB();
     if (MBB != PrevBB) {
       addLinOrdEdge(ConflictList, PipeBreakers);

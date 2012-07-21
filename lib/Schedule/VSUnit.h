@@ -143,20 +143,22 @@ public:
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
-  unsigned SchedSlot : 31;
+  unsigned SchedSlot : 30;
   bool     IsDangling : 1;
-  unsigned short InstIdx;
-  unsigned short FUNum;
+  bool     HasFixedTiming: 1;
+  uint16_t InstIdx;
+  uint16_t FUNum;
 
   // Remember the dependencies of the scheduling unit.
   typedef DenseMap<VSUnit*, VDEdge> DepSet;
   DepSet Deps;
 
   // The atoms that using this atom.
-  std::list<VSUnit*> UseList;
+  typedef std::set<VSUnit*> UseListTy;
+  UseListTy UseList;
 
   void addToUseList(VSUnit *User) {
-    UseList.push_back(User);
+    UseList.insert(User);
   }
 
   VSUnit(const VSUnit&);          // DO NOT IMPLEMENT
@@ -172,9 +174,9 @@ class VSUnit {
   friend class VSchedGraph;
 
   // Create the entry node.
-  VSUnit(MachineBasicBlock *MBB, unsigned short Idx);
+  VSUnit(MachineBasicBlock *MBB, uint16_t Idx);
 
-  VSUnit(unsigned short Idx, unsigned FUNum);
+  VSUnit(unsigned short Idx, uint16_t FUNum);
 
   void addPtr(InstPtrTy Ptr, int8_t Latency) {
     assert((Instrs.empty() || getParentBB() == Ptr.getParent())
@@ -235,8 +237,8 @@ public:
 
   /// @name Use
   //{
-  typedef std::list<VSUnit*>::iterator use_iterator;
-  typedef std::list<VSUnit*>::const_iterator const_use_iterator;
+  typedef UseListTy::iterator use_iterator;
+  typedef UseListTy::const_iterator const_use_iterator;
   use_iterator use_begin() { return UseList.begin(); }
   const_use_iterator use_begin() const { return UseList.begin(); }
   use_iterator use_end() { return UseList.end(); }
@@ -320,6 +322,9 @@ public:
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
+  
+  bool hasFixedTiming() const { return HasFixedTiming; }
+  void setHasFixedTiming(bool has = true) { HasFixedTiming = has; }
 
   unsigned getOpcode() const;
   VFUs::FUTypes getFUType() const;
@@ -500,6 +505,9 @@ public:
   // Verify the schedule graph, should be call after the graph is built.
   void verify() const;
   void verifySU(const VSUnit *SU) const;
+
+  // Add the the iterator point to the first newly added SU.
+  iterator mergeSUsInSubGraph(VSchedGraph &SubGraph);
 
   // VSUnit Creating/Mapping/Merging
   bool mapMI2SU(InstPtrTy Ptr, VSUnit *SU, int8_t latency) {

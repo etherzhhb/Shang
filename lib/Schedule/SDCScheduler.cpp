@@ -66,7 +66,10 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
       Val[0] = -1.0;
       Col[1] = 1 + DstStartIdx;
       Val[1] = 1.0;
-      if(!add_constraintex(lp, 2, Val, Col, GE, DI.getLatency()))
+
+      int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixTiming) ? EQ : GE;
+
+      if(!add_constraintex(lp, 2, Val, Col, ConstrType, DI.getLatency()))
         report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
                            " at VSUnit " + utostr_32(U->getIdx()) );
     }
