@@ -75,9 +75,8 @@ bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
 void VSchedGraph::verify() const {
   if (getEntryRoot()->num_deps())
     llvm_unreachable("Entry root should not have any dependence!");
-  if (getExitRoot()->getNumUses())
+  if (getExitRoot()->num_uses())
     llvm_unreachable("Exit root should not have any use!");
-  // TODO: Other verification.
 
   for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I)
     verifySU(*I);

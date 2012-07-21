@@ -237,11 +237,8 @@ public:
   use_iterator use_end() { return UseList.end(); }
   const_use_iterator use_end() const { return UseList.end(); }
 
-  VSUnit *use_back() { return UseList.back(); }
-  VSUnit *use_back() const { return UseList.back(); }
-
-  bool use_empty() { return UseList.empty(); }
-  size_t getNumUses() const { return UseList.size(); }
+  bool use_empty() const { return UseList.empty(); }
+  size_t num_uses() const { return UseList.size(); }
   //}
 
   unsigned countValDeps() const;
@@ -544,7 +541,7 @@ public:
 
     typedef TerminatorMapTy::iterator it;
     for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
-      if (I->second->getNumUses() == 0)
+      if (I->second->use_empty())
         Exit->addDep(I->second, VDEdge::CreateCtrlDep(0));
 
     return Exit;

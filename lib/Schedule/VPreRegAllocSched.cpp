@@ -896,7 +896,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
 
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
-    if (VSU->getNumUses() == 0 && VSU != Terminator) {
+    if (VSU->use_empty() && VSU != Terminator) {
       if (VSU->isDatapath()) continue;
 
       if (!(AllowDangling || G.isLoopOp(VSU->getRepresentativePtr())))
