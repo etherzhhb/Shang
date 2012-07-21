@@ -53,7 +53,8 @@ public:
   enum VDEdgeTypes {
     edgeValDep,
     edgeMemDep,
-    edgeCtrlDep
+    edgeCtrlDep,
+    edgeFixTiming,
   };
 private:
   VDEdgeTypes EdgeType : 2;
@@ -93,6 +94,10 @@ public:
 
   static VDEdge CreateCtrlDep(unsigned Latency) {
     return VDEdge(edgeCtrlDep, Latency, 0);
+  }
+
+  static VDEdge CreateFixTimingConstraint(unsigned Latency) {
+    return VDEdge(edgeFixTiming, Latency, 0);
   }
 
   template<bool IsCtrl>
