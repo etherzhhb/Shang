@@ -184,6 +184,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
                                   MachineBasicBlock *VExit);
 
+  void pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
+                         MachineBasicBlock *VExit );
+
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   bool cleanUpRegisterClass(unsigned RegNum, const TargetRegisterClass *RC);
@@ -1151,6 +1154,24 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
   G.verify();
 }
 
+void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
+                                          MachineBasicBlock *VExit) {
+  VSchedGraph LocalG(G.DLInfo, true, 1);
+  VSUnit *CurEntry = LocalG.createVSUnit(MBB);
+  buildControlPathGraph(LocalG, MBB);
+  // Todo: Simply set the terminator SU as the exit root?
+  LocalG.createExitRoot(VExit);
+  LocalG.prepareForCtrlSched();
+  LocalG.verify();
+  LocalG.scheduleCtrl();
+
+  typedef VSchedGraph::iterator it;
+  for (it I = G.mergeSUsInSubGraph(LocalG), E = G.end(); I != E; ++I)
+    if ((*I)->isControl()) addSchedDepForSU<true>(*I, G);
+
+  addDepsForBBEntry(G, CurEntry);
+}
+
 void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
                                                    MachineBasicBlock *Entry,
                                                    MachineBasicBlock *VExit) {
@@ -1161,9 +1182,14 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
     MachineBasicBlock *MBB = *I;
     G.DLInfo.resetExitSet();
 
+    if (couldBePipelined(MBB)) {
+      // Perform software pipelining with local scheduling algorithm.
+      pipelineBBLocally(G, MBB, VExit);
+      continue;
+    }
+
     VSUnit *CurEntry = G.createVSUnit(MBB);
     addDepsForBBEntry(G, CurEntry);
-
     buildControlPathGraph(G, MBB);
   }
 
