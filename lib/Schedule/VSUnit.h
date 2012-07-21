@@ -57,7 +57,7 @@ public:
     edgeFixTiming,
   };
 private:
-  VDEdgeTypes EdgeType : 2;
+  uint8_t  EdgeType : 2;
   // Iterate distance.
   uint16_t Distance : 14;
   // The latancy of this edge.
@@ -67,7 +67,7 @@ protected:
   VDEdge(enum VDEdgeTypes T, unsigned latancy, unsigned Dst)
     : EdgeType(T), Distance(Dst), Latancy(latancy) {}
 public:
-  unsigned getEdgeType() const { return EdgeType; }
+  VDEdgeTypes getEdgeType() const { return VDEdgeTypes(EdgeType); }
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
     return int(Latancy) - int(II) * int(getDistance());
@@ -132,7 +132,7 @@ public:
 
 
   // Forwarding the function from the Edge.
-  unsigned getEdgeType() const { return getEdge().getEdgeType(); }
+  VDEdge::VDEdgeTypes getEdgeType() const { return getEdge().getEdgeType(); }
   inline unsigned getLatency(unsigned II = 0) const {
     return getEdge().getLatency(II);
   }
