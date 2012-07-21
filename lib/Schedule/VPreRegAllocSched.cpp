@@ -133,8 +133,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
 
-  void addSchedDepForSU(VSUnit *A, VSchedGraph &G,
-                        bool isExit = false);
+  void addSchedDepForSU(VSUnit *A, VSchedGraph &G);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<bool IsCtrl>
   void addSchedDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
@@ -898,7 +897,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   }
 }
 
-void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G, bool isExit) {
+void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
   // Build the dependence edge.
   typedef VSUnit::instr_iterator it;
   assert(A->isControl() && "Unexpected data-path schedule unit!");
@@ -910,16 +909,15 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G, bool isExit)
     addSchedDepForMI<false>(MI, I ? A->getLatencyAt(I) : 0, A, G, *DepLat);
   }
 
+  if (!A->dep_empty()) return;
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
-  if (A->dep_empty() && !isExit) {
-    VSUnit *BBEntry = G.lookupSUnit(A->getParentBB());
-    unsigned Latency = 0;
-    if (BBEntry == G.getEntryRoot())
-      Latency = calculateLatencyFromEntry(A);
+  VSUnit *BBEntry = G.lookupSUnit(A->getParentBB());
+  unsigned Latency = 0;
+  if (BBEntry == G.getEntryRoot())
+    Latency = calculateLatencyFromEntry(A);
 
-    A->addDep(BBEntry, VDEdge::CreateCtrlDep(Latency));
-  }
+  A->addDep(BBEntry, VDEdge::CreateCtrlDep(Latency));
 }
 
 bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
@@ -1257,19 +1255,11 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     G.buildExitMIInfo(MI, ExitDepInfo);
   }
 
-  // Add the dependence of exit root.
-  addSchedDepForSU(ExitSU, G, true);
-
   // Add the control dependence edge edges to wait all operation finish.
   addSchedDepForMI<true>(ExitSU->getRepresentativePtr(), 0/*Offset*/,
                          ExitSU, G, ExitDepInfo);
-
-  // If we have a trivial schedule graph that only containing entry and exit
-  // simply connect them together.
-  if (ExitSU->dep_empty()) {
-    unsigned L = calculateLatencyFromEntry(ExitSU);
-    ExitSU->addDep(G.lookupSUnit(MBB), VDEdge::CreateCtrlDep(L));
-  }
+  // Add the dependence of exit root.
+  addSchedDepForSU(ExitSU, G);
 
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so dangling node
