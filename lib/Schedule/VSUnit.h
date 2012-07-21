@@ -180,7 +180,10 @@ class VSUnit {
 
   VSUnit *updateIdx(unsigned short Idx);
 
-  void cleanDeps() { Deps.clear(); }
+  void cleanDepAndUse() {
+    Deps.clear();
+    UseList.clear();
+  }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
