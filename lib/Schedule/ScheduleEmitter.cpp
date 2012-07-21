@@ -385,7 +385,7 @@ struct MicroStateBuilder {
                                          true))
         .addOperand(getRegUseOperand(SrcMO, CopySlot))
         .addOperand(VInstrInfo::CreatePredicate())
-        .addImm(Slot);
+        .addImm(translateToSlotRegNum(Slot));
 
       SrcMO.ChangeToRegister(DstReg, false);
     }
@@ -408,16 +408,20 @@ struct MicroStateBuilder {
           .addOperand(VInstrInfo::CreateReg(NewReg,
                                             VInstrInfo::getBitWidth(MO),
                                             false))
-          .addOperand(VInstrInfo::CreatePredicate()).addImm(0);
-
-    setInstrSlotNum(DefPHI, InsertSlot);
+          .addOperand(VInstrInfo::CreatePredicate())
+          .addImm(translateToSlotRegNum(InsertSlot));
 
     // Update the MO of the Original PHI.
     MO.ChangeToRegister(NewReg, true);
   }
 
+  // Translate the global slot number to unique slot register number.
+  unsigned translateToSlotRegNum(unsigned ScheduleSlot) {
+    return ScheduleSlot - ScheduleStartSlot + StartSlot;
+  }
+
   void setInstrSlotNum(MachineInstr * MI, unsigned ScheduleSlot) {
-    unsigned Slot = ScheduleSlot - ScheduleStartSlot + StartSlot;
+    unsigned Slot = translateToSlotRegNum(ScheduleSlot);
     VInstrInfo::setInstrSlotNum(MI, Slot);
   }
 
