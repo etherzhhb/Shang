@@ -966,10 +966,14 @@ void VPreRegAllocSched::addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU) {
 
   typedef MachineBasicBlock::pred_iterator pred_iterator;
   for (pred_iterator I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
-    VSUnit *PredTerminator = G.lookUpTerminator(*I);
+    MachineBasicBlock *PredBB = *I;
+
+    // Avoid self-loop.
+    if (PredBB == MBB) continue;
+
     // Ignore the terminator that is not yet created, which mean we are ignoring
     // the loop back edges.
-    if (PredTerminator)
+    if (VSUnit *PredTerminator = G.lookUpTerminator(PredBB))
       EntrySU->addDep(PredTerminator, VDEdge::CreateCtrlDep(0));
   }
 }
