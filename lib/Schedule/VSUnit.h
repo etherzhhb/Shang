@@ -429,6 +429,8 @@ private:
   SUnitMapType InstToSUnits;
   typedef std::map<MachineBasicBlock*, VSUnit*> TerminatorMapTy;
   TerminatorMapTy Terminators;
+  typedef std::map<MachineBasicBlock*, unsigned> IIMapTy;
+  IIMapTy IIMap;
 
   bool trySetLoopOp(MachineInstr *MI);
 
@@ -610,14 +612,12 @@ public:
   }
 
   unsigned getLoopOpSlot(MachineBasicBlock *MBB) const {
-    if (VSUnit *SE = getLoopOp())
-      return SE->getSlot();
-
-    return getEndSlot(MBB);
+    return getStartSlot(MBB) + getII(MBB);
   }
 
   unsigned getII(MachineBasicBlock *MBB) const {
-    return getLoopOpSlot(MBB) - getStartSlot(MBB);
+    IIMapTy::const_iterator at = IIMap.find(MBB);
+    return at == IIMap.end() ? getTotalSlot(MBB) : at->second;
   }
 
   bool enablePipeLine() const {

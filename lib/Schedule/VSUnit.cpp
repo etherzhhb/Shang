@@ -283,10 +283,14 @@ void VSchedGraph::scheduleLoop() {
 
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot(MBB) << '\n');
-  assert(getII(MBB) == Scheduler->getMII()
+  assert(getLoopOp()->getSlot() - EntrySlot == Scheduler->getMII()
          && "LoopOp was not scheduled to the right slot!");
-  assert(getLoopOpSlot(MBB) <= getEndSlot(MBB)
+  assert(getLoopOp()->getSlot() <= getEndSlot(MBB)
          && "Expect MII is not bigger then critical path length!");
+
+  bool succ = IIMap.insert(std::make_pair(MBB, Scheduler->getMII())).second;
+  assert(succ && "Cannot remember II!");
+  (void) succ;
 
   fixPHISchedules(begin(), begin() + num_scheds());
 }
