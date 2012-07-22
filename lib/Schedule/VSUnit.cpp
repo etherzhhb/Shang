@@ -496,6 +496,7 @@ void VDEdge::print(raw_ostream &OS) const {}
 
 // TODO: Implement edge bundle, calculate the edge for
 void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
+  assert(Src != this && "Cannot add self-loop!");
   edge_iterator at = Deps.find(Src);
 
   if (at == Deps.end()) {
