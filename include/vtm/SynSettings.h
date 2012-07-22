@@ -34,11 +34,11 @@ namespace llvm {
 class SynSettings {
 public:
   enum PipeLineAlgorithm {
-    IMS, ILPMS, DontPipeline
+    IMS, DontPipeline
   };
 
   enum ScheduleAlgorithm {
-    ILP, ASAP, SDC
+    ASAP, SDC
   };
 
 private:

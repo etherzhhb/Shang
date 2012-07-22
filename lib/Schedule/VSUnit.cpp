@@ -266,7 +266,6 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G, MachineFunction *F)
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
-  case SynSettings::ILP:   return new ILPScheduler(G);
   case SynSettings::ASAP:  return new ASAPScheduler(G);
   case SynSettings::SDC:  return new SDCScheduler(G);
   }
@@ -278,8 +277,6 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G, MachineFunction *F) {
   switch (I.getPipeLineAlgorithm()) {
   case SynSettings::IMS:
     return new IterativeModuloScheduling(G);
-  case SynSettings::ILPMS:
-    return new ILPScheduler(G);
   default:
     return createLinearScheduler(G, F);
   }

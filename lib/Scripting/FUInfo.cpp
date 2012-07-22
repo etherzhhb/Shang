@@ -197,7 +197,7 @@ SynSettings::SynSettings(StringRef Name, SynSettings &From)
 
 SynSettings::SynSettings(luabind::object SettingTable)
   : PipeAlg(SynSettings::DontPipeline),
-    SchedAlg(SynSettings::ILP), IsTopLevelModule(true) {
+    SchedAlg(SynSettings::SDC), IsTopLevelModule(true) {
   if (luabind::type(SettingTable) != LUA_TTABLE)
     return;
 

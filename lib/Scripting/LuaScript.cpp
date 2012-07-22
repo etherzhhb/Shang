@@ -77,11 +77,9 @@ void LuaScript::init() {
     luabind::class_<SynSettings>("SynSettings")
       .enum_("PipeLine")[
         luabind::value("IMS", SynSettings::IMS),
-          luabind::value("ILPMS", SynSettings::ILPMS),
           luabind::value("DontPipeline", SynSettings::DontPipeline)
       ]
       .enum_("Schedule")[
-        luabind::value("ILP", SynSettings::ILP),
         luabind::value("ASAP", SynSettings::ASAP),
         luabind::value("SDC", SynSettings::SDC)
       ],

@@ -234,65 +234,6 @@ public:
   }
 };
 
-class ILPScheduler : public SchedulingBase {
-  // The index of first step variable of the schedule unit.
-  // For a given schedule unit with index i, who's time frame is N, then there
-  // will be N step variables:
-  // sv_i_0, sv_i_1, sv_i_2, ... , sv_i_(N-1) 
-  // sv_i_j set to 1 means the schedule unit is scheduled to asap + j step
-  std::map<const VSUnit*, unsigned> SUnitToSV;
-  // Total step variables count.
-  unsigned NumStepVars;
-  // Total Step Variable;
-  unsigned StepIdx;
-  // Total variables in the model.
-  unsigned TotalVariables;
-
-  unsigned TotalRows;
-
-  // Build the first step variable index mapping of schedule units based on
-  // their ASAP and ALAP and return the total step variable count.
-  //
-  unsigned buildSVIdx();
-
-  unsigned getFstSVIdxOf(const VSUnit *U) const {
-    assert(U && "Unexpected NULL pointer!");
-    std::map<const VSUnit*, unsigned>::const_iterator at = SUnitToSV.find(U);
-    assert(at != SUnitToSV.end() && "SVIdx for VSUnit not exist!");
-    return at->second;
-  }
-
-  typedef std::pair<const VSUnit*, unsigned> SUToIdx;
-  typedef SmallVector<SUToIdx, 64> ActiveSUVec;
-  typedef std::map<unsigned, ActiveSUVec> ActiveSUMap;
-  ActiveSUMap ActiveSUs;
-
-  // Only 1 step variable allowed set to 1.
-  void buildOneActiveStepConstraints(lprec *lp);
-
-  // The schedule should satisfy the dependences.
-  void buildPrecedenceConstraints(lprec *lp);
-
-  unsigned getIdxOf(VFUs::FUTypes FU) {
-    return NumStepVars + FU - VFUs::FirstNonTrivialFUType;
-  }
-
-  // Avoid the resources conflict for the function units. 
-  void buildFUConstraints(lprec *lp);
-
-  // Set the variables' name in the model.
-  void setUpVariables(lprec *lp);
-
-  void buildObject(lprec *lp);
-
-  // Build the schedule form the result of ILP.
-  void buildSchedule(lprec *lp);
-public:
-  ILPScheduler(VSchedGraph &S);
-
-  bool scheduleState();
-};
-
 class SDCScheduler : public SchedulingBase {
   public:
     SDCScheduler(VSchedGraph &S);
