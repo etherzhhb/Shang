@@ -177,15 +177,17 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   static char ID;
 
   ~VPreRegAllocSched();
+
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void scheduleWholeFunctionBySDC(VSchedGraph &G);
-
-  void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
+  typedef ReversePostOrderTraversal<MachineBasicBlock*> BBTopOrd;
+  typedef BBTopOrd::rpo_iterator rpo_it;
+  void scheduleWholeFunctionBySDC(VSchedGraph &G, BBTopOrd &Ord);
+  void fixInterBBLatency(VSchedGraph &G, BBTopOrd &Ord);
+  void buildGlobalSchedulingGraph(VSchedGraph &G, BBTopOrd &Ord,
                                   MachineBasicBlock *VExit);
-
   void pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
-                         MachineBasicBlock *VExit );
+                         MachineBasicBlock *VExit);
 
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
@@ -240,11 +242,12 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   DetialLatencyInfo DLInfo(*MRI, false);
   VSchedGraph G(DLInfo, false, 1);
+  BBTopOrd Ord(MF.begin());
 
-  buildGlobalSchedulingGraph(G, MF.begin(), VirtualExit);
+  buildGlobalSchedulingGraph(G, Ord, VirtualExit);
 
   DEBUG(G.viewGraph());
-  scheduleWholeFunctionBySDC(G);
+  scheduleWholeFunctionBySDC(G, Ord);
 
   buildDataPathGraph(G);
   DEBUG(G.viewGraph());
@@ -1170,13 +1173,9 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   addDepsForBBEntry(G, CurEntry);
 }
 
-void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
-                                                   MachineBasicBlock *Entry,
+void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G, BBTopOrd &Ord,
                                                    MachineBasicBlock *VExit) {
-  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
-  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
-
-  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
+  for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
     G.DLInfo.resetExitSet();
 
@@ -1198,12 +1197,87 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   G.verify();
 }
 
-void VPreRegAllocSched::scheduleWholeFunctionBySDC(VSchedGraph &G) {
+void VPreRegAllocSched::fixInterBBLatency(VSchedGraph &G, BBTopOrd &Ord) {
+  // Remember the exiting slot of the BBs.
+  std::vector<unsigned> ExitSlots(G.num_bbs(), 0);
+
+  for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
+    MachineBasicBlock *MBB = *I;
+    unsigned TotalSlot = G.getTotalSlot(MBB);
+
+    // Compute the shortest distance from the entry of the function to the entry
+    // of the current block.
+    VSUnit *BBEntry = G.lookupSUnit(MBB);
+    unsigned EntrySlot = BBEntry->getSlot();
+    unsigned SlotsFromEntry = EntrySlot;
+    typedef VSUnit::dep_iterator dep_it;
+    for (dep_it I = BBEntry->dep_begin(), E = BBEntry->dep_end(); I != E; ++I) {
+      VSUnit *PredTerminator = *I;
+      DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
+             << "->MBB#" << MBB->getNumber() << " slack: "
+             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
+
+      MachineBasicBlock *PredBB = (*I)->getParentBB();
+      unsigned SlotsFromPredExit = ExitSlots[PredBB->getNumber()];
+      assert(SlotsFromPredExit && "Not visiting the BBs in topological order?");
+      SlotsFromEntry = std::min(SlotsFromEntry, SlotsFromPredExit);
+    }
+
+    typedef VSUnit::use_iterator use_it;
+    // The minimal slack from the predecessors of the BB to the entry of the BB.
+    int MinInterBBSlack = 0;
+    for (use_it I = BBEntry->use_begin(), E = BBEntry->use_end(); I != E; ++I) {
+      VSUnit *U = *I;
+      if (U->getParentBB() != MBB) continue;
+
+      unsigned USlot = U->getSlot();
+      for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+        if (!DI.isCrossBB()) continue;
+
+        MachineBasicBlock *SrcBB = DI->getParentBB();
+        assert(SrcBB != MBB && "Not cross BB depenency!");
+        VSUnit *SrcTerminator = G.lookUpTerminator(SrcBB);
+        unsigned SrcExitSlot = ExitSlots[SrcBB->getNumber()];
+        assert(SrcExitSlot && "Unexpected cross BB back-edge!");
+        // Calculate the latency distributed between the SrcBB and the SnkBB.
+        assert(USlot >= EntrySlot && SrcTerminator->getSlot() >= DI->getSlot()
+               && "Bad schedule!");
+        int InterBBLatency = DI->getLatency() - (USlot - EntrySlot)
+                             - (SrcTerminator->getSlot() - DI->getSlot());
+        // Calculate the minimal latency between the SrcBB and SnkBB.
+        int ActualInterBBlatency = SlotsFromEntry - SrcExitSlot;
+        DEBUG(dbgs().indent(4) << "Found InterBBLatency and ActualInterBBlatency"
+                               << InterBBLatency << ' '
+                               << ActualInterBBlatency << '\n');
+        // Calculate the slack.
+        int Slack = ActualInterBBlatency - InterBBLatency;
+        MinInterBBSlack = std::min(MinInterBBSlack, Slack);
+      }
+    }
+
+    DEBUG(dbgs() << "Minimal Slack: " << MinInterBBSlack << '\n');
+    assert(MinInterBBSlack == 0
+           && "Inserting delay block to fix negative slack is not yet"
+              " implemented!");
+    unsigned ExitSlot = SlotsFromEntry + G.getTotalSlot(MBB);
+    assert(ExitSlot && "Bad schedule!");
+    ExitSlots[MBB->getNumber()] = ExitSlot;
+  }
+}
+
+void VPreRegAllocSched::scheduleWholeFunctionBySDC(VSchedGraph &G,
+                                                   BBTopOrd &Ord) {
   SDCScheduler Scheduler(G);
 
   bool success = Scheduler.scheduleState();
   assert(success && "SDCScheduler fail!");
   (void) success;
+
+  // Currently the SDCScheduler cannot calculate the minimal latency between two
+  // bb correctly, which leads to a wrong global code motion for the
+  // multi-cycles chains. Hence we need to fix the schedule, the implement detail
+  // should be hidden by the function.
+  fixInterBBLatency(G, Ord);
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {

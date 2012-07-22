@@ -552,6 +552,8 @@ public:
     return at == Terminators.end() ? 0 : at->second;
   }
 
+  unsigned num_bbs() const { return Terminators.size(); }
+
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
   VSUnit *createExitRoot(MachineBasicBlock *MBB) {
     assert (Exit == 0 && "Exit already created!");
