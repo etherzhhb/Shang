@@ -249,7 +249,7 @@ void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
 
   typedef VSUnit::const_dep_iterator dep_it;
   for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
-    if (DI.getEdgeType() != VDEdge::edgeFixTiming) continue;
+    if (DI.getEdgeType() != VDEdge::edgeFixedTiming) continue;
 
     if (DI.getLatency() % II) continue;
     // Now the source of the dependency is scheduled to a slot which alias with

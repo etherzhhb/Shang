@@ -506,9 +506,9 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   }
 
   VDEdge &CurE = at->second;
-  assert(NewE.getEdgeType() != VDEdge::edgeFixTiming
-         && CurE.getEdgeType() != VDEdge::edgeFixTiming
-         && "Cannot overide fixed timing dependencies!");
+  assert(NewE.getEdgeType() != VDEdge::edgeFixedTiming
+         && CurE.getEdgeType() != VDEdge::edgeFixedTiming
+         && "Cannot override fixed timing dependencies!");
   // If the new dependency constraint tighter?
   assert((NewE.getDistance() == 0 || CurE.getDistance() == 0
           || CurE.getDistance() == NewE.getDistance())

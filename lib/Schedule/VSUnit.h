@@ -54,7 +54,7 @@ public:
     edgeValDep,
     edgeMemDep,
     edgeCtrlDep,
-    edgeFixTiming,
+    edgeFixedTiming,
   };
 private:
   uint8_t  EdgeType : 2;
@@ -97,7 +97,7 @@ public:
   }
 
   static VDEdge CreateFixTimingConstraint(unsigned Latency) {
-    return VDEdge(edgeFixTiming, Latency, 0);
+    return VDEdge(edgeFixedTiming, Latency, 0);
   }
 
   template<bool IsCtrl>

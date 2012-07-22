@@ -70,7 +70,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
       Col[1] = 1 + DstStartIdx;
       Val[1] = 1.0;
 
-      int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixTiming) ? EQ : GE;
+      int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
 
       if(!add_constraintex(lp, 2, Val, Col, ConstrType, DI.getLatency()))
         report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
