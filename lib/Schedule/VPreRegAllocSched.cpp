@@ -1131,7 +1131,8 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
   G.prepareForDatapathSched();
-  for (su_it I = G.begin() + 1, E = G.end(); I != E; ++I)
+
+  for (su_it I = G.begin(), E = G.end(); I != E; ++I)
     addValDep(G, *I);
 
   // Clear the dangling flag for all node that used (directly/indirectly) by
