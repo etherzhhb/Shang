@@ -1203,7 +1203,6 @@ void VPreRegAllocSched::fixInterBBLatency(VSchedGraph &G, BBTopOrd &Ord) {
 
   for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
-    unsigned TotalSlot = G.getTotalSlot(MBB);
 
     // Compute the shortest distance from the entry of the function to the entry
     // of the current block.

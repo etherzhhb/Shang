@@ -105,8 +105,8 @@ public:
   unsigned RecMII;
 
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this),
-      B(G->getNextSUIdx()), CurIdx(G->getEntryRoot()->getIdx()), RecMII(0) {
+    : G(SG), GraphEntry(SG->getEntryRoot()), B(G->getNextSUIdx()),
+      DummyNode(0, this), CurIdx(G->getEntryRoot()->getIdx()), RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
     // the InstIdx of the VSUnit and this only works if they are sorted in
     // the VSUnits vector of SG.

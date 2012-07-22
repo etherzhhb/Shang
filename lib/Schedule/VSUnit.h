@@ -54,7 +54,7 @@ public:
     edgeValDep,
     edgeMemDep,
     edgeCtrlDep,
-    edgeFixedTiming,
+    edgeFixedTiming
   };
 private:
   uint8_t  EdgeType : 2;

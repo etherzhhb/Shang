@@ -401,15 +401,13 @@ struct MicroStateBuilder {
            && "Bad register class for PHI!");
     unsigned NewReg = MRI.createVirtualRegister(&VTM::DRRegClass);
 
-    MachineInstr *DefPHI
-      = BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
-                TII.get(VTM::VOpDefPhi))
-          .addOperand(MO)
-          .addOperand(VInstrInfo::CreateReg(NewReg,
-                                            VInstrInfo::getBitWidth(MO),
-                                            false))
-          .addOperand(VInstrInfo::CreatePredicate())
-          .addImm(translateToSlotRegNum(InsertSlot));
+    DebugLoc dl;
+    InsertPosTy IP = getStateCtrlAt(OpSlot(InsertSlot, true));
+    unsigned BitWidth = VInstrInfo::getBitWidth(MO);
+    BuildMI(MBB, IP, dl, TII.get(VTM::VOpDefPhi))
+      .addOperand(MO).addOperand(VInstrInfo::CreateReg(NewReg, BitWidth, false))
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addImm(translateToSlotRegNum(InsertSlot));
 
     // Update the MO of the Original PHI.
     MO.ChangeToRegister(NewReg, true);
