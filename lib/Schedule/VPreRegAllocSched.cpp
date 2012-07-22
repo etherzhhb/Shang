@@ -729,16 +729,13 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
     addSchedDepForMI<false, CrossBBOnly>(MI, MIOffset, A, G, *DepLat);
   }
 
-  // If we are only adding cross basic block dependencies, do not add the
-  // control dependencies from the entry of the same BB.
-  if (!A->dep_empty() || CrossBBOnly) return;
+  if (!A->dep_empty()) return;
 
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
-  MachineBasicBlock *ParentBB = A->getParentBB();
-  VSUnit *BBEntry = G.lookupSUnit(ParentBB);
-
-  A->addDep(BBEntry, VDEdge::CreateCtrlDep(calculateLatencyFromEntry(A)));
+  VSUnit *Entry = CrossBBOnly?G.getEntryRoot():G.lookupSUnit(A->getParentBB());
+  unsigned LatencyFromBBEntry = CrossBBOnly ? 0 : calculateLatencyFromEntry(A);
+  A->addDep(Entry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
 }
 
 bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
