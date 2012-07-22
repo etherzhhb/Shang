@@ -198,7 +198,7 @@ struct alap_less {
   }
 };
 
-void BasicLinearOrderGenerator::addLinOrdEdge() const {
+void BasicLinearOrderGenerator::addLinOrdEdge() {
   ConflictListTy ConflictList;
   std::vector<VSUnit*> PipeBreakers;
 
@@ -209,7 +209,10 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
     VSUnit *U = *I;
     // No need to assign the linear order for the SU which already has a fixed
     // timing constraint.
-    if (U->hasFixedTiming()) continue;
+    if (U->hasFixedTiming()) {
+      if (U->isTerminator()) buildSuccConflictMap(U);
+      continue;
+    }
 
     MachineBasicBlock *MBB = U->getParentBB();
     if (MBB != PrevBB) {
@@ -234,9 +237,42 @@ void BasicLinearOrderGenerator::addLinOrdEdge() const {
   S->topologicalSortScheduleUnits();
 }
 
+void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
+  assert(U->isTerminator() && "Bad SU type!");
+
+  MachineBasicBlock *ParentBB = U->getParentBB();
+  unsigned II = S.getState().getII(ParentBB);
+  // There is no FU conflict if the block is not pipelined.
+  if (II == 0) return;
+
+  SmallVector<FuncUnitId, 2> ActiveFUsAtLastSlot;
+
+  typedef VSUnit::const_dep_iterator dep_it;
+  for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+    if (DI.getEdgeType() != VDEdge::edgeFixTiming) continue;
+
+    if (DI.getLatency() % II) continue;
+    // Now the source of the dependency is scheduled to a slot which alias with
+    // the last slot of the BB.
+
+    FuncUnitId FU = DI->getFUId();
+    if (!FU.isBound()) continue;
+
+    ActiveFUsAtLastSlot.push_back(FU);
+  }
+
+  for (unsigned iter = 0, e = U->num_instrs(); iter < e; ++iter) {
+    MachineInstr *MI = U->getPtrAt(iter);
+    if (!MI->isBranch()) continue;
+
+    MachineBasicBlock *SuccBB = MI->getOperand(1).getMBB();
+    FirstSlotConflicts[SuccBB].insert(ActiveFUsAtLastSlot.begin(),
+                                      ActiveFUsAtLastSlot.end());
+  }
+}
+
 void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
-                                              std::vector<VSUnit*> &PipeBreakers)
-                                              const {
+                                              SUVecTy &PipeBreakers) {
   typedef ConflictListTy::iterator iterator;
   for (iterator I = List.begin(), E = List.end(); I != E; ++I) {
     std::vector<VSUnit*> &SUs = I->second;
@@ -245,16 +281,26 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
 
     std::sort(SUs.begin(), SUs.end(), alap_less(S));
 
+    VSUnit *FirstSU;
     // A trivial id means SUs contains the MemoryBus and BRam operations,
     // which need to be handle carefully.
     if (I->first == VFUs::BRam)
-      addLinOrdEdgeForPipeOp(I->first, SUs);
+      FirstSU = addLinOrdEdgeForPipeOp(I->first, SUs);
     else
-      addLinOrdEdge(I->second);
+      FirstSU = addLinOrdEdge(I->second);
+
+    MachineBasicBlock *ParentBB = FirstSU->getParentBB();
+    if (!isFUConflictedAtFirstSlot(ParentBB, I->first)) continue;
+
+    // Prevent the First SU from being scheduled to the first slot if there is
+    // FU conflict.
+    VSUnit *BBEntry = S.getState().lookupSUnit(ParentBB);
+    assert(BBEntry && "EntrySU not found!");
+    FirstSU->addDep(BBEntry, VDEdge::CreateCtrlDep(1));    
   }
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
+VSUnit *BasicLinearOrderGenerator::addLinOrdEdge(SUVecTy &SUs) {
   VSUnit *LaterSU = SUs.back();
   SUs.pop_back();
 
@@ -269,12 +315,14 @@ void BasicLinearOrderGenerator::addLinOrdEdge(std::vector<VSUnit*> &SUs) const {
 
     LaterSU = EalierSU;
   }
+
+  return LaterSU;
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
-                                                       std::vector<VSUnit*> &SUs)
-                                                       const {
+VSUnit *BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
+                                                          SUVecTy &SUs) {
   VSUnit *LaterSU = SUs.back();
+  VSUnit *FirstSU = LaterSU;
   SUs.pop_back();
 
   while (!SUs.empty()) {
@@ -288,5 +336,10 @@ void BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
       LaterSU->addDep(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
 
     LaterSU = EalierSU;
+    if (Id == EalierSU->getFUId()) FirstSU = EalierSU;    
   }
+
+  assert(FirstSU->getFUId() == Id
+         && "SUs not containing any SU with the right FU type?");
+  return FirstSU;
 }

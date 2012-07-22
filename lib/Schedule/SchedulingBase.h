@@ -22,6 +22,7 @@
 
 #include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallSet.h"
 #include <map>
 using namespace llvm;
 
@@ -205,17 +206,27 @@ struct ASAPScheduler : public SchedulingBase {
 // A pseudo scheduler which generate linear order for SDC scheduler.
 class BasicLinearOrderGenerator {
 protected:
-  typedef std::map<FuncUnitId, std::vector<VSUnit*> > ConflictListTy;
+  typedef std::vector<VSUnit*> SUVecTy;
+  typedef std::map<FuncUnitId, SUVecTy> ConflictListTy;
+  typedef std::map<MachineBasicBlock*, SmallSet<FuncUnitId, 2> >
+          FirstSlotConflictMapTy;
   SchedulingBase &S;
+  FirstSlotConflictMapTy FirstSlotConflicts;
+  void buildSuccConflictMap(const VSUnit *Terminator);
+  bool isFUConflictedAtFirstSlot(MachineBasicBlock *MBB, FuncUnitId Id) const {
+    FirstSlotConflictMapTy::const_iterator at = FirstSlotConflicts.find(MBB);
+    return at == FirstSlotConflicts.end() ? false : at->second.count(Id);
+  }
 
-  void addLinOrdEdge(ConflictListTy &ConflictList,
-                     std::vector<VSUnit*> &PipeBreakers) const;
-  void addLinOrdEdge(std::vector<VSUnit*> &SUs) const;
-  void addLinOrdEdgeForPipeOp(FuncUnitId Id, std::vector<VSUnit*> &SUs) const;
+  void addLinOrdEdge(ConflictListTy &ConflictList, SUVecTy &PipeBreakers);
+  // Add the linear ordering edges to the SUs in the vector and return the first
+  // SU.
+  VSUnit *addLinOrdEdge(SUVecTy &SUs);
+  VSUnit *addLinOrdEdgeForPipeOp(FuncUnitId Id, SUVecTy &SUs);
 
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
 
-  virtual void addLinOrdEdge() const;
+  virtual void addLinOrdEdge();
 public:
 
   static void addLinOrdEdge(SchedulingBase &S) {
