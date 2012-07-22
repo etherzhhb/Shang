@@ -58,14 +58,17 @@ public:
   };
 private:
   uint8_t  EdgeType : 2;
+  uint8_t  IsCrossBB : 1;
   // Iterate distance.
-  uint16_t Distance : 14;
+  uint16_t Distance : 13;
   // The latancy of this edge.
   uint16_t Latancy;
 
+  friend class VSUnit;
+  void setIsCrossBB(bool v = true) { IsCrossBB = v; }
 protected:
   VDEdge(enum VDEdgeTypes T, unsigned latancy, unsigned Dst)
-    : EdgeType(T), Distance(Dst), Latancy(latancy) {}
+    : EdgeType(T), IsCrossBB(false), Distance(Dst), Latancy(latancy) {}
 public:
   VDEdgeTypes getEdgeType() const { return VDEdgeTypes(EdgeType); }
   // Compute the latency considering the distance between iterations in a loop.
@@ -76,6 +79,7 @@ public:
   // Get the distance between iterations in a loop.
   unsigned getDistance() const { return Distance; }
   bool isLoopCarried() const { return getDistance() > 0; }
+  bool isCrossBB() const { return IsCrossBB; }
 
   void print(raw_ostream &OS) const;
 
@@ -136,7 +140,8 @@ public:
   inline unsigned getLatency(unsigned II = 0) const {
     return getEdge().getLatency(II);
   }
-  unsigned isLoopCarried() const { return getEdge().isLoopCarried(); }
+  bool isLoopCarried() const { return getEdge().isLoopCarried(); }
+  bool isCrossBB() const { return getEdge().isCrossBB(); }
   unsigned getDistance() const { return getEdge().getDistance(); }
 };
 

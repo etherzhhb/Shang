@@ -499,6 +499,8 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   assert(Src != this && "Cannot add self-loop!");
   edge_iterator at = Deps.find(Src);
 
+  NewE.setIsCrossBB(Src->getParentBB() != getParentBB());
+
   if (at == Deps.end()) {
     Deps.insert(std::make_pair(Src, NewE));
     Src->addToUseList(this);
