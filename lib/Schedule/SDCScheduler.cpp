@@ -45,7 +45,6 @@ struct LPObjFn : public std::map<unsigned, REAL> {
     std::vector<int> Indices;
     std::vector<REAL> Coefficients;
 
-    unsigned Col = 0;
     //Build the ASAP object function.
     typedef VSchedGraph::sched_iterator it;
     for(const_iterator I = begin(), E = end(); I != E; ++I) {
@@ -113,6 +112,12 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
     assert(U->isControl() && "Unexpected datapath in scheduler!");
     unsigned DstIdx = SUIdx[U];
 
+    if (U->isScheduled()) {
+      if(!set_bounds(lp, DstIdx + 1, U->getSlot(), U->getSlot()))
+        report_fatal_error("SDCScheduler: Can NOT bounds for scheduled VSUnit "
+                           + utostr_32(U->getIdx()) );
+    }
+
     addDependencyConstraints(lp, U, DstIdx);
   }
 }
@@ -146,9 +151,14 @@ void SDCScheduler::buildSchedule(lprec *lp) {
       VSUnit *U = *I;
     unsigned Offset = SUIdx[U];
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
-    DEBUG(dbgs() << "the row is:" << TotalRows + Offset + 1
-                 <<"the result is:" << j << "\n");
-    U->scheduledTo(j + State.EntrySlot);
+    DEBUG(dbgs() << "At row:" << TotalRows + Offset + 1
+                 << " the result is:" << j << "\n");
+    if (U->isScheduled()) {
+      assert(U->getSlot() == j && "Bad result!");
+      continue;
+    }
+
+    U->scheduledTo(j);
   }
 }
 
