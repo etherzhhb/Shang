@@ -63,8 +63,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   TargetData *TD;
 
-  MachineLoopInfo *LI;
-  LoopInfo *IRLI;
+  MachineLoopInfo *MLI;
+  LoopInfo *LI;
   AliasAnalysis *AA;
   ScalarEvolution *SE;
 
@@ -233,8 +233,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   FInfo = MF.getInfo<VFInfo>();
   AA = &getAnalysis<AliasAnalysis>();
-  LI = &getAnalysis<MachineLoopInfo>();
-  IRLI = &getAnalysis<LoopInfo>();
+  MLI = &getAnalysis<MachineLoopInfo>();
+  LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
@@ -365,7 +365,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
   // The schedule unit and the corresponding memory operand.
   typedef std::vector<std::pair<MachineMemOperand*, VSUnit*> > MemOpMapTy;
   MemOpMapTy VisitedMemOps;
-  Loop *IRL = IRLI->getLoopFor(G.getEntryBB()->getBasicBlock());
+  Loop *IRL = LI->getLoopFor(G.getEntryBB()->getBasicBlock());
 
   typedef MachineBasicBlock::instr_iterator it;
   for (it I = MBB->instr_begin(), E = MBB->instr_end(); I != E; ++I) {
@@ -742,7 +742,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
 }
 
 bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
-  MachineLoop *L = LI->getLoopFor(MBB);
+  MachineLoop *L = MLI->getLoopFor(MBB);
   // Not in any loop.
   if (!L) return false;
   // Dirty Hack: Only support one block loop at this moment.
