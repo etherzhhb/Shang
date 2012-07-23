@@ -703,26 +703,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
 
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
-  if (NumValDep == 0) {
+  if (NumValDep == 0)
     A->addDep(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
-    return;
-  }
-
-  // For pipelined loop, take care of the Anti-dependence from PHI.
-  if (G.isPipelined(ParentBB) && !isCtrl) {
-    typedef VSUnit::dep_iterator it;
-    for (it I = A->dep_begin(), E = A->dep_end(); I != E; ++I) {
-      VSUnit *DepSU = *I;
-
-      if (!DepSU->isPHI()) continue;
-
-      // Data-path op must read the value from PHI before it is refreshed, so
-      // add the back-edge to constraint the ALAP step of the operation.
-      // Although it is possible to detect and handle this situation in
-      // ScheduleEmitter, but that solution is more complex.
-      DepSU->addDep(A, VDEdge::CreateMemDep(0, 1));
-    }
-  }
 }
 
 template<bool CrossBBOnly>
