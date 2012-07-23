@@ -452,6 +452,33 @@ void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
   }
 }
 
+void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
+  // Perform depth first search to find node that reachable from Root.
+  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
+  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  Root->setIsDangling(false);
+  MachineBasicBlock *RootBB = Root->getParentBB();
+
+  while (!WorkStack.empty()) {
+    VSUnit *U = WorkStack.back().first;
+    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
+
+    if (ChildIt == U->dep_end()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    VSUnit *ChildNode = *ChildIt;
+    ++WorkStack.back().second;
+
+    if (!ChildNode->isDangling() || ChildNode->getParentBB() != RootBB) continue;
+
+    // If the node is reachable from exit, then it is not dangling.
+    ChildNode->setIsDangling(false);
+    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+  }
+}
+
 void VSchedGraph::scheduleDatapath() {
   SDCScheduler Scheduler(*this);
 
@@ -465,7 +492,15 @@ void VSchedGraph::scheduleDatapath() {
   // Break the multi-cycles chains to expose more FU sharing opportunities.
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *U = *I;
+    if (U->isControl()) clearDanglingFlagForTree(U);
+  }
+
+  for (iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *U = *I;
+
     if (U->isControl()) continue;
+
+    if (U->isDangling()) U->scheduledTo(getEndSlot(U->getParentBB()));
 
     fixChainedDatapathRC(U);
   }
@@ -508,12 +543,14 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
 }
 
 VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)
-  : SchedSlot(0), HasFixedTiming(false), InstIdx(Idx), FUNum(FUNum) {
+  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
+    FUNum(FUNum) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
 }
 
 VSUnit::VSUnit(MachineBasicBlock *MBB, uint16_t Idx)
-  : SchedSlot(0), HasFixedTiming(false), InstIdx(Idx), FUNum(0) {
+  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
+    FUNum(0) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
   Instrs.push_back(MBB);
   latencies.push_back(0);
@@ -611,4 +648,5 @@ void VSUnit::print(raw_ostream &OS) const {
   }
 
   OS << getFUId() << "\nAt slot: " << getSlot();
+  if (isDangling()) OS << " <Dangling>";
 }

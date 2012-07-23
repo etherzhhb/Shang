@@ -591,7 +591,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     // Sort the instructions, so we can emit them in order.
     std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
 
-    bool IsDangling = A->isDatapath() && A->getSlot() >= ScheduleEndSlot;
+    bool IsDangling = A->isDangling();
 
     typedef SmallVector<InSUInstInfo, 8>::iterator it;
     for (it I = Insts.begin(), E = Insts.end(); I != E; ++I) {

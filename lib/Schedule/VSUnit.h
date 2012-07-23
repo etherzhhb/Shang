@@ -148,7 +148,8 @@ public:
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
-  unsigned SchedSlot : 31;
+  unsigned SchedSlot : 30;
+  bool     IsDangling : 1;
   bool     HasFixedTiming: 1;
   uint16_t InstIdx;
   uint16_t FUNum;
@@ -189,7 +190,9 @@ class VSUnit {
     latencies.push_back(Latency);
   }
 
+  // Update internal status.
   VSUnit *updateIdx(unsigned short Idx);
+  void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
   void cleanDepAndUse() {
     Deps.clear();
@@ -199,6 +202,7 @@ public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
   unsigned short getIdx() const { return InstIdx; }
+  bool isDangling() const { return IsDangling; }
 
   typedef DepSet::iterator edge_iterator;
   edge_iterator edge_begin() { return Deps.begin(); }
@@ -447,6 +451,7 @@ private:
   unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
                         MachineBasicBlock *MBB);
   void fixPHISchedules(iterator su_begin, iterator su_end);
+  static void clearDanglingFlagForTree(VSUnit *Root);
 public:
   const unsigned EntrySlot;
 
