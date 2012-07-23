@@ -24,45 +24,27 @@
 
 using namespace llvm;
 
-namespace llvm {
-  // Helper class to build the object function for lp.
-struct LPObjFn : public std::map<unsigned, REAL> {
-  LPObjFn &operator*=(REAL val) {
-    for (iterator I = begin(), E = end(); I != E; ++I)
-      I->second *= val;
+void LPObjFn::setLPObj(lprec *lp) const {
+  std::vector<int> Indices;
+  std::vector<REAL> Coefficients;
 
-    return *this;
+  //Build the ASAP object function.
+  typedef VSchedGraph::sched_iterator it;
+  for(const_iterator I = begin(), E = end(); I != E; ++I) {
+    Indices.push_back(I->first);
+    Coefficients.push_back(I->second);
   }
 
-  LPObjFn &operator+=(const LPObjFn &Other) {
-    for (const_iterator I = Other.begin(), E = Other.end(); I != E; ++I)
-      (*this)[I->first] += I->second;
-
-    return *this;
-  }
-
-  void setLPObj(lprec *lp) const {
-    std::vector<int> Indices;
-    std::vector<REAL> Coefficients;
-
-    //Build the ASAP object function.
-    typedef VSchedGraph::sched_iterator it;
-    for(const_iterator I = begin(), E = end(); I != E; ++I) {
-      Indices.push_back(I->first);
-      Coefficients.push_back(I->second);
-    }
-
-    set_obj_fnex(lp, size(), Coefficients.data(), Indices.data());
-    set_maxim(lp);
-    DEBUG(write_lp(lp, "log.lp"));
-  }
-};
+  set_obj_fnex(lp, size(), Coefficients.data(), Indices.data());
+  set_maxim(lp);
+  DEBUG(write_lp(lp, "log.lp"));
 }
 
 SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), NumVars(0), lp(0)
 {}
 
-void SDCScheduler::createStepVariables(lprec *lp) {
+void SDCScheduler::createLPAndVariables() {
+  lp = make_lp(0, NumVars);
   unsigned Col =  1;
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
@@ -122,7 +104,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   }
 }
 
-void SDCScheduler::buildASAPObject(LPObjFn &Obj, double weight) {
+void SDCScheduler::buildASAPObject(double weight) {
   //Build the ASAP object function.
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
@@ -130,18 +112,18 @@ void SDCScheduler::buildASAPObject(LPObjFn &Obj, double weight) {
     unsigned Idx = SUIdx[U];
     // Because LPObjFn will set the objective function to maxim instead of minim,
     // we should use -1.0 instead of 1.0 as coefficient
-    Obj[1 + Idx] += - 1.0 * weight;
+    ObjFn[1 + Idx] += - 1.0 * weight;
   }
 }
 
-void SDCScheduler::buildOptSlackObject(LPObjFn &Obj, double weight){
+void SDCScheduler::buildOptSlackObject(double weight){
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
     int Indeg = U->countValDeps();
     int Outdeg = U->countValUses();
     unsigned Idx = SUIdx[U];
-    Obj[1 + Idx] += (Outdeg - Indeg) * weight;
+    ObjFn[1 + Idx] += (Outdeg - Indeg) * weight;
   }
 }
 
@@ -228,14 +210,7 @@ bool SDCScheduler::solveLP(lprec *lp) {
   return true;
 }
 
-bool SDCScheduler::scheduleDAGwithLinearOrder() {
-  DEBUG(viewGraph());
-  lprec *lp = make_lp(0, NumVars);
-  // Build the step variables.
-  createStepVariables(lp);
-  LPObjFn ObjFn;
-  buildASAPObject(ObjFn, 1.0);
-  //buildOptSlackObject(ObjFn, 0.0);
+bool SDCScheduler::schedule() {
   ObjFn.setLPObj(lp);
 
   set_add_rowmode(lp, TRUE);
@@ -256,15 +231,20 @@ bool SDCScheduler::scheduleDAGwithLinearOrder() {
   DEBUG(viewGraph());
 
   delete_lp(lp);
+  lp = 0;
   SUIdx.clear();
+  ObjFn.clear();
   return true;
 }
 
 bool SDCScheduler::scheduleState() {
   buildTimeFrameAndResetSchedule(true);
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
-
-  return scheduleDAGwithLinearOrder();
+  // Build the step variables.
+  createLPAndVariables();
+  buildASAPObject(1.0);
+  //buildOptSlackObject(0.0);
+  return schedule();
 }
 
 

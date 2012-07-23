@@ -234,14 +234,39 @@ public:
   }
 };
 
-struct LPObjFn;
+// Helper class to build the object function for lp.
+struct LPObjFn : public std::map<unsigned, double> {
+  LPObjFn &operator*=(double val) {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      I->second *= val;
+
+    return *this;
+  }
+
+  LPObjFn &operator+=(const LPObjFn &Other) {
+    for (const_iterator I = Other.begin(), E = Other.end(); I != E; ++I)
+      (*this)[I->first] += I->second;
+
+    return *this;
+  }
+
+  void setLPObj(lprec *lp) const;
+};
+
 class SDCScheduler : public SchedulingBase {
 public:
   SDCScheduler(VSchedGraph &S);
   bool scheduleState();
-  bool scheduleDAGwithLinearOrder();
+  bool schedule();
+  // Set the variables' name in the model.
+  void createLPAndVariables();
+
+  // Build the schedule object function.
+  void buildASAPObject(double weight);
+  void buildOptSlackObject(double weight);
 private:
   lprec *lp;
+  LPObjFn ObjFn;
   // The number of step variables.
   unsigned NumVars;
   // Total rows in LP.
@@ -251,16 +276,10 @@ private:
   typedef SUIdx2LPColMap::iterator SUIdxIt;
   SUIdx2LPColMap SUIdx;
 
-  // Set the variables' name in the model.
-  void createStepVariables(lprec *lp);
-
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);
   void addDependencyConstraints(lprec *lp, const VSUnit *U, unsigned DstIdx);
 
-  // Build the schedule object function.
-  void buildASAPObject(LPObjFn &Obj, double weight);
-  void buildOptSlackObject(LPObjFn &Obj, double weight);
   bool solveLP(lprec *lp);
 
   // Build the schedule form the result of ILP.
