@@ -60,52 +60,52 @@ private:
   uint8_t  EdgeType : 2;
   uint8_t  IsCrossBB : 1;
   // Iterate distance.
-  uint16_t Distance : 13;
+  int16_t Distance : 13;
   // The latancy of this edge.
-  uint16_t Latancy;
+  int16_t Latancy;
 
   friend class VSUnit;
   void setIsCrossBB(bool v = true) { IsCrossBB = v; }
 protected:
-  VDEdge(enum VDEdgeTypes T, unsigned latancy, unsigned Dst)
+  VDEdge(enum VDEdgeTypes T, int latancy, int Dst)
     : EdgeType(T), IsCrossBB(false), Distance(Dst), Latancy(latancy) {}
 public:
   VDEdgeTypes getEdgeType() const { return VDEdgeTypes(EdgeType); }
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
-    return int(Latancy) - int(II) * int(getDistance());
+    return Latancy - int(II) * getDistance();
   }
   void setLatency(unsigned latency) { Latancy = latency; }
   // Get the distance between iterations in a loop.
-  unsigned getDistance() const { return Distance; }
+  int getDistance() const { return Distance; }
   bool isLoopCarried() const { return getDistance() > 0; }
   bool isCrossBB() const { return IsCrossBB; }
 
   void print(raw_ostream &OS) const;
 
   template<int DISTANCE>
-  static VDEdge CreateMemDep(unsigned Latency) {
+  static VDEdge CreateMemDep(int Latency) {
     return VDEdge(edgeMemDep, Latency, DISTANCE);
   }
 
-  static VDEdge CreateMemDep(unsigned Latency, unsigned Distance) {
+  static VDEdge CreateMemDep(int Latency, int Distance) {
     return VDEdge(edgeMemDep, Latency, Distance);
   }
 
-  static VDEdge CreateValDep(unsigned Latency) {
+  static VDEdge CreateValDep(int Latency) {
     return VDEdge(edgeValDep, Latency, 0);
   }
 
-  static VDEdge CreateCtrlDep(unsigned Latency) {
+  static VDEdge CreateCtrlDep(int Latency) {
     return VDEdge(edgeCtrlDep, Latency, 0);
   }
 
-  static VDEdge CreateFixTimingConstraint(unsigned Latency) {
+  static VDEdge CreateFixTimingConstraint(int Latency) {
     return VDEdge(edgeFixedTiming, Latency, 0);
   }
 
   template<bool IsCtrl>
-  static VDEdge CreateCtrlOrValDep(unsigned Latency) {
+  static VDEdge CreateCtrlOrValDep(int Latency) {
     return VDEdge(IsCtrl ? edgeCtrlDep : edgeValDep, Latency, 0);
   }
 };
@@ -137,12 +137,12 @@ public:
 
   // Forwarding the function from the Edge.
   VDEdge::VDEdgeTypes getEdgeType() const { return getEdge().getEdgeType(); }
-  inline unsigned getLatency(unsigned II = 0) const {
+  inline int getLatency(unsigned II = 0) const {
     return getEdge().getLatency(II);
   }
   bool isLoopCarried() const { return getEdge().isLoopCarried(); }
   bool isCrossBB() const { return getEdge().isCrossBB(); }
-  unsigned getDistance() const { return getEdge().getDistance(); }
+  int getDistance() const { return getEdge().getDistance(); }
 };
 
 /// @brief Base Class of all hardware atom.
