@@ -60,58 +60,60 @@ struct LPObjFn : public std::map<unsigned, REAL> {
 };
 }
 
-SDCScheduler::SDCScheduler(VSchedGraph &S)
-  : SchedulingBase(S), NumVars(0), NumInst(0) {
-}
+SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), NumVars(0), lp(0)
+{}
 
 void SDCScheduler::createStepVariables(lprec *lp) {
   unsigned Col =  1;
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
-    ++NumInst;
     const VSUnit* U = *I;
     // Set up the scheduling variables for VSUnits.
     SUIdx[U] = NumVars;
     std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start";
     DEBUG(dbgs() <<"the col is" << Col << "the colName is" <<SVStart << "\n");
     set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
-    set_int(lp,Col,TRUE);
+    set_int(lp, Col, TRUE);
     ++Col;
     ++NumVars;
   }
 }
 
-void SDCScheduler::addDependencyConstraints(lprec *lp) {
-  int Col[2];
-  REAL Val[2];
+void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U,
+                                            unsigned DstIdx) {
+  // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
+  typedef VSUnit::const_dep_iterator dep_it;
+  for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+    assert(DI.getDistance() == 0
+           && "Loop carried dependencies cannot handled by SDC scheduler!");
 
+    const VSUnit *Dep = *DI;
+    unsigned SrcIdx = SUIdx[Dep];
+
+    int Col[2];
+    REAL Val[2];
+    // Build the LP.
+    Col[0] = 1 + SrcIdx;
+    Val[0] = -1.0;
+    Col[1] = 1 + DstIdx;
+    Val[1] = 1.0;
+
+    int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
+
+    if(!add_constraintex(lp, 2, Val, Col, ConstrType, DI.getLatency()))
+      report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
+                         " at VSUnit " + utostr_32(U->getIdx()) );
+  }
+}
+
+void SDCScheduler::addDependencyConstraints(lprec *lp) {
   typedef VSchedGraph::sched_iterator sched_it;
   for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath in scheduler!");
-    unsigned DstStartIdx = SUIdx[U];
+    unsigned DstIdx = SUIdx[U];
 
-    // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
-    typedef VSUnit::const_dep_iterator dep_it;
-    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
-      assert(DI.getDistance() == 0
-             && "Loop carried dependencies cannot handled by SDC scheduler!");
-
-      const VSUnit *Dep = *DI;
-      unsigned SrcStartIdx = SUIdx[Dep];
-
-      // Build the LP.
-      Col[0] = 1 + SrcStartIdx;
-      Val[0] = -1.0;
-      Col[1] = 1 + DstStartIdx;
-      Val[1] = 1.0;
-
-      int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
-
-      if(!add_constraintex(lp, 2, Val, Col, ConstrType, DI.getLatency()))
-        report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
-                           " at VSUnit " + utostr_32(U->getIdx()) );
-    }
+    addDependencyConstraints(lp, U, DstIdx);
   }
 }
 
@@ -174,28 +176,7 @@ static const char *transSolveResult(int result) {
   return ResultTable[result];
 }
 
-bool SDCScheduler::scheduleState() {
-  buildTimeFrameAndResetSchedule(true);
-  BasicLinearOrderGenerator::addLinOrdEdge(*this);
-
-  DEBUG(viewGraph());
-  lp = make_lp(0, NumVars);
-  set_add_rowmode(lp, TRUE);
-
-  // Build the step variables.
-  createStepVariables(lp);
-
-  // Build the constraints.
-  addDependencyConstraints(lp);
-
-  // Turn off the add rowmode and start to solve the model.
-  set_add_rowmode(lp, FALSE);
-  TotalRows = get_Nrows(lp);
-  LPObjFn ObjFn;
-  buildASAPObject(ObjFn, 1.0);
-  //buildOptSlackObject(ObjFn, 0.0);
-  ObjFn.setLPObj(lp);
-
+bool SDCScheduler::solveLP(lprec *lp) {
   set_verbose(lp, CRITICAL);
   DEBUG(set_verbose(lp, FULL));
 
@@ -234,6 +215,31 @@ bool SDCScheduler::scheduleState() {
                        + Twine(transSolveResult(result)));
   }
 
+  return true;
+}
+
+bool SDCScheduler::scheduleDAGwithLinearOrder() {
+  DEBUG(viewGraph());
+  lprec *lp = make_lp(0, NumVars);
+  // Build the step variables.
+  createStepVariables(lp);
+  LPObjFn ObjFn;
+  buildASAPObject(ObjFn, 1.0);
+  //buildOptSlackObject(ObjFn, 0.0);
+  ObjFn.setLPObj(lp);
+
+  set_add_rowmode(lp, TRUE);
+
+  // Build the constraints.
+  addDependencyConstraints(lp);
+
+  // Turn off the add rowmode and start to solve the model.
+  set_add_rowmode(lp, FALSE);
+
+  TotalRows = get_Nrows(lp);
+
+  if (!solveLP(lp)) return false;
+
   // Schedule the state with the ILP result.
   buildSchedule(lp);
 
@@ -243,4 +249,12 @@ bool SDCScheduler::scheduleState() {
   SUIdx.clear();
   return true;
 }
+
+bool SDCScheduler::scheduleState() {
+  buildTimeFrameAndResetSchedule(true);
+  BasicLinearOrderGenerator::addLinOrdEdge(*this);
+
+  return scheduleDAGwithLinearOrder();
+}
+
 

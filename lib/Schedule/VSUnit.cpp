@@ -281,23 +281,6 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G, MachineFunction *F) {
   }
 }
 
-void VSchedGraph::scheduleCtrl() {
-  if (enablePipeLine())
-    scheduleLoop();
-  else
-    scheduleLinear();
-}
-
-void VSchedGraph::scheduleLinear() {
-  MachineFunction *F = getEntryBB()->getParent();
-  OwningPtr<SchedulingBase> Scheduler(createLinearScheduler(*this, F));
-
-  while (!Scheduler->scheduleState())
-    Scheduler->lengthenCriticalPath();
-
-  DEBUG(Scheduler->dumpTimeFrame());
-}
-
 void VSchedGraph::scheduleLoop() {
   MachineBasicBlock *MBB = getEntryBB();
   MachineFunction *F = MBB->getParent();

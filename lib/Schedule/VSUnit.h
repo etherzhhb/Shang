@@ -438,10 +438,6 @@ private:
   // The schedule unit that jump back to current fsm state.
   PointerIntPair<MachineInstr*, 1, bool> LoopOp;
 
-  /// Scheduling implementation.
-  void scheduleLinear();
-  void scheduleLoop();
-
   typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
   typedef std::map<MachineBasicBlock*, VSUnit*> TerminatorMapTy;
@@ -659,7 +655,7 @@ public:
 
   /// @name Scheduling
   //{
-  void scheduleCtrl();
+  void scheduleLoop();
   // Schedule datapath operations as late as possible after control operations
   // scheduled, this can reduce register usage.
   void scheduleDatapath();

@@ -1158,7 +1158,7 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   LocalG.createExitRoot(VExit);
   LocalG.prepareForCtrlSched();
   LocalG.verify();
-  LocalG.scheduleCtrl();
+  LocalG.scheduleLoop();
 
   typedef VSchedGraph::iterator it;
   for (it I = G.mergeSUsInSubGraph(LocalG), E = G.end(); I != E; ++I)
@@ -1201,7 +1201,7 @@ void VPreRegAllocSched::fixInterBBLatency(VSchedGraph &G, BBTopOrd &Ord) {
     // Compute the shortest distance from the entry of the function to the entry
     // of the current block.
     VSUnit *BBEntry = G.lookupSUnit(MBB);
-    unsigned EntrySlot = BBEntry->getSlot();
+    const unsigned EntrySlot = BBEntry->getSlot();
     unsigned SlotsFromEntry = EntrySlot;
     typedef VSUnit::dep_iterator dep_it;
     for (dep_it I = BBEntry->dep_begin(), E = BBEntry->dep_end(); I != E; ++I) {
