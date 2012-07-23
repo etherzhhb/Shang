@@ -272,9 +272,15 @@ private:
   // Total rows in LP.
   unsigned TotalRows;
   // The table of the index of the VSUnits and the column number in LP.
-  typedef std::map<const VSUnit*, unsigned> SUIdx2LPColMap;
-  typedef SUIdx2LPColMap::iterator SUIdxIt;
-  SUIdx2LPColMap SUIdx;
+  typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;
+  typedef SUI2IdxMapTy::const_iterator SUIdxIt;
+  SUI2IdxMapTy SUIdx;
+
+  unsigned getSUIdx(const VSUnit* U) const {
+    SUIdxIt at = SUIdx.find(U);
+    assert(at != SUIdx.end() && "Idx not existed!");
+    return at->second;
+  }
 
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);

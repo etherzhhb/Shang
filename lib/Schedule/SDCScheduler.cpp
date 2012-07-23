@@ -50,7 +50,9 @@ void SDCScheduler::createLPAndVariables() {
   for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
     // Set up the scheduling variables for VSUnits.
-    SUIdx[U] = NumVars;
+    bool inserted = SUIdx.insert(std::make_pair(U, NumVars)).second;
+    assert(inserted && "Index already existed!");
+    (void) inserted;
     std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start";
     DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
     set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
@@ -69,7 +71,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U,
            && "Loop carried dependencies cannot handled by SDC scheduler!");
 
     const VSUnit *Dep = *DI;
-    unsigned SrcIdx = SUIdx[Dep];
+    unsigned SrcIdx = getSUIdx(Dep);
 
     int Col[2];
     REAL Val[2];
@@ -91,7 +93,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   typedef VSchedGraph::sched_iterator sched_it;
   for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
-    unsigned DstIdx = SUIdx[U];
+    unsigned DstIdx = getSUIdx(U);
 
     if (U->isScheduled()) {
       if(!set_bounds(lp, DstIdx + 1, U->getSlot(), U->getSlot()))
@@ -108,7 +110,7 @@ void SDCScheduler::buildASAPObject(double weight) {
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
       const VSUnit* U = *I;
-    unsigned Idx = SUIdx[U];
+    unsigned Idx = getSUIdx(U);
     // Because LPObjFn will set the objective function to maxim instead of minim,
     // we should use -1.0 instead of 1.0 as coefficient
     ObjFn[1 + Idx] += - 1.0 * weight;
@@ -121,7 +123,7 @@ void SDCScheduler::buildOptSlackObject(double weight){
     const VSUnit* U = *I;
     int Indeg = U->countValDeps();
     int Outdeg = U->countValUses();
-    unsigned Idx = SUIdx[U];
+    unsigned Idx = getSUIdx(U);
     ObjFn[1 + Idx] += (Outdeg - Indeg) * weight;
   }
 }
