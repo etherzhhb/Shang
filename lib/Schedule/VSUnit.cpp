@@ -508,14 +508,12 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
 }
 
 VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)
-  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
-    FUNum(FUNum) {
+  : SchedSlot(0), HasFixedTiming(false), InstIdx(Idx), FUNum(FUNum) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
 }
 
 VSUnit::VSUnit(MachineBasicBlock *MBB, uint16_t Idx)
-  : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
-    FUNum(0) {
+  : SchedSlot(0), HasFixedTiming(false), InstIdx(Idx), FUNum(0) {
   assert(Idx > VSchedGraph::NullSUIdx && "Bad index!");
   Instrs.push_back(MBB);
   latencies.push_back(0);
@@ -613,5 +611,4 @@ void VSUnit::print(raw_ostream &OS) const {
   }
 
   OS << getFUId() << "\nAt slot: " << getSlot();
-  if (isDangling()) OS << " <Dangling>";
 }

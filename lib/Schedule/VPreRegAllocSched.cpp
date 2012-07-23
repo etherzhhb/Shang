@@ -50,7 +50,6 @@
 using namespace llvm;
 
 STATISTIC(MutexPredNoAlias, "Number of no-alias because of mutex predicate");
-STATISTIC(DanglingDatapath, "Number of dangling data-path operations");
 //===----------------------------------------------------------------------===//
 namespace {
 /// @brief Schedule the operations.
@@ -159,9 +158,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &G, MachineInstr *FirstTerminator);
-
-  void scheduleDanglingDatapathOps(VSchedGraph &G);
-  void clearDanglingFlagForTree(VSUnit *Root);
 
   template<int AllowDangling>
   void buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator);
@@ -935,48 +931,6 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
   }
 }
 
-void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &G){
-  typedef VSchedGraph::sched_iterator sched_it;
-
-  // Schedule all dangling nodes to dangling step.
-  for (sched_it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
-    VSUnit *U = *I;
-
-    if (!U->isDangling()) continue;
-
-    assert(U->isDatapath() && "Unexpected dangling control operation.");
-    U->scheduledTo(G.getEndSlot(U->getParentBB()));
-    ++DanglingDatapath;
-  }
-}
-
-void VPreRegAllocSched::clearDanglingFlagForTree(VSUnit *Root) {
-  // Perform depth first search to find node that reachable from Root.
-  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
-  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
-  Root->setIsDangling(false);
-  MachineBasicBlock *RootBB = Root->getParentBB();
-
-  while (!WorkStack.empty()) {
-    VSUnit *U = WorkStack.back().first;
-    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
-
-    if (ChildIt == U->dep_end()) {
-      WorkStack.pop_back();
-      continue;
-    }
-
-    VSUnit *ChildNode = *ChildIt;
-    ++WorkStack.back().second;
-
-    if (!ChildNode->isDangling() || ChildNode->getParentBB() != RootBB) continue;
-
-    // If the node is reachable from exit, then it is not dangling.
-    ChildNode->setIsDangling(false);
-    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
-  }
-}
-
 void VPreRegAllocSched::addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU) {
   MachineBasicBlock *MBB = EntrySU->getRepresentativePtr();
   assert(MBB && "Bad entry node type!");
@@ -1128,19 +1082,6 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
 
   for (su_it I = G.begin(), E = G.end(); I != E; ++I)
     addValDep(G, *I);
-
-  // Clear the dangling flag for all node that used (directly/indirectly) by
-  // a scheduled node.
-  for (su_it I = G.begin(), E = G.end(); I != E; ++I) {
-    VSUnit *U = *I;
-    if (U->isScheduled()) clearDanglingFlagForTree(U);
-  }
-
-  // Build control dependence for exitroot, dangling node is allowed because we
-  // do not handle them explicitly.
-  buildTerminatorDeps<true>(G, G.lookUpTerminator(G.getEntryBB()));
-
-  scheduleDanglingDatapathOps(G);
 
   // Verify the schedule graph.
   G.verify();

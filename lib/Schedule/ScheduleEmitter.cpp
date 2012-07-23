@@ -31,15 +31,16 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-schedule-emitter"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+STATISTIC(DanglingDatapath, "Number of dangling data-path operations");
 
 namespace {
-
 class OpSlot {
   int SlotNum;
   OpSlot(int S) : SlotNum(S) {}
@@ -590,7 +591,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     // Sort the instructions, so we can emit them in order.
     std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
 
-    bool IsDangling = A->isDangling();
+    bool IsDangling = A->isDatapath() && A->getSlot() >= ScheduleEndSlot;
 
     typedef SmallVector<InSUInstInfo, 8>::iterator it;
     for (it I = Insts.begin(), E = Insts.end(); I != E; ++I) {
@@ -598,6 +599,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 
       // Simply place the dangling node at the end.
       if (IsDangling){
+        ++DanglingDatapath;
         unsigned RegNo = MI->getOperand(0).getReg();
         unsigned Opcode = MI->getOpcode();
         MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opcode));
@@ -866,7 +868,7 @@ unsigned VSchedGraph::emitSchedule() {
 
 unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
                                    unsigned StartSlot, MachineBasicBlock *MBB) {
-  unsigned CurSlot = getStartSlot(MBB);
+  unsigned CurSlot = getStartSlot(MBB), EndSlot = getEndSlot(MBB);
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
@@ -881,7 +883,7 @@ unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   for (iterator I = su_begin, E = su_end; I != E; ++I) {
     VSUnit *A = *I;
     DEBUG(dbgs() << "Going to emit: "; A->dump());
-    if (A->getSlot() != CurSlot)
+    if (A->getSlot() != CurSlot && CurSlot < EndSlot)
       CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());
 
     StateBuilder.emitSUnit(A);

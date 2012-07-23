@@ -148,8 +148,7 @@ public:
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
-  unsigned SchedSlot : 30;
-  bool     IsDangling : 1;
+  unsigned SchedSlot : 31;
   bool     HasFixedTiming: 1;
   uint16_t InstIdx;
   uint16_t FUNum;
@@ -200,8 +199,6 @@ public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
   unsigned short getIdx() const { return InstIdx; }
-  bool isDangling() const { return IsDangling; }
-  void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
   typedef DepSet::iterator edge_iterator;
   edge_iterator edge_begin() { return Deps.begin(); }
