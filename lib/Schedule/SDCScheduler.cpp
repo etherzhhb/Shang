@@ -19,7 +19,7 @@
 #include "SchedulingBase.h"
 #include "vtm/VInstrInfo.h"
 #include "lp_solve/lp_lib.h"
-#define DEBUG_TYPE "SDCdebug"
+#define DEBUG_TYPE "sdc-scheduler"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -52,7 +52,7 @@ void SDCScheduler::createLPAndVariables() {
     // Set up the scheduling variables for VSUnits.
     SUIdx[U] = NumVars;
     std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start";
-    DEBUG(dbgs() <<"the col is" << Col << "the colName is" <<SVStart << "\n");
+    DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
     set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
     set_int(lp, Col, TRUE);
     ++Col;
@@ -91,7 +91,6 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   typedef VSchedGraph::sched_iterator sched_it;
   for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
-    assert(U->isControl() && "Unexpected datapath in scheduler!");
     unsigned DstIdx = SUIdx[U];
 
     if (U->isScheduled()) {
@@ -130,7 +129,7 @@ void SDCScheduler::buildOptSlackObject(double weight){
 void SDCScheduler::buildSchedule(lprec *lp) {
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
-      VSUnit *U = *I;
+    VSUnit *U = *I;
     unsigned Offset = SUIdx[U];
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
     DEBUG(dbgs() << "At row:" << TotalRows + Offset + 1
@@ -140,6 +139,7 @@ void SDCScheduler::buildSchedule(lprec *lp) {
       continue;
     }
 
+    assert(j && "Bad result!");
     U->scheduledTo(j);
   }
 }
@@ -227,8 +227,6 @@ bool SDCScheduler::schedule() {
 
   // Schedule the state with the ILP result.
   buildSchedule(lp);
-
-  DEBUG(viewGraph());
 
   delete_lp(lp);
   lp = 0;
