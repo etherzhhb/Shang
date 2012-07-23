@@ -411,8 +411,6 @@ void VSchedGraph::scheduleDatapathALAP() {
 
     // Schedule As late as possible to reduce register usage.
     A->scheduledTo(Step);
-
-    fixChainedDatapathRC(A);
   }
 }
 
@@ -437,8 +435,6 @@ void VSchedGraph::scheduleDatapathASAP() {
            && "Bad schedule for datapath SU!");
     // Schedule As soon as possible.
     A->scheduledTo(Step);
-
-    fixChainedDatapathRC(A);
   }
 }
 
@@ -459,6 +455,14 @@ void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
 void VSchedGraph::scheduleDatapath() {
   if (ScheduleDataPathALAP) scheduleDatapathALAP();
   else                      scheduleDatapathASAP();
+
+  // Break the multi-cycles chains to expose more FU sharing opportunities.
+  for (iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->isControl()) continue;
+
+    fixChainedDatapathRC(U);
+  }
 }
 
 //===----------------------------------------------------------------------===//
