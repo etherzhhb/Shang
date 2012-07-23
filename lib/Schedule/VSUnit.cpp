@@ -238,7 +238,6 @@ void VSchedGraph::prepareForDatapathSched() {
   }
 
   SUsToSched = ArrayRef<VSUnit*>(AllSUs);
-  // TODO: Sort them?
 }
 
 void VSchedGraph::resetSchedule(unsigned MII) {

@@ -234,6 +234,7 @@ public:
   }
 };
 
+struct LPObjFn;
 class SDCScheduler : public SchedulingBase {
   public:
     SDCScheduler(VSchedGraph &S);
@@ -258,8 +259,8 @@ class SDCScheduler : public SchedulingBase {
     void addDependencyConstraints(lprec *lp);
 
     // Build the schedule object function.
-    void buildASAPObject();
-    void buildOptimizingSlackDistributionObject();
+    void buildASAPObject(LPObjFn &Obj, double weight);
+    void buildOptSlackObject(LPObjFn &Obj, double weight);
 
     // Build the schedule form the result of ILP.
     void buildSchedule(lprec *lp);

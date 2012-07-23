@@ -24,6 +24,42 @@
 
 using namespace llvm;
 
+namespace llvm {
+  // Helper class to build the object function for lp.
+struct LPObjFn : public std::map<unsigned, REAL> {
+  LPObjFn &operator*=(REAL val) {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      I->second *= val;
+
+    return *this;
+  }
+
+  LPObjFn &operator+=(const LPObjFn &Other) {
+    for (const_iterator I = Other.begin(), E = Other.end(); I != E; ++I)
+      (*this)[I->first] += I->second;
+
+    return *this;
+  }
+
+  void setLPObj(lprec *lp) const {
+    std::vector<int> Indices;
+    std::vector<REAL> Coefficients;
+
+    unsigned Col = 0;
+    //Build the ASAP object function.
+    typedef VSchedGraph::sched_iterator it;
+    for(const_iterator I = begin(), E = end(); I != E; ++I) {
+      Indices.push_back(I->first);
+      Coefficients.push_back(I->second);
+    }
+
+    set_obj_fnex(lp, size(), Coefficients.data(), Indices.data());
+    set_maxim(lp);
+    DEBUG(write_lp(lp, "log.lp"));
+  }
+};
+}
+
 SDCScheduler::SDCScheduler(VSchedGraph &S)
   : SchedulingBase(S), NumVars(0), NumInst(0) {
 }
@@ -79,48 +115,27 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   }
 }
 
-void SDCScheduler::buildASAPObject() {
-  std::vector<int> Indices(NumInst);
-  std::vector<REAL> Coefficients(NumInst);
-
-  unsigned Col = 0;
+void SDCScheduler::buildASAPObject(LPObjFn &Obj, double weight) {
   //Build the ASAP object function.
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
       const VSUnit* U = *I;
     unsigned Idx = SUIdx[U];
-    Indices[Col] = 1 + Idx;
-    Coefficients[Col] = 1.0;
-    ++Col;
+    // Because LPObjFn will set the objective function to maxim instead of minim,
+    // we should use -1.0 instead of 1.0 as coefficient
+    Obj[1 + Idx] += - 1.0 * weight;
   }
-
-  set_obj_fnex(lp, Col, Coefficients.data(), Indices.data());
-  set_minim(lp);
-  DEBUG(write_lp(lp, "log.lp"));
 }
 
-void SDCScheduler::buildOptimizingSlackDistributionObject(){
-  std::vector<int> Indices(NumInst);
-  std::vector<REAL> Coefficients(NumInst);
-
-  unsigned Col = 0;
-  //Build the Optimizing Slack object function.
+void SDCScheduler::buildOptSlackObject(LPObjFn &Obj, double weight){
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
     int Indeg = U->countValDeps();
     int Outdeg = U->countValUses();
     unsigned Idx = SUIdx[U];
-    Indices[Col] = 1 + Idx;
-    Coefficients[Col] = Outdeg - Indeg;
-    ++Col;
+    Obj[1 + Idx] += (Outdeg - Indeg) * weight;
   }
-
-  set_obj_fnex(lp, Col, Coefficients.data(), Indices.data());
-  set_maxim(lp);
-
-  DEBUG(write_lp(lp, "log.lp"));
-
 }
 
 void SDCScheduler::buildSchedule(lprec *lp) {
@@ -176,8 +191,10 @@ bool SDCScheduler::scheduleState() {
   // Turn off the add rowmode and start to solve the model.
   set_add_rowmode(lp, FALSE);
   TotalRows = get_Nrows(lp);
-  buildASAPObject();
-  //buildOptimizingSlackDistributionObject();
+  LPObjFn ObjFn;
+  buildASAPObject(ObjFn, 1.0);
+  //buildOptSlackObject(ObjFn, 0.0);
+  ObjFn.setLPObj(lp);
 
   set_verbose(lp, CRITICAL);
   DEBUG(set_verbose(lp, FULL));
