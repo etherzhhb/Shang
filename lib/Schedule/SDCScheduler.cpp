@@ -43,12 +43,14 @@ void LPObjFn::setLPObj(lprec *lp) const {
 SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), NumVars(0), lp(0)
 {}
 
-void SDCScheduler::createLPAndVariables() {
+unsigned SDCScheduler::createLPAndVariables() {
   lp = make_lp(0, NumVars);
   unsigned Col =  1;
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
+    if (U->isScheduled()) continue;
+
     // Set up the scheduling variables for VSUnits.
     bool inserted = SUIdx.insert(std::make_pair(U, NumVars)).second;
     assert(inserted && "Index already existed!");
@@ -60,10 +62,17 @@ void SDCScheduler::createLPAndVariables() {
     ++Col;
     ++NumVars;
   }
+
+  return NumVars;
 }
 
-void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U,
-                                            unsigned DstIdx) {
+void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
+  unsigned DstIdx = 0;
+  int DstSlot = U->getSlot();
+  if (DstSlot == 0) DstIdx = getSUIdx(U);
+  SmallVector<int, 2> Col;
+  SmallVector<REAL, 2> Coeff;
+
   // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
   typedef VSUnit::const_dep_iterator dep_it;
   for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
@@ -71,19 +80,35 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U,
            && "Loop carried dependencies cannot handled by SDC scheduler!");
 
     const VSUnit *Dep = *DI;
-    unsigned SrcIdx = getSUIdx(Dep);
+    unsigned SrcIdx = 0;
+    int SrcSlot = Dep->getSlot();
+    if (SrcSlot == 0) SrcIdx = getSUIdx(Dep);
 
-    int Col[2];
-    REAL Val[2];
-    // Build the LP.
-    Col[0] = 1 + SrcIdx;
-    Val[0] = -1.0;
-    Col[1] = 1 + DstIdx;
-    Val[1] = 1.0;
+    int RHS = DI.getLatency() - DstSlot + SrcSlot;
 
-    int ConstrType = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
+    // Both SU is scheduled.
+    if (SrcSlot && DstSlot) {
+      assert(0 >= RHS && "Bad schedule!");
+      continue;
+    }
 
-    if(!add_constraintex(lp, 2, Val, Col, ConstrType, DI.getLatency()))
+    Col.clear();
+    Coeff.clear();
+
+    // Build the constraint.
+    if (SrcSlot == 0) {
+      Col.push_back(1 + SrcIdx);
+      Coeff.push_back(-1.0);
+    }
+
+    if (DstSlot == 0) {
+      Col.push_back(1 + DstIdx);
+      Coeff.push_back(1.0);
+    }
+
+    int EqTy = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
+
+    if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
       report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
                          " at VSUnit " + utostr_32(U->getIdx()) );
   }
@@ -91,25 +116,18 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U,
 
 void SDCScheduler::addDependencyConstraints(lprec *lp) {
   typedef VSchedGraph::sched_iterator sched_it;
-  for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
-    const VSUnit *U = *I;
-    unsigned DstIdx = getSUIdx(U);
-
-    if (U->isScheduled()) {
-      if(!set_bounds(lp, DstIdx + 1, U->getSlot(), U->getSlot()))
-        report_fatal_error("SDCScheduler: Can NOT bounds for scheduled VSUnit "
-                           + utostr_32(U->getIdx()) );
-    }
-
-    addDependencyConstraints(lp, U, DstIdx);
-  }
+  for(sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I)
+    addDependencyConstraints(lp, *I);
 }
 
 void SDCScheduler::buildASAPObject(double weight) {
   //Build the ASAP object function.
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
-      const VSUnit* U = *I;
+    const VSUnit* U = *I;
+
+    if (U->isScheduled()) continue;
+
     unsigned Idx = getSUIdx(U);
     // Because LPObjFn will set the objective function to maxim instead of minim,
     // we should use -1.0 instead of 1.0 as coefficient
@@ -121,6 +139,9 @@ void SDCScheduler::buildOptSlackObject(double weight){
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
+
+    if (U->isScheduled()) continue;
+
     int Indeg = U->countValDeps();
     int Outdeg = U->countValUses();
     unsigned Idx = getSUIdx(U);
@@ -132,14 +153,13 @@ void SDCScheduler::buildSchedule(lprec *lp) {
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     VSUnit *U = *I;
-    unsigned Offset = SUIdx[U];
+
+    if (U->isScheduled()) continue;
+
+    unsigned Offset = getSUIdx(U);
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
     DEBUG(dbgs() << "At row:" << TotalRows + Offset + 1
                  << " the result is:" << j << "\n");
-    if (U->isScheduled()) {
-      assert(U->getSlot() == j && "Bad result!");
-      continue;
-    }
 
     assert(j && "Bad result!");
     U->scheduledTo(j);
@@ -240,8 +260,10 @@ bool SDCScheduler::schedule() {
 bool SDCScheduler::scheduleState() {
   buildTimeFrameAndResetSchedule(true);
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
-  // Build the step variables.
-  createLPAndVariables();
+  // Build the step variables, and no need to schedule at all if all SUs have
+  // been scheduled.
+  if (!createLPAndVariables()) return true;
+
   buildASAPObject(1.0);
   //buildOptSlackObject(0.0);
   return schedule();

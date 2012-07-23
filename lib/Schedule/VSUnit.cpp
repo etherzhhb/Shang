@@ -482,12 +482,13 @@ void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
 void VSchedGraph::scheduleDatapath() {
   SDCScheduler Scheduler(*this);
 
-  Scheduler.createLPAndVariables();
-  // Schedule them ALAP.
-  Scheduler.buildASAPObject(-1.0);
-  bool succ = Scheduler.schedule();
-  assert(succ && "Cannot schedule the data-path!");
-  (void) succ;
+  if (Scheduler.createLPAndVariables()) {
+    // Schedule them ALAP.
+    Scheduler.buildASAPObject(-1.0);
+    bool succ = Scheduler.schedule();
+    assert(succ && "Cannot schedule the data-path!");
+    (void) succ;
+  }
 
   // Break the multi-cycles chains to expose more FU sharing opportunities.
   for (iterator I = begin(), E = end(); I != E; ++I) {

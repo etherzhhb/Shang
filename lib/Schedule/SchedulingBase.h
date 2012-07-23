@@ -259,7 +259,7 @@ public:
   bool scheduleState();
   bool schedule();
   // Set the variables' name in the model.
-  void createLPAndVariables();
+  unsigned createLPAndVariables();
 
   // Build the schedule object function.
   void buildASAPObject(double weight);
@@ -284,7 +284,7 @@ private:
 
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);
-  void addDependencyConstraints(lprec *lp, const VSUnit *U, unsigned DstIdx);
+  void addDependencyConstraints(lprec *lp, const VSUnit *U);
 
   bool solveLP(lprec *lp);
 
