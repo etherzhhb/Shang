@@ -269,4 +269,109 @@ bool SDCScheduler::scheduleState() {
   return schedule();
 }
 
+unsigned SDCScheduler::calculateMinSlotsFromEntry(VSUnit *BBEntry,
+                                                  const B2SMapTy &Map) {
+  unsigned SlotsFromEntry = BBEntry->getSlot();
 
+  typedef VSUnit::dep_iterator dep_it;
+  for (dep_it I = BBEntry->dep_begin(), E = BBEntry->dep_end(); I != E; ++I) {
+    VSUnit *PredTerminator = *I;
+    //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
+    //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
+    //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
+
+    MachineBasicBlock *PredBB = (*I)->getParentBB();
+    unsigned SlotsFromPredExit = Map[PredBB->getNumber()];
+    //assert(SlotsFromPredExit && "Not visiting the BBs in topological order?");
+    SlotsFromEntry = std::min<unsigned>(SlotsFromEntry, SlotsFromPredExit);
+  }
+
+  return SlotsFromEntry;
+}
+
+int SDCScheduler::calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
+                                          unsigned MinSlotsForEntry) {
+  unsigned EntrySlot = BBEntry->getSlot();
+  MachineBasicBlock *MBB = BBEntry->getParentBB();
+  typedef VSUnit::use_iterator use_it;
+  // The minimal slack from the predecessors of the BB to the entry of the BB.
+  int MinInterBBSlack = 0;
+
+  for (use_it I = BBEntry->use_begin(), E = BBEntry->use_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->getParentBB() != MBB) continue;
+
+    unsigned USlot = U->getSlot();
+    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+      if (!DI.isCrossBB()) continue;
+
+      MachineBasicBlock *SrcBB = DI->getParentBB();
+      assert(SrcBB != MBB && "Not cross BB depenency!");
+      VSUnit *SrcTerminator = G.lookUpTerminator(SrcBB);
+      unsigned SrcExitSlot = Map[SrcBB->getNumber()];
+      assert(SrcExitSlot && "Unexpected cross BB back-edge!");
+      // Calculate the latency distributed between the SrcBB and the SnkBB.
+      assert(USlot >= EntrySlot && SrcTerminator->getSlot() >= DI->getSlot()
+              && "Bad schedule!");
+      int InterBBLatency = DI->getLatency() - (USlot - EntrySlot)
+                            - (SrcTerminator->getSlot() - DI->getSlot());
+      // Calculate the minimal latency between the SrcBB and SnkBB.
+      int ActualInterBBlatency = MinSlotsForEntry - SrcExitSlot;
+      DEBUG(dbgs().indent(4) << "Found InterBBLatency and ActualInterBBlatency"
+                              << InterBBLatency << ' '
+                              << ActualInterBBlatency << '\n');
+      // Calculate the slack.
+      int Slack = ActualInterBBlatency - InterBBLatency;
+      MinInterBBSlack = std::min<int>(MinInterBBSlack, Slack);
+    }
+  }
+
+  return MinInterBBSlack;
+}
+
+void SDCScheduler::fixInterBBLatency() {
+  B2SMapTy ExitSlots(G.num_bbs(), 0);
+
+  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
+  VSUnit *ExitRoot = G.getExitRoot();
+  WorkStack.push_back(std::make_pair(ExitRoot, ExitRoot->dep_begin()));
+
+  // Visit the blocks in topological order, and ignore the pseudo exit node.
+  while (WorkStack.size() > 1) {
+    VSUnit *U = WorkStack.back().first;
+    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
+
+    if (ChildIt == U->dep_end()) {
+      WorkStack.pop_back();
+
+      // All dependencies visited, now visit the current BBEntry.
+      assert(U->isBBEntry() && "Unexpected non-entry node!");
+      unsigned SlotsFromEntry = calculateMinSlotsFromEntry(U, ExitSlots);
+      unsigned CurBBEntrySlot = U->getSlot();
+
+      int MinInterBBSlack = calulateMinInterBBSlack(U, ExitSlots, SlotsFromEntry);
+
+      DEBUG(dbgs() << "Minimal Slack: " << MinInterBBSlack << '\n');
+      assert(MinInterBBSlack == 0
+             && "Inserting delay block to fix negative slack is not yet"
+                " implemented!");
+
+      MachineBasicBlock *MBB = U->getParentBB();
+      unsigned ExitSlot = SlotsFromEntry + G.getTotalSlot(MBB);
+      assert(ExitSlot && "Bad schedule!");
+      ExitSlots[MBB->getNumber()] = ExitSlot;
+
+      continue;
+    }
+
+    VSUnit *ChildNode = *ChildIt;
+    ++WorkStack.back().second;
+
+    assert(ChildNode->isTerminator() && "Unexpected non-terminator node!");
+    // Jump to the entry of the parent block of the terminator.
+    ChildNode = G.lookupSUnit(ChildNode->getParentBB());
+    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+  }
+
+  assert(WorkStack.back().first == ExitRoot && "Stack broken!");
+}

@@ -264,6 +264,12 @@ public:
   // Build the schedule object function.
   void buildASAPObject(double weight);
   void buildOptSlackObject(double weight);
+
+  // Currently the SDCScheduler cannot calculate the minimal latency between two
+  // bb correctly, which leads to a wrong global code motion for the
+  // multi-cycles chains. Hence we need to fix the schedule, the implement detail
+  // should be hidden by the function.
+  void fixInterBBLatency();
 private:
   lprec *lp;
   LPObjFn ObjFn;
@@ -290,6 +296,11 @@ private:
 
   // Build the schedule form the result of ILP.
   void buildSchedule(lprec *lp);
+
+  typedef std::vector<unsigned> B2SMapTy;
+  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry, const B2SMapTy &Map);
+  int calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
+                              unsigned MinSlotsForEntry);
 };
 
 
