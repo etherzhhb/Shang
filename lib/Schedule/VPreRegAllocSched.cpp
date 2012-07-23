@@ -116,7 +116,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void addSchedDepForSU(VSUnit *A, VSchedGraph &G);
 
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
-  template<bool IsCtrl, bool CrossBBOnly>
+  template<VDEdge::Types Type, bool CrossBBOnly>
   void addSchedDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
                         VSchedGraph &G, DepLatInfoTy &LatInfo);
   // Add the dependence from the incoming value of PHI to PHI.
@@ -503,7 +503,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
 }
 
 //===----------------------------------------------------------------------===//
-template<bool IsCtrl, bool CrossBBOnly>
+template<VDEdge::Types Type, bool CrossBBOnly>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
                                          VSUnit *A, VSchedGraph &G,
                                          DepLatInfoTy &LatInfo) {
@@ -528,7 +528,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       if (SrcSU == 0) continue;
 
       if (SrcBB != CurMBB || !CrossBBOnly)
-        A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<IsCtrl>(Latency - MIOffset));
+        A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<Type>(Latency - MIOffset));
 
       // If we are only adding cross basic block dependencies, do not add the
       // control dependencies from the entry of the same BB.
@@ -577,7 +577,8 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       continue;
 
     // Get the minimal steps between MI and its dependency.
-    unsigned MinCtrlDistance = G.getCtrlStepBetween<!IsCtrl>(SrcMI, MI);
+    unsigned MinCtrlDistance =
+      G.getCtrlStepBetween<Type == VDEdge::edgeValDep>(SrcMI, MI);
     // The the latency must bigger than the minimal latency between two control
     // operations.
     Latency = std::max(int(MinCtrlDistance), Latency);
@@ -589,7 +590,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     Latency -= MIOffset;
-    A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<IsCtrl>(Latency));
+    A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<Type>(Latency));
   }
 }
 
@@ -713,10 +714,10 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);    
     assert(MI && "Unexpected entry root!");
-    const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
-    assert(DepLat && "Operand latency information not available!");
+    const DetialLatencyInfo::DepLatInfoTy *Deps = G.getDepLatInfo(MI);
+    assert(Deps && "Operand latency information not available!");
     int MIOffset = I ? A->getLatencyAt(I) : 0;
-    addSchedDepForMI<false, CrossBBOnly>(MI, MIOffset, A, G, *DepLat);
+    addSchedDepForMI<VDEdge::edgeValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
   if (!A->dep_empty()) return;
@@ -954,7 +955,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   SmallVector<MachineInstr*, 8> Exits;
   // We need wait all operation finish before the exit operation active, compute
   // the latency from operations need to wait to the exit operation.
-  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
+  DetialLatencyInfo::DepLatInfoTy ExitDeps;
   MachineBasicBlock *MBB = FirstTerminator->getParent();
 
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
@@ -1002,7 +1003,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
         // can always finish in time.
         const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
         assert(DepLat && "Operand latency information not available!");
-        addSchedDepForMI<true, false>(MI, 0/*Offset*/, ExitSU, G, *DepLat);
+        addSchedDepForMI<VDEdge::edgeCtrlDep, false>(MI, 0/*Offset*/, ExitSU, G,
+                                                     *DepLat);
         // Add the dependence from PHISU to ExitSU, we will constraint the PHI
         // so it will schedule before the last stage of a pipeline BB.
         VSUnit *PHISU = G.lookupSUnit(MI);
@@ -1022,12 +1024,12 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
       continue;
 
     // Build datapath latency information for the terminator.
-    G.buildExitMIInfo(MI, ExitDepInfo);
+    G.buildExitMIInfo(MI, ExitDeps);
   }
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI<true, false>(ExitSU->getRepresentativePtr(), 0/*Offset*/,
-                                ExitSU, G, ExitDepInfo);
+  addSchedDepForMI<VDEdge::edgeCtrlDep, false>(ExitSU->getRepresentativePtr(),
+                                               0/*Offset*/, ExitSU, G, ExitDeps);
   // Add the dependence of exit root.
   addSchedDepForSU<false>(ExitSU, G);
 

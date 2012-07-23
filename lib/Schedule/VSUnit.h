@@ -50,7 +50,7 @@ class MachineOperand;
 /// @brief Inline operation
 class VDEdge {
 public:
-  enum VDEdgeTypes {
+  enum Types {
     edgeValDep,
     edgeMemDep,
     edgeCtrlDep,
@@ -67,10 +67,10 @@ private:
   friend class VSUnit;
   void setIsCrossBB(bool v = true) { IsCrossBB = v; }
 protected:
-  VDEdge(enum VDEdgeTypes T, int latancy, int Dst)
+  VDEdge(enum Types T, int latancy, int Dst)
     : EdgeType(T), IsCrossBB(false), Distance(Dst), Latancy(latancy) {}
 public:
-  VDEdgeTypes getEdgeType() const { return VDEdgeTypes(EdgeType); }
+  Types getEdgeType() const { return Types(EdgeType); }
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
     return Latancy - int(II) * getDistance();
@@ -104,9 +104,9 @@ public:
     return VDEdge(edgeFixedTiming, Latency, 0);
   }
 
-  template<bool IsCtrl>
+  template<Types Type>
   static VDEdge CreateCtrlOrValDep(int Latency) {
-    return VDEdge(IsCtrl ? edgeCtrlDep : edgeValDep, Latency, 0);
+    return VDEdge(Type, Latency, 0);
   }
 };
 
@@ -136,7 +136,7 @@ public:
 
 
   // Forwarding the function from the Edge.
-  VDEdge::VDEdgeTypes getEdgeType() const { return getEdge().getEdgeType(); }
+  VDEdge::Types getEdgeType() const { return getEdge().getEdgeType(); }
   inline int getLatency(unsigned II = 0) const {
     return getEdge().getLatency(II);
   }
