@@ -674,28 +674,20 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         // Prevent the data-path SU from being scheduled to the same slot with
         // A.
         if (Latency == 0 && Dep->isDatapath()) Latency = 1;
-        // Cross iteration dependences do not make sense in normal loops.
-        if (G.isPipelined(ParentBB))
-          // The iterate distance for back-edge to PHI is always 1.
-          // A->addDep(Dep, VDEdge::CreateMemDep(Latency, 1));
-          // Since the II is already known, we can translate the distant of the
-          // loop carried dependency to cycle-accurate latency, and since we
-          // have already move the PHI by II cycles later, we should not add
-          // II to the latency again.
-          A->addDep(Dep, VDEdge::CreateMemDep(Latency/*+G.getII(ParentBB)*/, 0));
-        else {
-          // Else connect the schedule unit to exit root, since it is not
-          // dangling.
-          VSUnit *CurTerminator = G.lookUpTerminator(ParentBB);
-          CurTerminator->addDep(Dep, VDEdge::CreateCtrlDep(Latency));
-        }
+
+        // The iterate distance for back-edge to PHI is always 1.
+        // A->addDep(Dep, VDEdge::CreateMemDep(Latency, 1));
+        // Since the II is already known, we can translate the distant of the
+        // loop carried dependency to cycle-accurate latency, and since we
+        // have already move the PHI by II cycles later, we should not add
+        // II to the latency again.
+        A->addDep(Dep, VDEdge::CreateMemDep(Latency/*+G.getII(ParentBB)*/, 0));
         continue;
       }
 
       // As explained above, the PHI is moved by II cycles later, we need to
       // revert the move while building the dependency from the PHI.
-      if (Dep->isPHI() && G.isPipelined(Dep->getParentBB()))
-        Latency -= G.getII(ParentBB);
+      if (Dep->isPHI()) Latency -= G.getII(ParentBB);
 
       // Prevent the data-path SU from being scheduled to the same slot with
       // A.
