@@ -50,13 +50,13 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-  State.resetSchedule(getMII());
+  G.resetSchedule(getMII());
   buildTimeFrame();
   // Reset exclude slots and resource table.
   resetRT();
 
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
-  IMSQueueType ToSched(State.sched_begin() + 1, State.sched_end(),
+  IMSQueueType ToSched(G.sched_begin() + 1, G.sched_end(),
                        ims_sort(*this));
   while (!ToSched.empty()) {
     VSUnit *A = ToSched.top();
@@ -130,12 +130,12 @@ void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
 
 VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
   MachineInstr *BlockingMI = getConflictedInst(U, step);
-  return BlockingMI ? State.lookupSUnit(BlockingMI) : 0;
+  return BlockingMI ? G.lookupSUnit(BlockingMI) : 0;
 }
 
 bool IterativeModuloScheduling::isAllSUnitScheduled() {
   typedef VSchedGraph::sched_iterator it;
-  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
+  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled())
       return false;
@@ -145,13 +145,13 @@ bool IterativeModuloScheduling::isAllSUnitScheduled() {
 }
 
 bool ASAPScheduler::scheduleState() {
-  State.getEntryRoot()->scheduledTo(State.EntrySlot);
+  G.getEntryRoot()->scheduledTo(G.EntrySlot);
   buildTimeFrame();
 
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
   typedef VSchedGraph::sched_iterator it;
-  for (it I = State.sched_begin() + 1, E = State.sched_end(); I != E; ++I) {
+  for (it I = G.sched_begin() + 1, E = G.sched_end(); I != E; ++I) {
     VSUnit *A = *I;
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
@@ -203,7 +203,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
   std::vector<VSUnit*> PipeBreakers;
 
   typedef VSchedGraph::sched_iterator sched_it;
-  MachineBasicBlock *PrevBB = S.getState().getEntryBB();
+  MachineBasicBlock *PrevBB = S->getEntryBB();
 
   for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
     VSUnit *U = *I;
@@ -241,7 +241,7 @@ void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
   assert(U->isTerminator() && "Bad SU type!");
 
   MachineBasicBlock *ParentBB = U->getParentBB();
-  unsigned II = S.getState().getII(ParentBB);
+  unsigned II = S->getII(ParentBB);
   // There is no FU conflict if the block is not pipelined.
   if (II == 0) return;
 
@@ -294,7 +294,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
 
     // Prevent the First SU from being scheduled to the first slot if there is
     // FU conflict.
-    VSUnit *BBEntry = S.getState().lookupSUnit(ParentBB);
+    VSUnit *BBEntry = S->lookupSUnit(ParentBB);
     assert(BBEntry && "EntrySU not found!");
     FirstSU->addDep(BBEntry, VDEdge::CreateCtrlDep(1));    
   }

@@ -57,7 +57,7 @@ private:
 
     // Even the two MIs not in the same trace, the different trace may active at
     // the same time in different iterations.
-    if (State.enablePipeLine()) return true;
+    if (G.enablePipeLine()) return true;
 
     return findConflictedInst(Set, MI) != Set.end();
   }
@@ -73,18 +73,18 @@ private:
 protected:
   /// @name PriorityQueue
   //{
+  VSchedGraph &G;
 
-  VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
     : EntrySlot(S.EntrySlot), MII(0), CriticalPathEnd(0),
-      State(S) {}
+      G(S) {}
 
 public:
   virtual ~SchedulingBase() {}
 
-  VSchedGraph &getState() const { return State; }
-  VSchedGraph *operator->() const { return &State; }
+  VSchedGraph *operator*() const { return &G; }
+  VSchedGraph *operator->() const { return &G; }
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -163,10 +163,10 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   void shortenCriticalPath() { --CriticalPathEnd; }
   unsigned getCriticalPathLength() {
-    return CriticalPathEnd - State.EntrySlot;
+    return CriticalPathEnd - G.EntrySlot;
   }
   void setCriticalPathLength(unsigned L) {
-    CriticalPathEnd = State.EntrySlot + L;
+    CriticalPathEnd = G.EntrySlot + L;
   }
 
   void viewGraph();
@@ -176,10 +176,10 @@ template <> struct GraphTraits<SchedulingBase*>
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::sched_iterator nodes_iterator;
   static nodes_iterator nodes_begin(SchedulingBase *G) {
-    return G->getState().sched_begin();
+    return (*G)->sched_begin();
   }
   static nodes_iterator nodes_end(SchedulingBase *G) {
-    return G->getState().sched_end();
+    return (*G)->sched_end();
   }
 };
 

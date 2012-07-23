@@ -362,7 +362,7 @@ SubGraphNode::ChildIt SubGraphNode::child_end() const {
 //===----------------------------------------------------------------------===//
 unsigned SchedulingBase::computeRecMII() {
   //// Find all recurrences with Johnson's algorithm.
-  SubGraph SG(&State);
+  SubGraph SG(&G);
 
   // Do not pipeline if we cannot compute RecMII.
   if (!SG.findAllCircuits()) return 0;
