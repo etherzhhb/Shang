@@ -692,6 +692,11 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         continue;
       }
 
+      // As explained above, the PHI is moved by II cycles later, we need to
+      // revert the move while building the dependency from the PHI.
+      if (Dep->isPHI() && G.isPipelined(Dep->getParentBB()))
+        Latency -= G.getII(ParentBB);
+
       // Prevent the data-path SU from being scheduled to the same slot with
       // A.
       if (isCtrl && Dep->isDatapath() && Latency == 0) Latency = 1;
