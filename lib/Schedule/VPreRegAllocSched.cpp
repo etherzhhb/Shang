@@ -671,6 +671,9 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       if (Dep->getIdx() > A->getIdx()) {
         assert(A->getRepresentativePtr().get_mi()->isPHI()
                && "Expected backedge for PHI!");
+        // Prevent the data-path SU from being scheduled to the same slot with
+        // A.
+        if (Latency == 0 && Dep->isDatapath()) Latency = 1;
         // Cross iteration dependences do not make sense in normal loops.
         if (G.isPipelined(ParentBB))
           // The iterate distance for back-edge to PHI is always 1.
@@ -683,6 +686,10 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         }
         continue;
       }
+
+      // Prevent the data-path SU from being scheduled to the same slot with
+      // A.
+      if (isCtrl && Dep->isDatapath() && Latency == 0) Latency = 1;
 
       A->addDep(Dep, VDEdge::CreateValDep(Latency));
 

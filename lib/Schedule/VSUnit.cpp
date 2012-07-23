@@ -421,7 +421,8 @@ void VSchedGraph::scheduleDatapathALAP() {
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot
       // with the control operation.
-      if (Use->isControl()) CurStep = std::min(UseSlot - 1, CurStep);
+      assert((CurStep < UseSlot || !Use->isControl())
+             && "Bad data-path to control-path latency!");
 
       Step = std::min(CurStep, Step);
     }
