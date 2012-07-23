@@ -411,12 +411,8 @@ void VSchedGraph::scheduleDatapathALAP() {
       const VSUnit *Use = *UI;
       VDEdge UseEdge = Use->getEdgeFrom(A);
       assert(Use->isScheduled() && "Expect use scheduled!");
-
+      assert(!UseEdge.isLoopCarried() && "Unexpected loop carried dependency!");
       unsigned UseSlot = Use->getSlot();
-      // We had already adjusted the schedule the PHI, so do not add the II
-      // to UseSlot again.
-      if (isPipelined(MBB) && !Use->isPHI())
-        UseSlot += (getII(MBB) * UseEdge.getDistance());
       unsigned CurStep = UseSlot - UseEdge.getLatency();
       // All control operations are read at emit, do not schedule the datapath
       // operation which is the control operation depends on to the same slot

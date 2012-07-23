@@ -677,7 +677,12 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         // Cross iteration dependences do not make sense in normal loops.
         if (G.isPipelined(ParentBB))
           // The iterate distance for back-edge to PHI is always 1.
-          A->addDep(Dep, VDEdge::CreateMemDep(Latency, 1));
+          // A->addDep(Dep, VDEdge::CreateMemDep(Latency, 1));
+          // Since the II is already known, we can translate the distant of the
+          // loop carried dependency to cycle-accurate latency, and since we
+          // have already move the PHI by II cycles later, we should not add
+          // II to the latency again.
+          A->addDep(Dep, VDEdge::CreateMemDep(Latency/*+G.getII(ParentBB)*/, 0));
         else {
           // Else connect the schedule unit to exit root, since it is not
           // dangling.
