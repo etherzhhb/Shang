@@ -442,21 +442,6 @@ void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
 
   if (CurEdge == NewEdge) return;
 
-  if (NewEdge.getEdgeType() == VDEdge::SoftConstraint) {
-    if (CurEdge.getEdgeType() == VDEdge::SoftConstraint) {
-      llvm_unreachable("Cannot merge softconstraint yet!");
-      return;
-    }
-
-    assert(!CurEdge.isLoopCarried()
-           && "Cannot mixing soft-constraints with loop carried dependencies!");
-    assert(Edges.size() == 1 && "Cannot handle multiple edge yet!");
-    // Only add new soft constraints if it is tighter than the hard constraints.
-    if (NewEdge.getLatency() > CurEdge.getLatency())
-      Edges.push_back(NewEdge);
-    return;
-  }
-
   assert(NewEdge.getEdgeType() != VDEdge::FixedTiming
         && CurEdge.getEdgeType() != VDEdge::FixedTiming
         && "Cannot override fixed timing dependencies!");

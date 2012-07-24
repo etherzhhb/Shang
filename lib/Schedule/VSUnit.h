@@ -54,40 +54,40 @@ public:
     ValDep,
     MemDep,
     CtrlDep,
-    FixedTiming,
-    SoftConstraint
+    FixedTiming
   };
 private:
   uint8_t  EdgeType : 3;
   // Iterate distance.
-  int16_t DistanceOrSoftConstraintType : 13;
+  uint16_t Distance : 13;
   // The latancy of this edge.
-  int16_t Latancy;
+  int16_t  Latancy;
 
   friend class VSUnit;
 protected:
   VDEdge(enum Types T, int latancy, int Dst)
-    : EdgeType(T), DistanceOrSoftConstraintType(Dst), Latancy(latancy) {}
+    : EdgeType(T), Distance(Dst), Latancy(latancy) {}
 public:
   Types getEdgeType() const { return Types(EdgeType); }
+
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
-    return Latancy - int(II) * getDistance();
+    return Latancy - int(II) * int(getDistance());
   }
+
   void setLatency(unsigned latency) { Latancy = latency; }
   // Get the distance between iterations in a loop.
-  int getDistance() const {
-    assert(EdgeType != SoftConstraint && "Bad edge type!");
-    return DistanceOrSoftConstraintType;
+  unsigned getDistance() const {
+    return Distance;
   }
   bool isLoopCarried() const {
-    return getEdgeType() != SoftConstraint && getDistance() > 0;
+    return getDistance() > 0;
   }
 
   inline bool operator==(const VDEdge &RHS) const {
-    return RHS.getEdgeType() == getEdgeType()
-           && RHS.getLatency() == getLatency()
-           && RHS.DistanceOrSoftConstraintType == DistanceOrSoftConstraintType;
+    return RHS.EdgeType == EdgeType
+           && RHS.Latancy == Latancy
+           && RHS.Distance == Distance;
   }
 
   void print(raw_ostream &OS) const;
@@ -119,7 +119,6 @@ public:
   }
 };
 
-
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
@@ -132,10 +131,9 @@ class VSUnit {
   struct EdgeBundle {
     SmallVector<VDEdge, 1> Edges;
     bool IsCrossBB;
-    bool HasSoftConstraints;
 
     explicit EdgeBundle(VDEdge E, bool IsCrossBB)
-      : Edges(1, E), IsCrossBB(IsCrossBB), HasSoftConstraints(false) {}
+      : Edges(1, E), IsCrossBB(IsCrossBB) {}
 
     operator const VDEdge &() const {
       return Edges.front();
@@ -185,7 +183,7 @@ public:
     bool hasSoftConstraint() const {
       return IteratorType::operator->()->second.HasSoftConstraints;
     }
-    int getDistance() const { return getEdge().getDistance(); }
+    unsigned getDistance() const { return getEdge().getDistance(); }
   };
 
 private:

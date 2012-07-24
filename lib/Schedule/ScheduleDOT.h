@@ -49,7 +49,6 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
     case VDEdge::MemDep:          return "color=blue,style=dashed";
     case VDEdge::CtrlDep:         return "color=green,style=dashed";
     case VDEdge::FixedTiming:     return "color=red";
-    case VDEdge::SoftConstraint:  return "style=dashed";
     }
 
     llvm_unreachable("Unexpected edge type!");
