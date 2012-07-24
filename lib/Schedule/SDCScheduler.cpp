@@ -43,6 +43,18 @@ void LPObjFn::setLPObj(lprec *lp) const {
 SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), lp(0), NumVars(0)
 {}
 
+unsigned SDCScheduler::createStepVariable(const VSUnit* U, unsigned Col) {
+  // Set up the step variable for the VSUnit.
+  bool inserted = SUIdx.insert(std::make_pair(U, Col)).second;
+  assert(inserted && "Index already existed!");
+  (void) inserted;
+  std::string SVStart = "sv" + utostr_32(U->getIdx());
+  DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
+  set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
+  set_int(lp, Col, TRUE);
+  return Col + 1;
+}
+
 unsigned SDCScheduler::createLPAndVariables() {
   lp = make_lp(0, NumVars);
   unsigned Col =  1;
@@ -51,15 +63,7 @@ unsigned SDCScheduler::createLPAndVariables() {
     const VSUnit* U = *I;
     if (U->isScheduled()) continue;
 
-    // Set up the step variable for the VSUnit.
-    bool inserted = SUIdx.insert(std::make_pair(U, Col)).second;
-    assert(inserted && "Index already existed!");
-    (void) inserted;
-    std::string SVStart = "sv" + utostr_32(U->getIdx());
-    DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
-    set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
-    set_int(lp, Col, TRUE);
-    ++Col;
+    Col = createStepVariable(U, Col);
   }
 
   NumVars = Col - 1;
@@ -149,7 +153,8 @@ void SDCScheduler::buildOptSlackObject(double weight){
   }
 }
 
-void SDCScheduler::buildSchedule(lprec *lp) {
+void SDCScheduler::buildSchedule(lprec *lp, unsigned TotalRows) {
+
   typedef VSchedGraph::sched_iterator it;
   for(it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
     VSUnit *U = *I;
@@ -204,7 +209,7 @@ bool SDCScheduler::solveLP(lprec *lp) {
 
   DEBUG(write_lp(lp, "log.lp"));
 
-  TotalRows = get_Nrows(lp);
+  unsigned TotalRows = get_Nrows(lp);
   DEBUG(dbgs() << "The model has " << NumVars
                << "x" << TotalRows << '\n');
 
@@ -242,13 +247,12 @@ bool SDCScheduler::schedule() {
 
   // Turn off the add rowmode and start to solve the model.
   set_add_rowmode(lp, FALSE);
-
-  TotalRows = get_Nrows(lp);
+  unsigned TotalRows = get_Nrows(lp);
 
   if (!solveLP(lp)) return false;
 
   // Schedule the state with the ILP result.
-  buildSchedule(lp);
+  buildSchedule(lp, TotalRows);
 
   delete_lp(lp);
   lp = 0;
@@ -280,9 +284,9 @@ unsigned SDCScheduler::calculateMinSlotsFromEntry(VSUnit *BBEntry,
     //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
     //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
 
-    MachineBasicBlock *PredBB = (*I)->getParentBB();
+    MachineBasicBlock *PredBB = PredTerminator->getParentBB();
     unsigned SlotsFromPredExit = Map[PredBB->getNumber()];
-    //assert(SlotsFromPredExit && "Not visiting the BBs in topological order?");
+    assert(SlotsFromPredExit && "Not visiting the BBs in topological order?");
     SlotsFromEntry = std::min<unsigned>(SlotsFromEntry, SlotsFromPredExit);
   }
 
@@ -347,7 +351,6 @@ void SDCScheduler::fixInterBBLatency() {
       // All dependencies visited, now visit the current BBEntry.
       assert(U->isBBEntry() && "Unexpected non-entry node!");
       unsigned SlotsFromEntry = calculateMinSlotsFromEntry(U, ExitSlots);
-      unsigned CurBBEntrySlot = U->getSlot();
 
       int MinInterBBSlack = calulateMinInterBBSlack(U, ExitSlots, SlotsFromEntry);
 

@@ -275,8 +275,6 @@ private:
   LPObjFn ObjFn;
   // The number of step variables.
   unsigned NumVars;
-  // Total rows in LP.
-  unsigned TotalRows;
   // The table of the index of the VSUnits and the column number in LP.
   typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;
   typedef SUI2IdxMapTy::const_iterator SUIdxIt;
@@ -288,6 +286,10 @@ private:
     return at->second;
   }
 
+  // Create step variables, which represent the c-step that the VSUnits are
+  // scheduled to.
+  unsigned createStepVariable(const VSUnit *U, unsigned Col);
+
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);
   void addDependencyConstraints(lprec *lp, const VSUnit *U);
@@ -295,7 +297,7 @@ private:
   bool solveLP(lprec *lp);
 
   // Build the schedule form the result of ILP.
-  void buildSchedule(lprec *lp);
+  void buildSchedule(lprec *lp, unsigned TotalRows);
 
   typedef std::vector<unsigned> B2SMapTy;
   unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry, const B2SMapTy &Map);
