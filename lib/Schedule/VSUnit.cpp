@@ -380,64 +380,6 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
   }
 }
 
-void VSchedGraph::scheduleDatapathALAP() {
-  typedef SUnitVecTy::reverse_iterator rev_it;
-  for (rev_it I = AllSUs.rbegin(), E = AllSUs.rend(); I != E; ++I) {
-    VSUnit *A = *I;
-    if (A->isScheduled()) continue;
-
-    MachineBasicBlock *MBB = A->getParentBB();
-    unsigned Step = getEndSlot(MBB);
-
-    for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
-         UI != UE; ++UI) {
-      const VSUnit *Use = *UI;
-      VDEdge UseEdge = Use->getEdgeFrom(A);
-      assert(Use->isScheduled() && "Expect use scheduled!");
-      assert(!UseEdge.isLoopCarried() && "Unexpected loop carried dependency!");
-      unsigned UseSlot = Use->getSlot();
-      unsigned CurStep = UseSlot - UseEdge.getLatency();
-      // All control operations are read at emit, do not schedule the datapath
-      // operation which is the control operation depends on to the same slot
-      // with the control operation.
-      assert((CurStep < UseSlot || !Use->isControl())
-             && "Bad data-path to control-path latency!");
-
-      Step = std::min(CurStep, Step);
-    }
-
-    assert(Step < getEndSlot(MBB) && Step >= getStartSlot(MBB)
-           && "Bad schedule for datapath SU!");
-
-    // Schedule As late as possible to reduce register usage.
-    A->scheduledTo(Step);
-  }
-}
-
-void VSchedGraph::scheduleDatapathASAP() {
-  for (iterator I = AllSUs.begin(), E = AllSUs.end(); I != E; ++I) {
-    VSUnit *A = *I;
-    if (A->isScheduled()) continue;
-
-    MachineBasicBlock *MBB = A->getParentBB();
-    unsigned Step = getStartSlot(getEntryBB());
-    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-         DI != DE; ++DI) {
-      const VSUnit *DepSU = *DI;
-      assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      unsigned NewStep = DepSU->getSlot() + DI.getLatency();
-      if (isPipelined(MBB)) NewStep -= getII(MBB) * DI.getDistance();
-
-      Step = std::max(Step, NewStep);
-    }
-
-    assert(Step < getEndSlot(MBB) && Step >= getStartSlot(MBB)
-           && "Bad schedule for datapath SU!");
-    // Schedule As soon as possible.
-    A->scheduledTo(Step);
-  }
-}
-
 void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
   // Fix the schedule of PHI's so we can emit the incoming copies at a right
   // slot;
