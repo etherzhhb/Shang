@@ -260,71 +260,50 @@ void VSchedGraph::resetSchedule(unsigned MII) {
     if (I->isPHI()) I.getEdge().setLatency(MII);
 }
 
-static SchedulingBase *createLinearScheduler(VSchedGraph &G, MachineFunction *F)
-{
-  const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
-
-  switch (I.getScheduleAlgorithm()) {
-  case SynSettings::ASAP:  return new ASAPScheduler(G);
-  case SynSettings::SDC:  return new SDCScheduler(G);
-  }
-  return 0;
-}
-
-static SchedulingBase *createLoopScheduler(VSchedGraph &G, MachineFunction *F) {
-  const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
-  switch (I.getPipeLineAlgorithm()) {
-  case SynSettings::IMS:
-    return new IterativeModuloScheduling(G);
-  default:
-    return createLinearScheduler(G, F);
-  }
-}
-
 void VSchedGraph::scheduleLoop() {
   MachineBasicBlock *MBB = getEntryBB();
   MachineFunction *F = MBB->getParent();
   DEBUG(dbgs() << "Try to pipeline MBB#" << MBB->getNumber()
                << " MF#" << F->getFunctionNumber() << '\n');
-  OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this, F));
+  IterativeModuloScheduling Scheduler(*this);
   // Ensure us can schedule the critical path.
-  while (!Scheduler->scheduleCriticalPath(true))
-    Scheduler->lengthenCriticalPath();
+  while (!Scheduler.scheduleCriticalPath(true))
+    Scheduler.lengthenCriticalPath();
 
   // computeMII may return a very big II if we cannot compute the RecII.
-  Scheduler->computeMII();
+  Scheduler.computeMII();
   DEBUG(dbgs() << "Pipelining BB# " << MBB->getNumber()
                << " in function " << MBB->getParent()->getFunction()->getName()
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
-  DEBUG(dbgs() << "MII: " << Scheduler->getMII() << "...");
-  while (!Scheduler->scheduleCriticalPath(true)) {
+  DEBUG(dbgs() << "MII: " << Scheduler.getMII() << "...");
+  while (!Scheduler.scheduleCriticalPath(true)) {
     // Make sure MII smaller than the critical path length.
-    if (2 * Scheduler->getMII() < Scheduler->getCriticalPathLength())
-      Scheduler->increaseMII();
+    if (2 * Scheduler.getMII() < Scheduler.getCriticalPathLength())
+      Scheduler.increaseMII();
     else
-      Scheduler->lengthenCriticalPath();
+      Scheduler.lengthenCriticalPath();
   }
 
-  assert(Scheduler->getMII() <= Scheduler->getCriticalPathLength()
+  assert(Scheduler.getMII() <= Scheduler.getCriticalPathLength()
          && "MII bigger then Critical path length!");
 
-  while (!Scheduler->scheduleState()) {
+  while (!Scheduler.scheduleState()) {
     // Make sure MII smaller than the critical path length.
-    if (Scheduler->getMII() < Scheduler->getCriticalPathLength())
-      Scheduler->increaseMII();
+    if (Scheduler.getMII() < Scheduler.getCriticalPathLength())
+      Scheduler.increaseMII();
     else
-      Scheduler->lengthenCriticalPath();
+      Scheduler.lengthenCriticalPath();
   }
 
-  DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
+  DEBUG(dbgs() << "SchedII: " << Scheduler.getMII()
                << " Latency: " << getTotalSlot(MBB) << '\n');
-  assert(getLoopOp()->getSlot() - EntrySlot == Scheduler->getMII()
+  assert(getLoopOp()->getSlot() - EntrySlot == Scheduler.getMII()
          && "LoopOp was not scheduled to the right slot!");
   assert(getLoopOp()->getSlot() <= getEndSlot(MBB)
          && "Expect MII is not bigger then critical path length!");
 
-  bool succ = IIMap.insert(std::make_pair(MBB, Scheduler->getMII())).second;
+  bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
   assert(succ && "Cannot remember II!");
   (void) succ;
 
