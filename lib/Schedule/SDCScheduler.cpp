@@ -40,8 +40,7 @@ void LPObjFn::setLPObj(lprec *lp) const {
   DEBUG(write_lp(lp, "log.lp"));
 }
 
-SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), lp(0), NumVars(0)
-{}
+SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), lp(0) {}
 
 unsigned SDCScheduler::createStepVariable(const VSUnit* U, unsigned Col) {
   // Set up the step variable for the VSUnit.
@@ -56,7 +55,7 @@ unsigned SDCScheduler::createStepVariable(const VSUnit* U, unsigned Col) {
 }
 
 unsigned SDCScheduler::createLPAndVariables() {
-  lp = make_lp(0, NumVars);
+  lp = make_lp(0, 0);
   unsigned Col =  1;
   typedef VSchedGraph::sched_iterator it;
   for (it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
@@ -66,8 +65,7 @@ unsigned SDCScheduler::createLPAndVariables() {
     Col = createStepVariable(U, Col);
   }
 
-  NumVars = Col - 1;
-  return NumVars;
+  return Col - 1;
 }
 
 void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
@@ -209,7 +207,7 @@ bool SDCScheduler::solveLP(lprec *lp) {
 
   DEBUG(write_lp(lp, "log.lp"));
 
-  unsigned TotalRows = get_Nrows(lp);
+  unsigned TotalRows = get_Nrows(lp), NumVars = get_Ncolumns(lp);
   DEBUG(dbgs() << "The model has " << NumVars
                << "x" << TotalRows << '\n');
 

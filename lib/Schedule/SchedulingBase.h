@@ -273,8 +273,6 @@ public:
 private:
   lprec *lp;
   LPObjFn ObjFn;
-  // The number of step variables.
-  unsigned NumVars;
   // The table of the index of the VSUnits and the column number in LP.
   typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;
   typedef SUI2IdxMapTy::const_iterator SUIdxIt;
