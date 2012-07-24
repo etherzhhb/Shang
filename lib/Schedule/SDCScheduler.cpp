@@ -51,18 +51,18 @@ unsigned SDCScheduler::createLPAndVariables() {
     const VSUnit* U = *I;
     if (U->isScheduled()) continue;
 
-    // Set up the scheduling variables for VSUnits.
-    bool inserted = SUIdx.insert(std::make_pair(U, NumVars)).second;
+    // Set up the step variable for the VSUnit.
+    bool inserted = SUIdx.insert(std::make_pair(U, Col)).second;
     assert(inserted && "Index already existed!");
     (void) inserted;
-    std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start";
+    std::string SVStart = "sv" + utostr_32(U->getIdx());
     DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
     set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
     set_int(lp, Col, TRUE);
     ++Col;
-    ++NumVars;
   }
 
+  NumVars = Col - 1;
   return NumVars;
 }
 
@@ -97,12 +97,12 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
 
     // Build the constraint.
     if (SrcSlot == 0) {
-      Col.push_back(1 + SrcIdx);
+      Col.push_back(SrcIdx);
       Coeff.push_back(-1.0);
     }
 
     if (DstSlot == 0) {
-      Col.push_back(1 + DstIdx);
+      Col.push_back(DstIdx);
       Coeff.push_back(1.0);
     }
 
@@ -131,7 +131,7 @@ void SDCScheduler::buildASAPObject(double weight) {
     unsigned Idx = getSUIdx(U);
     // Because LPObjFn will set the objective function to maxim instead of minim,
     // we should use -1.0 instead of 1.0 as coefficient
-    ObjFn[1 + Idx] += - 1.0 * weight;
+    ObjFn[Idx] += - 1.0 * weight;
   }
 }
 
@@ -145,7 +145,7 @@ void SDCScheduler::buildOptSlackObject(double weight){
     int Indeg = U->countValDeps();
     int Outdeg = U->countValUses();
     unsigned Idx = getSUIdx(U);
-    ObjFn[1 + Idx] += (Outdeg - Indeg) * weight;
+    ObjFn[Idx] += (Outdeg - Indeg) * weight;
   }
 }
 
@@ -156,9 +156,9 @@ void SDCScheduler::buildSchedule(lprec *lp) {
 
     if (U->isScheduled()) continue;
 
-    unsigned Offset = getSUIdx(U);
-    unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
-    DEBUG(dbgs() << "At row:" << TotalRows + Offset + 1
+    unsigned Idx = getSUIdx(U);
+    unsigned j = get_var_primalresult(lp, TotalRows + Idx);
+    DEBUG(dbgs() << "At row:" << TotalRows + Idx
                  << " the result is:" << j << "\n");
 
     assert(j && "Bad result!");
