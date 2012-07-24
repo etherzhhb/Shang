@@ -80,7 +80,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
   // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
   typedef VSUnit::const_dep_iterator dep_it;
   for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
-    assert(DI.getDistance() == 0
+    assert(!DI.isLoopCarried()
            && "Loop carried dependencies cannot handled by SDC scheduler!");
 
     const VSUnit *Dep = *DI;
