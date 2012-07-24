@@ -639,7 +639,11 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
 
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);
-    int IntraSULatency = I ? A->getLatencyAt(I) : 0;
+    float IntraSULatency = I ? A->getLatencyAt(I) : 0;
+    // Prevent the data-path dependency from scheduling to the same slot with
+    // the MI with the Control SU.
+    if (IntraSULatency < 0 && isCtrl)
+      IntraSULatency -= DetialLatencyInfo::DeltaLatency;
 
     assert(MI && "Unexpected entry root!");
     for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
@@ -654,7 +658,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       float DetailLatency = G.getChainingLatency(DepSrc, MI);
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
-      DetailLatency -= std::min(0.0f, float(IntraSULatency));
+
+      DetailLatency -= std::min(0.0f, IntraSULatency);
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
