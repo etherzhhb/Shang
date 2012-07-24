@@ -91,7 +91,7 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
 
   for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
-    assert((DI.getEdgeType() == VDEdge::edgeMemDep
+    assert((DI.getEdgeType() == VDEdge::MemDep
             || SU->getIdx() > Dep->getIdx())
            && "Bad value dependent edge!");
     assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
@@ -530,8 +530,8 @@ void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   }
 
   VDEdge &CurE = at->second;
-  assert(NewE.getEdgeType() != VDEdge::edgeFixedTiming
-         && CurE.getEdgeType() != VDEdge::edgeFixedTiming
+  assert(NewE.getEdgeType() != VDEdge::FixedTiming
+         && CurE.getEdgeType() != VDEdge::FixedTiming
          && "Cannot override fixed timing dependencies!");
   // If the new dependency constraint tighter?
   assert((NewE.getDistance() == 0 || CurE.getDistance() == 0
@@ -568,7 +568,7 @@ unsigned VSUnit::countValDeps() const {
   unsigned DepCounter = 0;
 
   for(const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
-    if(I.getEdgeType() != VDEdge::edgeValDep) continue;
+    if(I.getEdgeType() != VDEdge::ValDep) continue;
 
     ++DepCounter;
   }
@@ -581,7 +581,7 @@ unsigned VSUnit::countValUses() const {
 
   for(const_use_iterator I = use_begin(), E = use_end(); I != E; ++I){
     const VSUnit* V =*I;
-    if(V->getEdgeFrom(this).getEdgeType() != VDEdge::edgeValDep) continue;
+    if(V->getEdgeFrom(this).getEdgeType() != VDEdge::ValDep) continue;
 
     ++DepCounter;
   }

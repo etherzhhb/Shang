@@ -573,8 +573,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       continue;
 
     // Get the minimal steps between MI and its dependency.
-    unsigned MinCtrlDistance =
-      G.getCtrlStepBetween<Type == VDEdge::edgeValDep>(SrcMI, MI);
+    unsigned MinCtrlDistance = G.getCtrlStepBetween<Type>(SrcMI, MI);
     // The the latency must bigger than the minimal latency between two control
     // operations.
     Latency = std::max(int(MinCtrlDistance), Latency);
@@ -713,7 +712,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &G) {
     const DetialLatencyInfo::DepLatInfoTy *Deps = G.getDepLatInfo(MI);
     assert(Deps && "Operand latency information not available!");
     int MIOffset = I ? A->getLatencyAt(I) : 0;
-    addSchedDepForMI<VDEdge::edgeValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
+    addSchedDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
   if (!A->dep_empty()) return;
@@ -788,12 +787,12 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   MachineInstr *SrcMI = 0;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), G, SrcMI))
-    return G.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo<true>(SrcMI, MI, G));
+    return G.mapMI2SU(MI, SrcSU, SrcSU->getValLatencyTo(SrcMI, MI, G));
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI))
     if (VSUnit *SrcSU = getDefSU(*Pred, G, SrcMI))
-      return G.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo<true>(SrcMI, MI, G));
+      return G.mapMI2SU(MI, SrcSU, SrcSU->getValLatencyTo(SrcMI, MI, G));
 
   // Merge it into the EntryRoot.
   return G.mapMI2SU(MI, G.lookupSUnit(MI->getParent()), G.getStepsFromEntry(MI));
@@ -913,7 +912,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
         llvm_unreachable("Unexpected handing node!");
 
       // A PHIMove can be scheduled to the same slot with the exit root.
-      unsigned Latency = VSU->getMaxLatencyTo<false>(ExitMI, G);
+      unsigned Latency = VSU->getMaxLatencyTo<VDEdge::CtrlDep>(ExitMI, G);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
       // PHI copies, and the PHIElimination Hook will take care of the data
@@ -999,7 +998,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
         // can always finish in time.
         const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
         assert(DepLat && "Operand latency information not available!");
-        addSchedDepForMI<VDEdge::edgeCtrlDep, false>(MI, 0/*Offset*/, ExitSU, G,
+        addSchedDepForMI<VDEdge::CtrlDep, false>(MI, 0/*Offset*/, ExitSU, G,
                                                      *DepLat);
         // Add the dependence from PHISU to ExitSU, we will constraint the PHI
         // so it will schedule before the last stage of a pipeline BB.
@@ -1024,7 +1023,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   }
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI<VDEdge::edgeCtrlDep, false>(ExitSU->getRepresentativePtr(),
+  addSchedDepForMI<VDEdge::CtrlDep, false>(ExitSU->getRepresentativePtr(),
                                                0/*Offset*/, ExitSU, G, ExitDeps);
   // Add the dependence of exit root.
   addSchedDepForSU<false>(ExitSU, G);

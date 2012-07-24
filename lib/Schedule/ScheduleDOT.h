@@ -45,10 +45,10 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
     VDEdge UseEdge = Use->getEdgeFrom(Node);
 
     switch (UseEdge.getEdgeType()) {
-    case VDEdge::edgeValDep:    return "";
-    case VDEdge::edgeMemDep:    return "color=blue,style=dashed";
-    case VDEdge::edgeCtrlDep:   return "color=green,style=dashed";
-    case VDEdge::edgeFixedTiming: return "color=red";
+    case VDEdge::ValDep:    return "";
+    case VDEdge::MemDep:    return "color=blue,style=dashed";
+    case VDEdge::CtrlDep:   return "color=green,style=dashed";
+    case VDEdge::FixedTiming: return "color=red";
     }
 
     llvm_unreachable("Unexpected edge type!");

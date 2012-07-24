@@ -40,7 +40,7 @@ void LPObjFn::setLPObj(lprec *lp) const {
   DEBUG(write_lp(lp, "log.lp"));
 }
 
-SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), NumVars(0), lp(0)
+SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), lp(0), NumVars(0)
 {}
 
 unsigned SDCScheduler::createLPAndVariables() {
@@ -106,7 +106,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
       Coeff.push_back(1.0);
     }
 
-    int EqTy = (DI.getEdgeType() == VDEdge::edgeFixedTiming) ? EQ : GE;
+    int EqTy = (DI.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
 
     if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
       report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"

@@ -51,10 +51,10 @@ class MachineOperand;
 class VDEdge {
 public:
   enum Types {
-    edgeValDep,
-    edgeMemDep,
-    edgeCtrlDep,
-    edgeFixedTiming
+    ValDep,
+    MemDep,
+    CtrlDep,
+    FixedTiming
   };
 private:
   uint8_t  EdgeType : 2;
@@ -85,23 +85,23 @@ public:
 
   template<int DISTANCE>
   static VDEdge CreateMemDep(int Latency) {
-    return VDEdge(edgeMemDep, Latency, DISTANCE);
+    return VDEdge(MemDep, Latency, DISTANCE);
   }
 
   static VDEdge CreateMemDep(int Latency, int Distance) {
-    return VDEdge(edgeMemDep, Latency, Distance);
+    return VDEdge(MemDep, Latency, Distance);
   }
 
   static VDEdge CreateValDep(int Latency) {
-    return VDEdge(edgeValDep, Latency, 0);
+    return VDEdge(ValDep, Latency, 0);
   }
 
   static VDEdge CreateCtrlDep(int Latency) {
-    return VDEdge(edgeCtrlDep, Latency, 0);
+    return VDEdge(CtrlDep, Latency, 0);
   }
 
   static VDEdge CreateFixTimingConstraint(int Latency) {
-    return VDEdge(edgeFixedTiming, Latency, 0);
+    return VDEdge(FixedTiming, Latency, 0);
   }
 
   template<Types Type>
@@ -285,14 +285,19 @@ public:
   }
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
+  template<VDEdge::Types Type>
+  inline int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
+                          VSchedGraph &G) const;
 
-  template<bool IsValDep>
-  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI, VSchedGraph &G) const;
+  int getValLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
+                      VSchedGraph &G) const {
+    return getLatencyTo<VDEdge::ValDep>(SrcMI, DstMI, G);
+  }
   int getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
-  template<bool IsValDep>
-  int getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const;
+  template<VDEdge::Types Type>
+  inline int getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const;
 
   typedef SmallVectorImpl<InstPtrTy>::iterator instr_iterator;
 
@@ -497,11 +502,9 @@ public:
     DLInfo.eraseFromWaitSet(MI);
   }
 
-  template<bool IsValDep>
-  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                              const MachineInstr *DstInstr) {
-    return DLInfo.getCtrlStepBetween<IsValDep>(SrcInstr, DstInstr);
-  }
+  template<VDEdge::Types Type>
+  inline unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
+                                     const MachineInstr *DstInstr) const;
 
   unsigned getStepsFromEntry(const MachineInstr *DstInstr) const {
     return DLInfo.getStepsFromEntry(DstInstr);
@@ -683,10 +686,10 @@ template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
   }
 };
 
-template<bool IsValDep>
+template<VDEdge::Types Type>
 int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
                          VSchedGraph &G) const {
-  int Latency = G.getCtrlStepBetween<IsValDep>(SrcMI, DstMI);
+  int Latency = G.getCtrlStepBetween<Type>(SrcMI, DstMI);
   if (SrcMI != getRepresentativePtr()) {
     Latency += getLatencyFor(SrcMI);
   }
@@ -694,17 +697,40 @@ int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
   return Latency;
 }
 
-template<bool IsValDep>
+template<VDEdge::Types Type>
 int VSUnit::getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const {
   int latency = 0;
   for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
     // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
     // source is the entry root of the state.
-    latency = std::max(getLatencyTo<IsValDep>(*I, DstMI, G), latency);
+    latency = std::max(getLatencyTo<Type>(*I, DstMI, G), latency);
 
   return latency;
 }
 
+template<>
+inline unsigned
+VSchedGraph::getCtrlStepBetween<VDEdge::ValDep>(const MachineInstr *SrcInstr,
+                                                const MachineInstr *DstInstr)
+                                                const {
+  return DLInfo.getCtrlStepBetween<true>(SrcInstr, DstInstr);
+}
+
+template<>
+inline unsigned
+VSchedGraph::getCtrlStepBetween<VDEdge::CtrlDep>(const MachineInstr *SrcInstr,
+                                                 const MachineInstr *DstInstr)
+                                                 const {
+  return DLInfo.getCtrlStepBetween<false>(SrcInstr, DstInstr);
+}
+
+template<>
+inline unsigned
+VSchedGraph::getCtrlStepBetween<VDEdge::MemDep>(const MachineInstr *SrcInstr,
+                                                const MachineInstr *DstInstr)
+                                                const {
+  return DLInfo.getCtrlStepBetween<false>(SrcInstr, DstInstr);
+}
 } // end namespace
 
 #endif
