@@ -54,21 +54,20 @@ public:
     ValDep,
     MemDep,
     CtrlDep,
-    FixedTiming
+    FixedTiming,
+    SoftConstraint
   };
 private:
-  uint8_t  EdgeType : 2;
-  uint8_t  IsCrossBB : 1;
+  uint8_t  EdgeType : 3;
   // Iterate distance.
-  int16_t Distance : 13;
+  int16_t DistanceOrSoftConstraintType : 13;
   // The latancy of this edge.
   int16_t Latancy;
 
   friend class VSUnit;
-  void setIsCrossBB(bool v = true) { IsCrossBB = v; }
 protected:
   VDEdge(enum Types T, int latancy, int Dst)
-    : EdgeType(T), IsCrossBB(false), Distance(Dst), Latancy(latancy) {}
+    : EdgeType(T), DistanceOrSoftConstraintType(Dst), Latancy(latancy) {}
 public:
   Types getEdgeType() const { return Types(EdgeType); }
   // Compute the latency considering the distance between iterations in a loop.
@@ -77,9 +76,19 @@ public:
   }
   void setLatency(unsigned latency) { Latancy = latency; }
   // Get the distance between iterations in a loop.
-  int getDistance() const { return Distance; }
-  bool isLoopCarried() const { return getDistance() > 0; }
-  bool isCrossBB() const { return IsCrossBB; }
+  int getDistance() const {
+    assert(EdgeType != SoftConstraint && "Bad edge type!");
+    return DistanceOrSoftConstraintType;
+  }
+  bool isLoopCarried() const {
+    return getEdgeType() != SoftConstraint && getDistance() > 0;
+  }
+
+  inline bool operator==(const VDEdge &RHS) const {
+    return RHS.getEdgeType() == getEdgeType()
+           && RHS.getLatency() == getLatency()
+           && RHS.DistanceOrSoftConstraintType == DistanceOrSoftConstraintType;
+  }
 
   void print(raw_ostream &OS) const;
 
@@ -110,40 +119,6 @@ public:
   }
 };
 
-template<class IteratorType, bool IsConst>
-class VSUnitDepIterator : public IteratorType {
-  typedef VSUnitDepIterator<IteratorType, IsConst> Self;
-  typedef typename conditional<IsConst, const VSUnit, VSUnit>::type NodeType;
-public:
-  VSUnitDepIterator(IteratorType i) : IteratorType(i) {}
-
-  NodeType *operator*() const {
-    return IteratorType::operator->()->first;
-  }
-
-  NodeType *operator->() const { return operator*(); }
-
-  VDEdge getEdge() const { return IteratorType::operator->()->second; }
-
-  Self& operator++() {                // Preincrement
-    IteratorType::operator++();
-    return *this;
-  }
-
-  Self operator++(int) { // Postincrement
-    return IteratorType::operator++(0);
-  }
-
-
-  // Forwarding the function from the Edge.
-  VDEdge::Types getEdgeType() const { return getEdge().getEdgeType(); }
-  inline int getLatency(unsigned II = 0) const {
-    return getEdge().getLatency(II);
-  }
-  bool isLoopCarried() const { return getEdge().isLoopCarried(); }
-  bool isCrossBB() const { return getEdge().isCrossBB(); }
-  int getDistance() const { return getEdge().getDistance(); }
-};
 
 /// @brief Base Class of all hardware atom.
 class VSUnit {
@@ -154,8 +129,68 @@ class VSUnit {
   uint16_t InstIdx;
   uint16_t FUNum;
 
+  struct EdgeBundle {
+    SmallVector<VDEdge, 1> Edges;
+    bool IsCrossBB;
+    bool HasSoftConstraints;
+
+    explicit EdgeBundle(VDEdge E, bool IsCrossBB)
+      : Edges(1, E), IsCrossBB(IsCrossBB), HasSoftConstraints(false) {}
+
+    operator const VDEdge &() const {
+      return Edges.front();
+    }
+
+    operator VDEdge &() {
+      return Edges.front();
+    }
+
+    void addEdge(VDEdge NewEdge);
+  };
+
+public:
+  template<class IteratorType, bool IsConst>
+  class VSUnitDepIterator : public IteratorType {
+    typedef VSUnitDepIterator<IteratorType, IsConst> Self;
+    typedef typename conditional<IsConst, const VSUnit, VSUnit>::type NodeType;
+  public:
+    VSUnitDepIterator(IteratorType i) : IteratorType(i) {}
+
+    NodeType *operator*() const {
+      return IteratorType::operator->()->first;
+    }
+
+    NodeType *operator->() const { return operator*(); }
+
+    VDEdge getEdge() const { return IteratorType::operator->()->second; }
+
+    Self& operator++() {                // Preincrement
+      IteratorType::operator++();
+      return *this;
+    }
+
+    Self operator++(int) { // Postincrement
+      return IteratorType::operator++(0);
+    }
+
+    // Forwarding the function from the Edge.
+    VDEdge::Types getEdgeType() const { return getEdge().getEdgeType(); }
+    inline int getLatency(unsigned II = 0) const {
+      return getEdge().getLatency(II);
+    }
+    bool isLoopCarried() const { return getEdge().isLoopCarried(); }
+    bool isCrossBB() const {
+      return IteratorType::operator->()->second.IsCrossBB;
+    }
+    bool hasSoftConstraint() const {
+      return IteratorType::operator->()->second.HasSoftConstraints;
+    }
+    int getDistance() const { return getEdge().getDistance(); }
+  };
+
+private:
   // Remember the dependencies of the scheduling unit.
-  typedef DenseMap<VSUnit*, VDEdge> DepSet;
+  typedef DenseMap<VSUnit*, EdgeBundle> DepSet;
   DepSet Deps;
 
   // The atoms that using this atom.

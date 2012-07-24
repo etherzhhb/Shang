@@ -516,31 +516,52 @@ void VSUnit::dump() const {
 
 void VDEdge::print(raw_ostream &OS) const {}
 
+void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
+  VDEdge &CurEdge = Edges.front();
+
+  if (CurEdge == NewEdge) return;
+
+  if (NewEdge.getEdgeType() == VDEdge::SoftConstraint) {
+    if (CurEdge.getEdgeType() == VDEdge::SoftConstraint) {
+      llvm_unreachable("Cannot merge softconstraint yet!");
+      return;
+    }
+
+    assert(!CurEdge.isLoopCarried()
+           && "Cannot mixing soft-constraints with loop carried dependencies!");
+    assert(Edges.size() == 1 && "Cannot handle multiple edge yet!");
+    // Only add new soft constraints if it is tighter than the hard constraints.
+    if (NewEdge.getLatency() > CurEdge.getLatency())
+      Edges.push_back(NewEdge);
+    return;
+  }
+
+  assert(NewEdge.getEdgeType() != VDEdge::FixedTiming
+        && CurEdge.getEdgeType() != VDEdge::FixedTiming
+        && "Cannot override fixed timing dependencies!");
+  // If the new dependency constraint tighter?
+  assert((NewEdge.getDistance() == 0 || CurEdge.getDistance() == 0
+          || CurEdge.getDistance() == NewEdge.getDistance())
+         && "Unexpected multiple loop carried dependencies!");
+  if (NewEdge.getDistance() <= CurEdge.getDistance()
+      && NewEdge.getLatency() > CurEdge.getLatency()) {
+    CurEdge = NewEdge;
+  }
+}
+
 // TODO: Implement edge bundle, calculate the edge for
-void llvm::VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
+void VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   assert(Src != this && "Cannot add self-loop!");
   edge_iterator at = Deps.find(Src);
 
-  NewE.setIsCrossBB(Src->getParentBB() != getParentBB());
-
   if (at == Deps.end()) {
-    Deps.insert(std::make_pair(Src, NewE));
+    bool IsCrossBB = Src->getParentBB() != getParentBB();
+    Deps.insert(std::make_pair(Src, EdgeBundle(NewE, IsCrossBB)));
     Src->addToUseList(this);
     return;
   }
 
-  VDEdge &CurE = at->second;
-  assert(NewE.getEdgeType() != VDEdge::FixedTiming
-         && CurE.getEdgeType() != VDEdge::FixedTiming
-         && "Cannot override fixed timing dependencies!");
-  // If the new dependency constraint tighter?
-  assert((NewE.getDistance() == 0 || CurE.getDistance() == 0
-          || CurE.getDistance() == NewE.getDistance())
-         && "Unexpected multiple loop carried dependencies!");
-  if (NewE.getDistance() <= CurE.getDistance()
-      && NewE.getLatency() > CurE.getLatency()) {
-    CurE = NewE;
-  }
+  at->second.addEdge(NewE);
 }
 
 VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)
