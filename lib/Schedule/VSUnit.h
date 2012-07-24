@@ -38,7 +38,7 @@
 
 namespace llvm {
 class BitLevelInfo;
-class SchedulingBase;
+class SDCScheduler;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
@@ -489,7 +489,10 @@ private:
   unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
                         MachineBasicBlock *MBB);
   void fixPHISchedules(iterator su_begin, iterator su_end);
+
   static void clearDanglingFlagForTree(VSUnit *Root);
+
+  void addSoftConstraintsToBreakChains(SDCScheduler &S);
 public:
   const unsigned EntrySlot;
 

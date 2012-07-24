@@ -254,16 +254,24 @@ struct LPObjFn : public std::map<unsigned, double> {
 };
 
 class SDCScheduler : public SchedulingBase {
+  struct SoftConstraint {
+    double Penalty;
+    const VSUnit *Src, *Dst;
+    unsigned SlackIdx, Slack;
+  };
 public:
   SDCScheduler(VSchedGraph &S);
   bool scheduleState();
   bool schedule();
   // Set the variables' name in the model.
   unsigned createLPAndVariables();
+  unsigned addSoftConstraint(const VSUnit *Src, const VSUnit *Dst,
+                             unsigned Slack, double Penalty);
 
   // Build the schedule object function.
   void buildASAPObject(double weight);
   void buildOptSlackObject(double weight);
+  void addSoftConstraintsPenalties(double weight);
 
   // Currently the SDCScheduler cannot calculate the minimal latency between two
   // bb correctly, which leads to a wrong global code motion for the
@@ -284,6 +292,9 @@ private:
     return at->second;
   }
 
+  typedef std::vector<SoftConstraint> SoftCstrVecTy;
+  SoftCstrVecTy SoftCstrs;
+
   // Create step variables, which represent the c-step that the VSUnits are
   // scheduled to.
   unsigned createStepVariable(const VSUnit *U, unsigned Col);
@@ -291,6 +302,8 @@ private:
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);
   void addDependencyConstraints(lprec *lp, const VSUnit *U);
+
+  void addSoftConstraints(lprec *lp);
 
   bool solveLP(lprec *lp);
 

@@ -68,6 +68,76 @@ unsigned SDCScheduler::createLPAndVariables() {
   return Col - 1;
 }
 
+unsigned SDCScheduler::addSoftConstraint(const VSUnit *Src, const VSUnit *Dst,
+                                         unsigned Slack, double Penalty) {
+  if (Src->isScheduled() && Dst->isScheduled()) return 0;
+
+  unsigned NextCol = get_Ncolumns(lp) + 1;
+  SoftConstraint C = { Penalty, Src, Dst, NextCol, Slack };
+  SoftCstrs.push_back(C);
+  std::string SlackName = "slack" + utostr_32(NextCol);
+  DEBUG(dbgs() <<"Col#" << NextCol << " name: " <<SlackName << "\n");
+  set_col_name(lp, NextCol, const_cast<char*>(SlackName.c_str()));
+  set_int(lp, NextCol, TRUE);
+  return NextCol;
+}
+
+void SDCScheduler::addSoftConstraints(lprec *lp) {
+  typedef SoftCstrVecTy::iterator iterator;
+  SmallVector<int, 3> Col;
+  SmallVector<REAL, 3> Coeff;
+
+  for (iterator I = SoftCstrs.begin(), E = SoftCstrs.end(); I != E; ++I) {
+    SoftConstraint &C = *I;
+
+    unsigned DstIdx = 0;
+    int DstSlot = C.Dst->getSlot();
+    if (DstSlot == 0) DstIdx = getSUIdx(C.Dst);
+
+    unsigned SrcIdx = 0;
+    int SrcSlot = C.Src->getSlot();
+    if (SrcSlot == 0) SrcIdx = getSUIdx(C.Src);
+
+    int RHS = C.Slack - DstSlot + SrcSlot;
+
+    // Both SU is scheduled.
+    if (SrcSlot && DstSlot) continue;
+
+    Col.clear();
+    Coeff.clear();
+
+    // Build the constraint.
+    if (SrcSlot == 0) {
+      Col.push_back(SrcIdx);
+      Coeff.push_back(-1.0);
+    }
+
+    if (DstSlot == 0) {
+      Col.push_back(DstIdx);
+      Coeff.push_back(1.0);
+    }
+
+    // Add the slack variable.
+    Col.push_back(C.SlackIdx);
+    Coeff.push_back(1.0);
+
+    if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), GE, RHS))
+      report_fatal_error("SDCScheduler: Can NOT step soft Constraints"
+                         " SlackIdx:" + utostr_32(C.SlackIdx));
+  }
+}
+
+void SDCScheduler::addSoftConstraintsPenalties(double weight) {
+  typedef SoftCstrVecTy::iterator iterator;
+  for (iterator I = SoftCstrs.begin(), E = SoftCstrs.end(); I != E; ++I) {
+    const SoftConstraint &C = *I;
+    // Ignore the eliminated soft constraints.
+    if (C.SlackIdx == 0) continue;
+
+    ObjFn[C.SlackIdx] -= C.Penalty * weight;
+  }
+}
+
 void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
   unsigned DstIdx = 0;
   int DstSlot = U->getSlot();
@@ -242,6 +312,7 @@ bool SDCScheduler::schedule() {
 
   // Build the constraints.
   addDependencyConstraints(lp);
+  addSoftConstraints(lp);
 
   // Turn off the add rowmode and start to solve the model.
   set_add_rowmode(lp, FALSE);
