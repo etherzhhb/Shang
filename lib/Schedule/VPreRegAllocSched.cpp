@@ -159,7 +159,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &G, MachineInstr *FirstTerminator);
 
-  template<int AllowDangling>
   void buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator);
 
   VSUnit *buildSUnit(MachineInstr *MI, VSchedGraph &G);
@@ -890,7 +889,6 @@ VSUnit *VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   return U;
 }
 
-template<int AllowDangling>
 void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) {
   typedef MachineBasicBlock::instr_iterator it;
   MachineInstr *ExitMI = Terminator->getRepresentativePtr();
@@ -908,7 +906,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
     if (VSU->use_empty() && VSU != Terminator) {
       if (VSU->isDatapath()) continue;
 
-      if (!(AllowDangling || G.isLoopOp(VSU->getRepresentativePtr())))
+      if (!G.isLoopOp(VSU->getRepresentativePtr()))
         llvm_unreachable("Unexpected handing node!");
 
       // A PHIMove can be scheduled to the same slot with the exit root.
@@ -1031,7 +1029,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so dangling node
   // is not allow.
-  buildTerminatorDeps<false>(G, ExitSU);
+  buildTerminatorDeps(G, ExitSU);
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
