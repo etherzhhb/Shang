@@ -654,8 +654,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       float DetailLatency = G.getChainingLatency(DepSrc, MI);
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
-      DetailLatency -= std::min(0.0f,
-                                IntraSULatency - DetialLatencyInfo::DeltaLatency);
+      DetailLatency -= std::min(0.0f, float(IntraSULatency));
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
