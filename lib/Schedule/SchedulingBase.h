@@ -133,7 +133,6 @@ public:
   // Return true when resource constraints preserved after citical path
   // scheduled
   bool scheduleCriticalPath(bool refreshFDepHD);
-  void schedulePassiveSUnits();
   bool allNodesSchedued() const;
 
   /// @name TimeFrame

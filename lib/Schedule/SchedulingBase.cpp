@@ -467,24 +467,6 @@ unsigned SchedulingBase::buildTimeFrameAndResetSchedule(bool rstSTF) {
   return CriticalPathEnd;
 }
 
-//===----------------------------------------------------------------------===//
-void SchedulingBase::schedulePassiveSUnits() {
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
-    VSUnit *A = *I;
-    if (A->isScheduled())
-      continue;
-
-    assert(A->getFUId().isTrivial()
-      && "SUnit that taking non-trivial not scheduled?");
-
-    DEBUG(A->print(dbgs()));
-    unsigned step = getASAPStep(A);
-    A->scheduledTo(step);
-    buildTimeFrameAndResetSchedule(false);
-  }
-}
-
 bool SchedulingBase::allNodesSchedued() const {
   typedef VSchedGraph::sched_iterator it;
   for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
