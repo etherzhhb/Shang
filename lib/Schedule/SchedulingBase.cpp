@@ -146,7 +146,7 @@ void SchedulingBase::buildALAPStep() {
   while (NeedToReCalc) {
     NeedToReCalc = false;
     for (int Idx = G.num_scheds()/*skip exitroot*/- 2; Idx >= 0; --Idx){
-      VSUnit *A = G.getCtrlAt(Idx);
+      VSUnit *A = G.sched_begin()[Idx];
       if (A->isScheduled()) {
         SUnitToTF[A].second = A->getSlot();
         continue;

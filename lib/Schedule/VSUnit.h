@@ -645,7 +645,6 @@ public:
   sched_iterator sched_end()    const { return SUsToSched.end(); }
   size_t num_scheds() const { return SUsToSched.size(); }
   unsigned getNextSUIdx() const { return NextSUIdx; }
-  VSUnit *getCtrlAt(unsigned Idx) const { return SUsToSched[Idx]; }
   void resetSchedule(unsigned MII);
 
   unsigned getStartSlot(MachineBasicBlock *MBB) const {
