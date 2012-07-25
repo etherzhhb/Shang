@@ -226,7 +226,6 @@ class IterativeModuloScheduling : public SchedulingBase {
 
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
-  bool isAllSUnitScheduled();
   VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
   IterativeModuloScheduling(VSchedGraph &S)

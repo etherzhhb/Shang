@@ -133,17 +133,6 @@ VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
   return BlockingMI ? G.lookupSUnit(BlockingMI) : 0;
 }
 
-bool IterativeModuloScheduling::isAllSUnitScheduled() {
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
-    VSUnit *A = *I;
-    if (!A->isScheduled())
-      return false;
-  }
-
-  return true;
-}
-
 bool ASAPScheduler::scheduleState() {
   G.getEntryRoot()->scheduledTo(G.EntrySlot);
   buildTimeFrame();
