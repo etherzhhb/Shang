@@ -64,7 +64,7 @@ unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
 }
 
 void SchedulingBase::buildASAPStep() {
-  VSUnit *Entry = G.getEntryRoot();
+  const VSUnit *Entry = G.getEntryRoot();
   SUnitToTF[Entry].first = Entry->getSlot();
   su_it Start = su_begin(G);
 
@@ -74,7 +74,7 @@ void SchedulingBase::buildASAPStep() {
   while(NeedToReCalc) {
     NeedToReCalc = false;
     for (su_it I = Start + 1, E = su_end(G); I != E; ++I) {
-      VSUnit *A = *I;
+      const VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A].first = A->getSlot();
         continue;
@@ -135,7 +135,7 @@ unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
 }
 
 void SchedulingBase::buildALAPStep() {
-  VSUnit *Exit = G.getExitRoot();
+  const VSUnit *Exit = G.getExitRoot();
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit].second = LastSlot;
 
@@ -144,7 +144,7 @@ void SchedulingBase::buildALAPStep() {
   while (NeedToReCalc) {
     NeedToReCalc = false;
     for (int Idx = num_sus(G)/*skip exitroot*/- 2; Idx >= 0; --Idx){
-      VSUnit *A = su_begin(G)[Idx];
+      const VSUnit *A = su_begin(G)[Idx];
       if (A->isScheduled()) {
         SUnitToTF[A].second = A->getSlot();
         continue;
@@ -176,7 +176,7 @@ void SchedulingBase::buildALAPStep() {
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    VSUnit *A = *I;
+    const VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
       << "} " <<  getTimeFrame(A);
@@ -192,7 +192,7 @@ unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    VSUnit *SU = *I;
+    const VSUnit *SU = *I;
     if (!SU->getFUId().isBound()) continue;
 
     ++TotalResUsage[SU->getFUId()];
@@ -427,7 +427,7 @@ void SchedulingBase::verifyFUUsage() {
   resetRT();
 
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    VSUnit *A = *I;
+    const VSUnit *A = *I;
     FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
     // if (A->getFUId().isBinded()) continue;
@@ -467,7 +467,7 @@ unsigned SchedulingBase::buildTimeFrameAndResetSchedule(bool rstSTF) {
 
 bool SchedulingBase::allNodesSchedued() const {
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    VSUnit *A = *I;
+    const VSUnit *A = *I;
     if (!A->isScheduled()) return false;
   }
 

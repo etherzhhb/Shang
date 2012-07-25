@@ -75,15 +75,6 @@ private:
 protected:
   // Helper function for SU traversing, SU dependencies traversing and SU users
   // traversing.
-  typedef VSUnit::dep_iterator dep_it;
-  static dep_it dep_begin(VSUnit *U) {
-    return U->dep_begin();
-  }
-
-  static dep_it dep_end(VSUnit *U) {
-    return U->dep_end();
-  }
-
   typedef VSUnit::const_dep_iterator const_dep_it;
   static const_dep_it dep_begin(const VSUnit *U) {
     return U->dep_begin();
@@ -91,15 +82,6 @@ protected:
 
   static const_dep_it dep_end(const VSUnit *U) {
     return U->dep_end();
-  }
-
-  typedef VSUnit::use_iterator use_it;
-  static use_it use_begin(VSUnit *U) {
-    return U->use_begin();
-  }
-
-  static use_it use_end(VSUnit *U) {
-    return U->use_end();
   }
 
   typedef VSUnit::const_use_iterator const_use_it;

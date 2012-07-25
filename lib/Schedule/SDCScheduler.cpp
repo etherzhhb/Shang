@@ -368,7 +368,7 @@ int SDCScheduler::calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
     if (U->getParentBB() != MBB) continue;
 
     unsigned USlot = U->getSlot();
-    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+    for (const_dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
       if (!DI.isCrossBB()) continue;
 
       MachineBasicBlock *SrcBB = DI->getParentBB();
