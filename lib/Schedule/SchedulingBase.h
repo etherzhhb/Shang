@@ -43,15 +43,16 @@ private:
   typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
   TFMapTy SUnitToTF;
 
-  typedef SmallVector<MachineInstr*, 4> InstSetTy;
+  typedef SmallVector<const MachineInstr*, 4> InstSetTy;
   static InstSetTy::const_iterator findConflictedInst(const InstSetTy &Set,
-                                                      MachineInstr *MI);
-  static MachineInstr *getConflictedInst(const InstSetTy &S, MachineInstr *MI) {
+                                                      const MachineInstr *MI);
+  static const MachineInstr *getConflictedInst(const InstSetTy &S,
+                                               const MachineInstr *MI) {
     InstSetTy::const_iterator at = findConflictedInst(S, MI);
     return at != S.end() ? *at : 0;
   }
 
-  bool hasConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
+  bool hasConflictedInst(const InstSetTy &Set, const MachineInstr *MI) {
     // Nothing to conflict if the set is empty.
     if (Set.empty()) return false;
 
@@ -187,15 +188,16 @@ public:
     return RT[std::make_pair(FU, Step)];
   }
 
-  void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
+  void revertFUUsage(const MachineInstr *MI, unsigned step, unsigned Latency,
                      FuncUnitId FU);
-  void revertFUUsage(VSUnit *U, unsigned step);
-  void takeFU(VSUnit *U, unsigned step);
-  void takeFU(MachineInstr *MI, unsigned step, unsigned Latency, FuncUnitId FU);
-  MachineInstr *getConflictedInst(MachineInstr *MI, unsigned step,
-                                  unsigned Latency, FuncUnitId FU);
-  MachineInstr *getConflictedInst(VSUnit *U, unsigned step);
-  bool tryTakeResAtStep(VSUnit *U, unsigned step);
+  void revertFUUsage(const VSUnit *U, unsigned step);
+  void takeFU(const VSUnit *U, unsigned step);
+  void takeFU(const MachineInstr *MI, unsigned step, unsigned Latency,
+              FuncUnitId FU);
+  const MachineInstr *getConflictedInst(const MachineInstr *MI, unsigned step,
+                                        unsigned Latency, FuncUnitId FU);
+  const MachineInstr *getConflictedInst(const VSUnit *U, unsigned step);
+  bool tryTakeResAtStep(const VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);
 

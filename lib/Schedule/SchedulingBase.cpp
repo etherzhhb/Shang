@@ -229,10 +229,10 @@ void SchedulingBase::dumpTimeFrame() const {
 }
 
 SchedulingBase::InstSetTy::const_iterator
-SchedulingBase::findConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
+SchedulingBase::findConflictedInst(const InstSetTy &Set, const MachineInstr *MI) {
   typedef InstSetTy::const_iterator it;
   it I = Set.begin(), E = Set.end();
-  MachineBasicBlock *MIParent = MI->getParent();
+  const MachineBasicBlock *MIParent = MI->getParent();
 
   while (I != E) {
     if (MIParent == (*I)->getParent() && !VInstrInfo::isPredicateMutex(MI, *I))
@@ -244,8 +244,8 @@ SchedulingBase::findConflictedInst(const InstSetTy &Set, MachineInstr *MI) {
   return I;
 }
 
-void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
-                            FuncUnitId FU) {
+void SchedulingBase::takeFU(const MachineInstr *MI, unsigned step,
+                            unsigned Latency, FuncUnitId FU) {
   VFUs::FUTypes Ty = FU.getFUType();
 
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
@@ -269,7 +269,7 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
   }
 }
 
-void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
+void SchedulingBase::takeFU(const VSUnit *U, unsigned step) {
   MachineInstr *MI = U->getRepresentativePtr();
   if (MI == 0) return;
 
@@ -288,14 +288,15 @@ void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
   //}
 }
 
-MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
-                                                unsigned Latency, FuncUnitId FU) {
+const MachineInstr *
+SchedulingBase::getConflictedInst(const MachineInstr *MI,unsigned step,
+                                  unsigned Latency, FuncUnitId FU) {
   VFUs::FUTypes Ty = FU.getFUType();
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned CurSlot = computeStepKey(i);
     InstSetTy &InstSet = getRTFor(CurSlot, FU);
-    if (MachineInstr *OtherMI = getConflictedInst(InstSet, MI))
+    if (const MachineInstr *OtherMI = getConflictedInst(InstSet, MI))
       return OtherMI;
     //// Do not conflict with the predicated channel as well.
     //if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
@@ -317,12 +318,12 @@ MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
     if (Ty == VFUs::BRam) {
       unsigned NextSlot = computeStepKey(i + 1);
       const InstSetTy &NextBreakers = PipeBreakerFUs.lookup(NextSlot);
-      if (MachineInstr *BreakerMI = getConflictedInst(NextBreakers, MI)) {
+      if (const MachineInstr *BreakerMI = getConflictedInst(NextBreakers, MI)) {
         // Cannot support II = 1
         if (NextSlot == CurSlot) return BreakerMI;
 
         InstSetTy &NextPipe = getRTFor(NextSlot, FU);
-        if (MachineInstr *OtherMI = getConflictedInst(NextPipe, MI))
+        if (const MachineInstr *OtherMI = getConflictedInst(NextPipe, MI))
           return OtherMI;
       }
 
@@ -330,12 +331,13 @@ MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
         unsigned PrevSlot = computeStepKey(i - 1);
         // Already detected by previous code.
         //if (PrevSlot == CurSlot) return BreakerMI;
-        if (MachineInstr *OtherMI = getConflictedInst(getRTFor(PrevSlot, FU), MI))
+        InstSetTy &PrevPipes = getRTFor(PrevSlot, FU);
+        if (const MachineInstr *OtherMI = getConflictedInst(PrevPipes, MI))
           return OtherMI;
       }
     } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
       const InstSetTy &CurPipes = PipeFUs.lookup(CurSlot);
-      if (MachineInstr *PipeLineMI = getConflictedInst(CurPipes, MI)) {
+      if (const MachineInstr *PipeLineMI = getConflictedInst(CurPipes, MI)) {
         unsigned PrevSlot = computeStepKey(i - 1);
         FuncUnitId PipeFU = VInstrInfo::getPreboundFUId(PipeLineMI);
         if (PrevSlot == CurSlot // Cannot support II = 1
@@ -348,7 +350,8 @@ MachineInstr *SchedulingBase::getConflictedInst(MachineInstr *MI,unsigned step,
   return 0;
 }
 
-MachineInstr *SchedulingBase::getConflictedInst(VSUnit *U, unsigned step) {
+const MachineInstr *SchedulingBase::getConflictedInst(const VSUnit *U,
+                                                      unsigned step) {
   MachineInstr *MI = U->getRepresentativePtr();
   if (MI == 0) return 0;
 
@@ -358,7 +361,7 @@ MachineInstr *SchedulingBase::getConflictedInst(VSUnit *U, unsigned step) {
   return getConflictedInst(MI, step, U->getLatency(), FU);
 }
 
-bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
+bool SchedulingBase::tryTakeResAtStep(const VSUnit *U, unsigned step) {
   if (getConflictedInst(U, step)) return false;
 
   takeFU(U, step);
@@ -374,7 +377,7 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   takeFU(U, step);
 }
 
-void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
+void SchedulingBase::revertFUUsage(const MachineInstr *MI, unsigned step,
                                    unsigned Latency, FuncUnitId FU) {
   VFUs::FUTypes Ty = FU.getFUType();
 
@@ -399,7 +402,7 @@ void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
   }
 }
 
-void SchedulingBase::revertFUUsage(VSUnit *U, unsigned step) {
+void SchedulingBase::revertFUUsage(const VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
