@@ -207,6 +207,12 @@ public:
   void viewGraph();
 };
 
+class Scheduler : public SchedulingBase {
+protected:
+  explicit Scheduler(VSchedGraph &S) : SchedulingBase(S) {}
+
+};
+
 template <> struct GraphTraits<SchedulingBase*> 
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::sched_iterator nodes_iterator;
@@ -218,21 +224,20 @@ template <> struct GraphTraits<SchedulingBase*>
   }
 };
 
-class IterativeModuloScheduling : public SchedulingBase {
+class IterativeModuloScheduling : public Scheduler {
   std::map<const VSUnit*, std::set<unsigned> > ExcludeSlots;
 
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
   VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
-  IterativeModuloScheduling(VSchedGraph &S)
-    : SchedulingBase(S) {}
+  IterativeModuloScheduling(VSchedGraph &S) : Scheduler(S) {}
 
   bool scheduleState();
 };
 
-struct ASAPScheduler : public SchedulingBase {
-  ASAPScheduler(VSchedGraph &S) : SchedulingBase(S) {}
+struct ASAPScheduler : public Scheduler {
+  ASAPScheduler(VSchedGraph &S) : Scheduler(S) {}
 
   bool scheduleState();
 };
@@ -287,14 +292,14 @@ struct LPObjFn : public std::map<unsigned, double> {
   void setLPObj(lprec *lp) const;
 };
 
-class SDCScheduler : public SchedulingBase {
+class SDCScheduler : public Scheduler {
   struct SoftConstraint {
     double Penalty;
     const VSUnit *Src, *Dst;
     unsigned SlackIdx, Slack;
   };
 public:
-  SDCScheduler(VSchedGraph &S);
+  SDCScheduler(VSchedGraph &S) : Scheduler(S), lp(0) {}
   bool scheduleState();
   bool schedule();
   // Set the variables' name in the model.

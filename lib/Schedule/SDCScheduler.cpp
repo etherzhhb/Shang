@@ -40,8 +40,6 @@ void LPObjFn::setLPObj(lprec *lp) const {
   DEBUG(write_lp(lp, "log.lp"));
 }
 
-SDCScheduler::SDCScheduler(VSchedGraph &S) : SchedulingBase(S), lp(0) {}
-
 unsigned SDCScheduler::createStepVariable(const VSUnit* U, unsigned Col) {
   // Set up the step variable for the VSUnit.
   bool inserted = SUIdx.insert(std::make_pair(U, Col)).second;
