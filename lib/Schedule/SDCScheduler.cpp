@@ -146,8 +146,7 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
   SmallVector<REAL, 2> Coeff;
 
   // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
-  typedef VSUnit::const_dep_iterator dep_it;
-  for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+  for (const_dep_it DI = dep_begin(U), DE = dep_end(U); DI != DE; ++DI) {
     assert(!DI.isLoopCarried()
            && "Loop carried dependencies cannot handled by SDC scheduler!");
 

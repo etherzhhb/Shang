@@ -156,8 +156,7 @@ bool ASAPScheduler::scheduleState() {
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
 
-    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-         DI != DE; ++DI) {
+    for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI) {
       // Ignore the loop carried edges.
       if (DI.isLoopCarried()) continue;
 

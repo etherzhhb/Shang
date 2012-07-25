@@ -46,7 +46,7 @@ void SchedulingBase::buildTimeFrame() {
 
 unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
   unsigned NewStep = 0;
-  for (const_dep_it DI = A->dep_begin(), DE = A->dep_end(); DI != DE; ++DI) {
+  for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
     // Ignore the back-edges when we are not pipelining the BB.
     if (DI.isLoopCarried() && !MII) continue;
@@ -97,10 +97,10 @@ void SchedulingBase::buildASAPStep() {
 
       // We need to re-calculate the ASAP steps if the sink of the back-edges,
       // need to be update.
-      for (use_it UI = A->use_begin(), UE = A->use_end(); UI != UE; ++UI) {
-        VSUnit *Use = *UI;
-        NeedToReCalc |=
-          Use->getIdx() < A->getIdx() && calculateASAP(Use) != getASAPStep(Use);
+      for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
+        const VSUnit *Use = *UI;
+        NeedToReCalc |= Use->getIdx() < A->getIdx()
+                        && calculateASAP(Use) != getASAPStep(Use);
       }
     }
   }
@@ -111,7 +111,7 @@ void SchedulingBase::buildASAPStep() {
 
 unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
   unsigned NewStep = VSUnit::MaxSlot;
-  for (const_use_it UI = A->use_begin(), UE = A->use_end(); UI != UE; ++UI) {
+  for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
     const VSUnit *Use = *UI;
     VDEdge UseEdge = Use->getEdgeFrom(A);
 
@@ -166,10 +166,10 @@ void SchedulingBase::buildALAPStep() {
       assert(getASAPStep(A) <= NewStep && "Broken ALAP step!");
       ALAPStep = NewStep;
 
-      for (dep_it DI = A->dep_begin(), DE = A->dep_end(); DI != DE; ++DI) {
-        VSUnit *Dep = *DI;
-        NeedToReCalc |=
-          A->getIdx() < Dep->getIdx() && calculateALAP(Dep) != getALAPStep(Dep);
+      for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI) {
+        const VSUnit *Dep = *DI;
+        NeedToReCalc |= A->getIdx() < Dep->getIdx()
+                        && calculateALAP(Dep) != getALAPStep(Dep);
       }
     }
   }
@@ -184,8 +184,7 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
       << "} " <<  getTimeFrame(A);
 
-    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
-        ++DI)
+    for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI)
       OS << " [" << DI->getIdx() << "]"; 
     
     OS << '\n';
