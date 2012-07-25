@@ -86,6 +86,7 @@ void SDCScheduler::addSoftConstraints(lprec *lp) {
   SmallVector<int, 3> Col;
   SmallVector<REAL, 3> Coeff;
 
+  // Build the constraint Dst - Src <= Latency - Slack
   for (iterator I = SoftCstrs.begin(), E = SoftCstrs.end(); I != E; ++I) {
     SoftConstraint &C = *I;
 
@@ -360,6 +361,7 @@ int SDCScheduler::calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
   unsigned EntrySlot = BBEntry->getSlot();
   MachineBasicBlock *MBB = BBEntry->getParentBB();
   typedef VSUnit::use_iterator use_it;
+  typedef VSUnit::dep_iterator dep_it;
   // The minimal slack from the predecessors of the BB to the entry of the BB.
   int MinInterBBSlack = 0;
 
@@ -368,7 +370,7 @@ int SDCScheduler::calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
     if (U->getParentBB() != MBB) continue;
 
     unsigned USlot = U->getSlot();
-    for (const_dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
       if (!DI.isCrossBB()) continue;
 
       MachineBasicBlock *SrcBB = DI->getParentBB();

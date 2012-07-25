@@ -138,8 +138,7 @@ bool ASAPScheduler::scheduleState() {
 
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
+  for (su_it I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
