@@ -128,7 +128,7 @@ void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
 }
 
 VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
-  MachineInstr *BlockingMI = getConflictedInst(U, step);
+  const MachineInstr *BlockingMI = getConflictedInst(U, step);
   return BlockingMI ? G.lookupSUnit(BlockingMI) : 0;
 }
 
