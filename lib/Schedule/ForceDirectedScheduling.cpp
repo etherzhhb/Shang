@@ -106,7 +106,7 @@ bool IterativeModuloScheduling::scheduleState() {
   DEBUG(dumpTimeFrame());
 
 #ifndef NDEBUG
-  verifyFUUsage();
+  verifyFUUsage(su_begin(G), su_end(G));
 #endif
 
   return true;

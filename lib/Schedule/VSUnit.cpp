@@ -267,7 +267,7 @@ void VSchedGraph::scheduleLoop() {
                << " MF#" << F->getFunctionNumber() << '\n');
   IterativeModuloScheduling Scheduler(*this);
   // Ensure us can schedule the critical path.
-  while (!Scheduler.scheduleCriticalPath(true))
+  while (!Scheduler.scheduleCriticalPath())
     Scheduler.lengthenCriticalPath();
 
   // computeMII may return a very big II if we cannot compute the RecII.
@@ -277,7 +277,7 @@ void VSchedGraph::scheduleLoop() {
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
   DEBUG(dbgs() << "MII: " << Scheduler.getMII() << "...");
-  while (!Scheduler.scheduleCriticalPath(true)) {
+  while (!Scheduler.scheduleCriticalPath()) {
     // Make sure MII smaller than the critical path length.
     if (2 * Scheduler.getMII() < Scheduler.getCriticalPathLength())
       Scheduler.increaseMII();

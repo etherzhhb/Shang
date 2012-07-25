@@ -32,6 +32,7 @@ typedef _lprec lprec;
 
 namespace llvm {
 class SchedulingBase {
+protected:
   // MII in modulo schedule.
   const unsigned EntrySlot;
   unsigned MII, CriticalPathEnd;
@@ -39,10 +40,6 @@ class SchedulingBase {
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
-  // Time frames for each schedule unit.
-  typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
-  TFMapTy SUnitToTF;
-
   typedef SmallVector<const MachineInstr*, 4> InstSetTy;
   static InstSetTy::const_iterator findConflictedInst(const InstSetTy &Set,
                                                       const MachineInstr *MI);
@@ -73,42 +70,9 @@ private:
   PipelineStatusMap PipeFUs, PipeBreakerFUs;
 
 protected:
-  // Helper function for SU traversing, SU dependencies traversing and SU users
-  // traversing.
-  typedef VSUnit::const_dep_iterator const_dep_it;
-  static const_dep_it dep_begin(const VSUnit *U) {
-    return U->dep_begin();
-  }
-
-  static const_dep_it dep_end(const VSUnit *U) {
-    return U->dep_end();
-  }
-
-  typedef VSUnit::const_use_iterator const_use_it;
-  static const_use_it use_begin(const VSUnit *U) {
-    return U->use_begin();
-  }
-
-  static const_use_it use_end(const VSUnit *U) {
-    return U->use_end();
-  }
-
-  static VDEdge getEdge(const VSUnit *Src, const VSUnit *Dst) {
-    return Dst->getEdgeFrom(Src);
-  }
-
-  typedef VSchedGraph::sched_iterator su_it;
-  static su_it su_begin(const VSchedGraph &G) {
-    return G.sched_begin();
-  }
-
-  static su_it su_end(const VSchedGraph &G) {
-    return G.sched_end();
-  }
-
-  static unsigned num_sus(const VSchedGraph &G) {
-    return G.num_scheds();
-  }
+  // Time frames for each schedule unit.
+  typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
+  TFMapTy SUnitToTF;
 
   /// @name PriorityQueue
   //{
@@ -128,16 +92,12 @@ public:
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
-  bool scheduleCriticalPath(bool refreshFDepHD);
-  bool allNodesSchedued() const;
+  typedef VSchedGraph::sched_iterator su_it;
+  bool scheduleCriticalPath(su_it I, su_it E);
+  bool allNodesSchedued(su_it I, su_it E) const;
 
   /// @name TimeFrame
   //{
-  unsigned calculateASAP(const VSUnit *A);
-  void buildASAPStep();
-  unsigned calculateALAP(const VSUnit *A);
-  void buildALAPStep();
-  void buildTimeFrame();
 
   unsigned getASAPStep(const VSUnit *A) const {
     TFMapTy::const_iterator at = SUnitToTF.find(A);
@@ -153,9 +113,6 @@ public:
   unsigned getTimeFrame(const VSUnit *A) const {
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
-
-  void printTimeFrame(raw_ostream &OS) const;
-  void dumpTimeFrame() const;
   //}
 
   void resetRT() {
@@ -182,10 +139,7 @@ public:
   bool tryTakeResAtStep(const VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);
-
-  void verifyFUUsage();
-
-  unsigned buildTimeFrameAndResetSchedule(bool resetSTF);
+  void verifyFUUsage(su_it I, su_it E);
 
   unsigned computeRecMII();
   unsigned computeResMII();
@@ -211,6 +165,57 @@ class Scheduler : public SchedulingBase {
 protected:
   explicit Scheduler(VSchedGraph &S) : SchedulingBase(S) {}
 
+  // Helper function for SU traversing, SU dependencies traversing and SU users
+  // traversing.
+  typedef VSUnit::const_dep_iterator const_dep_it;
+  static const_dep_it dep_begin(const VSUnit *U) {
+    return U->dep_begin();
+  }
+
+  static const_dep_it dep_end(const VSUnit *U) {
+    return U->dep_end();
+  }
+
+  typedef VSUnit::const_use_iterator const_use_it;
+  static const_use_it use_begin(const VSUnit *U) {
+    return U->use_begin();
+  }
+
+  static const_use_it use_end(const VSUnit *U) {
+    return U->use_end();
+  }
+
+  static VDEdge getEdge(const VSUnit *Src, const VSUnit *Dst) {
+    return Dst->getEdgeFrom(Src);
+  }
+
+  static su_it su_begin(const VSchedGraph &G) {
+    return G.sched_begin();
+  }
+
+  static su_it su_end(const VSchedGraph &G) {
+    return G.sched_end();
+  }
+
+  static unsigned num_sus(const VSchedGraph &G) {
+    return G.num_scheds();
+  }
+
+  unsigned calculateASAP(const VSUnit *A);
+  void buildASAPStep();
+  unsigned calculateALAP(const VSUnit *A);
+  void buildALAPStep();
+
+public:
+  unsigned buildTimeFrameAndResetSchedule(bool reset);
+  void buildTimeFrame();
+  void printTimeFrame(raw_ostream &OS) const;
+  void dumpTimeFrame() const;
+
+  bool scheduleCriticalPath() {
+    buildTimeFrameAndResetSchedule(true);
+    return SchedulingBase::scheduleCriticalPath(su_begin(G), su_end(G));
+  }
 };
 
 template <> struct GraphTraits<SchedulingBase*> 

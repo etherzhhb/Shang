@@ -26,9 +26,8 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-using namespace llvm;
 //===----------------------------------------------------------------------===//
-void SchedulingBase::buildTimeFrame() {
+void Scheduler::buildTimeFrame() {
   VSUnit *EntryRoot = G.getEntryRoot();
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
 
@@ -43,7 +42,7 @@ void SchedulingBase::buildTimeFrame() {
   DEBUG(dumpTimeFrame());
 }
 
-unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
+unsigned Scheduler::calculateASAP(const VSUnit * A) {
   unsigned NewStep = 0;
   for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
@@ -63,7 +62,7 @@ unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
   return NewStep;
 }
 
-void SchedulingBase::buildASAPStep() {
+void Scheduler::buildASAPStep() {
   bool NeedToReCalc = true;
 
   // Build the time frame iteratively.
@@ -103,7 +102,7 @@ void SchedulingBase::buildASAPStep() {
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
+unsigned Scheduler::calculateALAP(const VSUnit *A) {
   unsigned NewStep = VSUnit::MaxSlot;
   for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
     const VSUnit *Use = *UI;
@@ -130,7 +129,7 @@ unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
   return NewStep;
 }
 
-void SchedulingBase::buildALAPStep() {
+void Scheduler::buildALAPStep() {
   const VSUnit *Exit = G.getExitRoot();
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit].second = LastSlot;
@@ -171,7 +170,7 @@ void SchedulingBase::buildALAPStep() {
   }
 }
 
-void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
+void Scheduler::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     const VSUnit *A = *I;
@@ -186,10 +185,23 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   }
 }
 
+void Scheduler::dumpTimeFrame() const {
+  printTimeFrame(dbgs());
+}
+
+unsigned Scheduler::buildTimeFrameAndResetSchedule(bool reset) {
+  if (reset) G.resetSchedule(getMII());
+
+  buildTimeFrame();
+
+  return CriticalPathEnd;
+}
+
 unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator sched_iterator;
+  for (sched_iterator I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
     const VSUnit *SU = *I;
     if (!SU->getFUId().isBound()) continue;
 
@@ -219,10 +231,6 @@ bool SchedulingBase::computeMII() {
   // Also adjust the critical path length.
   setCriticalPathLength(std::max(MII, getCriticalPathLength()));
   return true;
-}
-
-void SchedulingBase::dumpTimeFrame() const {
-  printTimeFrame(dbgs());
 }
 
 SchedulingBase::InstSetTy::const_iterator
@@ -421,11 +429,11 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   revertFUUsage(U, step);
 }
 
-void SchedulingBase::verifyFUUsage() {
+void SchedulingBase::verifyFUUsage(su_it I, su_it E) {
   resetRT();
 
-  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    const VSUnit *A = *I;
+  while (I != E) {
+    const VSUnit *A = *I++;
     FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
     // if (A->getFUId().isBinded()) continue;
@@ -455,28 +463,18 @@ unsigned SchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-unsigned SchedulingBase::buildTimeFrameAndResetSchedule(bool rstSTF) {
-  if (rstSTF) G.resetSchedule(getMII());
-
-  buildTimeFrame();
-
-  return CriticalPathEnd;
-}
-
-bool SchedulingBase::allNodesSchedued() const {
-  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    const VSUnit *A = *I;
+bool SchedulingBase::allNodesSchedued(su_it I, su_it E) const {
+  while (I != E) {
+    const VSUnit *A = *I++;
     if (!A->isScheduled()) return false;
   }
 
   return true;
 }
 
-bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
-  if (refreshFDepHD) buildTimeFrameAndResetSchedule(true);
-
-  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
-    VSUnit *A = *I;
+bool SchedulingBase::scheduleCriticalPath(su_it I, su_it E) {
+  while (I != E) {
+    VSUnit *A = *I++;
 
     if (A->isScheduled() || getTimeFrame(A) != 1)
       continue;
