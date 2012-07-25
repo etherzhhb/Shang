@@ -54,6 +54,7 @@ bool IterativeModuloScheduling::scheduleState() {
   buildTimeFrame();
   // Reset exclude slots and resource table.
   resetRT();
+  ExcludeSlots.clear();
 
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
   IMSQueueType ToSched(su_begin(G) + 1, su_end(G), ims_sort(*this));
