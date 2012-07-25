@@ -57,8 +57,7 @@ unsigned SDCScheduler::createStepVariable(const VSUnit* U, unsigned Col) {
 unsigned SDCScheduler::createLPAndVariables() {
   lp = make_lp(0, 0);
   unsigned Col =  1;
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     const VSUnit* U = *I;
     if (U->isScheduled()) continue;
 
@@ -186,15 +185,13 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
 }
 
 void SDCScheduler::addDependencyConstraints(lprec *lp) {
-  typedef VSchedGraph::sched_iterator sched_it;
-  for(sched_it I = G.sched_begin(), E = G.sched_end(); I != E; ++I)
+  for(su_it I = su_begin(G), E = su_end(G); I != E; ++I)
     addDependencyConstraints(lp, *I);
 }
 
 void SDCScheduler::buildASAPObject(double weight) {
   //Build the ASAP object function.
-  typedef VSchedGraph::sched_iterator it;
-  for(it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
+  for(su_it I = su_begin(G),E = su_end(G);I != E; ++I) {
     const VSUnit* U = *I;
 
     if (U->isScheduled()) continue;
@@ -207,8 +204,7 @@ void SDCScheduler::buildASAPObject(double weight) {
 }
 
 void SDCScheduler::buildOptSlackObject(double weight){
-  typedef VSchedGraph::sched_iterator it;
-  for(it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
+  for(su_it I = su_begin(G),E = su_end(G);I != E; ++I) {
     const VSUnit* U = *I;
 
     if (U->isScheduled()) continue;
@@ -221,9 +217,7 @@ void SDCScheduler::buildOptSlackObject(double weight){
 }
 
 void SDCScheduler::buildSchedule(lprec *lp, unsigned TotalRows) {
-
-  typedef VSchedGraph::sched_iterator it;
-  for(it I = G.sched_begin(),E = G.sched_end();I != E; ++I) {
+  for(su_it I = su_begin(G),E = su_end(G);I != E; ++I) {
     VSUnit *U = *I;
 
     if (U->isScheduled()) continue;

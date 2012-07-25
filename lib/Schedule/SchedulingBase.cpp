@@ -67,15 +67,14 @@ unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
 void SchedulingBase::buildASAPStep() {
   VSUnit *Entry = G.getEntryRoot();
   SUnitToTF[Entry].first = Entry->getSlot();
-  typedef VSchedGraph::sched_iterator it;
-  it Start = G.sched_begin();
+  su_it Start = su_begin(G);
 
   bool NeedToReCalc = true;
 
   // Build the time frame iteratively.
   while(NeedToReCalc) {
     NeedToReCalc = false;
-    for (it I = Start + 1, E = G.sched_end(); I != E; ++I) {
+    for (su_it I = Start + 1, E = su_end(G); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A].first = A->getSlot();
@@ -145,8 +144,8 @@ void SchedulingBase::buildALAPStep() {
   // Build the time frame iteratively.
   while (NeedToReCalc) {
     NeedToReCalc = false;
-    for (int Idx = G.num_scheds()/*skip exitroot*/- 2; Idx >= 0; --Idx){
-      VSUnit *A = G.sched_begin()[Idx];
+    for (int Idx = num_sus(G)/*skip exitroot*/- 2; Idx >= 0; --Idx){
+      VSUnit *A = su_begin(G)[Idx];
       if (A->isScheduled()) {
         SUnitToTF[A].second = A->getSlot();
         continue;
@@ -177,8 +176,7 @@ void SchedulingBase::buildALAPStep() {
 
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
@@ -194,8 +192,7 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
 unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     VSUnit *SU = *I;
     if (!SU->getFUId().isBound()) continue;
 
@@ -427,8 +424,7 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
 void SchedulingBase::verifyFUUsage() {
   resetRT();
 
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
@@ -468,8 +464,7 @@ unsigned SchedulingBase::buildTimeFrameAndResetSchedule(bool rstSTF) {
 }
 
 bool SchedulingBase::allNodesSchedued() const {
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled()) return false;
   }
@@ -480,8 +475,7 @@ bool SchedulingBase::allNodesSchedued() const {
 bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
   if (refreshFDepHD) buildTimeFrameAndResetSchedule(true);
 
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
 
     if (A->isScheduled() || getTimeFrame(A) != 1)

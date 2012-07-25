@@ -56,8 +56,7 @@ bool IterativeModuloScheduling::scheduleState() {
   resetRT();
 
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
-  IMSQueueType ToSched(G.sched_begin() + 1, G.sched_end(),
-                       ims_sort(*this));
+  IMSQueueType ToSched(su_begin(G) + 1, su_end(G), ims_sort(*this));
   while (!ToSched.empty()) {
     VSUnit *A = ToSched.top();
     ToSched.pop();
@@ -140,7 +139,7 @@ bool ASAPScheduler::scheduleState() {
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
   typedef VSchedGraph::sched_iterator it;
-  for (it I = G.sched_begin() + 1, E = G.sched_end(); I != E; ++I) {
+  for (it I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;

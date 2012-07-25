@@ -114,6 +114,19 @@ protected:
     return Dst->getEdgeFrom(Src);
   }
 
+  typedef VSchedGraph::sched_iterator su_it;
+  static su_it su_begin(const VSchedGraph &G) {
+    return G.sched_begin();
+  }
+
+  static su_it su_end(const VSchedGraph &G) {
+    return G.sched_end();
+  }
+
+  static unsigned num_sus(const VSchedGraph &G) {
+    return G.num_scheds();
+  }
+
   /// @name PriorityQueue
   //{
   VSchedGraph &G;
