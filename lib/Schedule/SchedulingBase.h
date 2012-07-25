@@ -297,38 +297,40 @@ struct LPObjFn : public std::map<unsigned, double> {
   void setLPObj(lprec *lp) const;
 };
 
-class SDCScheduler : public Scheduler {
+class SDCSchedulingBase {
   struct SoftConstraint {
     double Penalty;
     const VSUnit *Src, *Dst;
     unsigned SlackIdx, Slack;
   };
 public:
-  SDCScheduler(VSchedGraph &S) : Scheduler(S), lp(0) {}
-  bool scheduleState();
-  bool schedule();
+
+  typedef VSchedGraph::sched_iterator su_it;
   // Set the variables' name in the model.
-  unsigned createLPAndVariables();
+  unsigned createLPAndVariables(su_it I, su_it E);
   unsigned addSoftConstraint(const VSUnit *Src, const VSUnit *Dst,
                              unsigned Slack, double Penalty);
 
   // Build the schedule object function.
-  void buildASAPObject(double weight);
-  void buildOptSlackObject(double weight);
+  void buildASAPObject(su_it I, su_it E, double weight);
+  void buildOptSlackObject(su_it I, su_it E, double weight);
   void addSoftConstraintsPenalties(double weight);
 
   // Currently the SDCScheduler cannot calculate the minimal latency between two
   // bb correctly, which leads to a wrong global code motion for the
   // multi-cycles chains. Hence we need to fix the schedule, the implement detail
   // should be hidden by the function.
-  void fixInterBBLatency();
-private:
+  void fixInterBBLatency(VSchedGraph &G);
+
+protected:
   lprec *lp;
   LPObjFn ObjFn;
   // The table of the index of the VSUnits and the column number in LP.
   typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;
   typedef SUI2IdxMapTy::const_iterator SUIdxIt;
   SUI2IdxMapTy SUIdx;
+
+  SDCSchedulingBase() : lp(0) {}
 
   unsigned getSUIdx(const VSUnit* U) const {
     SUIdxIt at = SUIdx.find(U);
@@ -343,21 +345,41 @@ private:
   // scheduled to.
   unsigned createStepVariable(const VSUnit *U, unsigned Col);
 
-  // The schedule should satisfy the dependences.
-  void addDependencyConstraints(lprec *lp);
-  void addDependencyConstraints(lprec *lp, const VSUnit *U);
-
   void addSoftConstraints(lprec *lp);
 
   bool solveLP(lprec *lp);
 
   // Build the schedule form the result of ILP.
-  void buildSchedule(lprec *lp, unsigned TotalRows);
+  void buildSchedule(lprec *lp, unsigned TotalRows, su_it I, su_it E);
 
+private:
   typedef std::vector<unsigned> B2SMapTy;
   unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry, const B2SMapTy &Map);
-  int calulateMinInterBBSlack(VSUnit *BBEntry, const B2SMapTy &Map,
-                              unsigned MinSlotsForEntry);
+  int calulateMinInterBBSlack(VSUnit *BBEntry,  VSchedGraph &G,
+                              const B2SMapTy &Map, unsigned MinSlotsForEntry);
+};
+
+class SDCScheduler : public SDCSchedulingBase, public Scheduler {
+  // The schedule should satisfy the dependences.
+  void addDependencyConstraints(lprec *lp);
+  void addDependencyConstraints(lprec *lp, const VSUnit *U);
+public:
+  explicit SDCScheduler(VSchedGraph &S) : Scheduler(S) {}
+
+  unsigned createLPAndVariables() {
+    return SDCSchedulingBase::createLPAndVariables(su_begin(G), su_end(G));
+  }
+
+  void buildASAPObject(double weight) {
+    SDCSchedulingBase::buildASAPObject(su_begin(G), su_end(G), weight);
+  }
+
+  // Do nothing.
+  bool scheduleState() {
+    return false;
+  }
+
+  bool schedule();
 };
 
 

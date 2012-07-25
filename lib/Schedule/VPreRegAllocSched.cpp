@@ -1138,11 +1138,20 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 void VPreRegAllocSched::scheduleWholeFunctionBySDC(VSchedGraph &G) {
   SDCScheduler Scheduler(G);
 
-  bool success = Scheduler.scheduleState();
+  Scheduler.buildTimeFrameAndResetSchedule(true);
+  BasicLinearOrderGenerator::addLinOrdEdge(Scheduler);
+  // Build the step variables, and no need to schedule at all if all SUs have
+  // been scheduled.
+  if (!Scheduler.createLPAndVariables()) return;
+
+  Scheduler.buildASAPObject(1.0);
+  //Scheduler.buildOptSlackObject(0.0);
+
+  bool success = Scheduler.schedule();
   assert(success && "SDCScheduler fail!");
   (void) success;
 
-  Scheduler.fixInterBBLatency();
+  Scheduler.fixInterBBLatency(G);
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
