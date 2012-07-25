@@ -158,12 +158,12 @@ public:
   void buildTimeFrame();
 
   unsigned getASAPStep(const VSUnit *A) const {
-    std::map<const VSUnit*, TimeFrame>::const_iterator at = SUnitToTF.find(A);
+    TFMapTy::const_iterator at = SUnitToTF.find(A);
     assert(at != SUnitToTF.end() && "TimeFrame for SU not exist!");
     return at->second.first;
   }
   unsigned getALAPStep(const VSUnit *A) const {
-    std::map<const VSUnit*, TimeFrame>::const_iterator at = SUnitToTF.find(A);
+    TFMapTy::const_iterator at = SUnitToTF.find(A);
     assert(at != SUnitToTF.end() && "TimeFrame for SU not exist!");
     return at->second.second;
   }

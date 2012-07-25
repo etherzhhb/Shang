@@ -33,7 +33,6 @@ void SchedulingBase::buildTimeFrame() {
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
 
   // Reset the time frames
-  typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
   for (TFMapTy::iterator I = SUnitToTF.begin(), E = SUnitToTF.end();I != E;++I)
     I->second = std::make_pair(0, VSUnit::MaxSlot);
 
