@@ -64,16 +64,12 @@ unsigned SchedulingBase::calculateASAP(const VSUnit * A) {
 }
 
 void SchedulingBase::buildASAPStep() {
-  const VSUnit *Entry = G.getEntryRoot();
-  SUnitToTF[Entry].first = Entry->getSlot();
-  su_it Start = su_begin(G);
-
   bool NeedToReCalc = true;
 
   // Build the time frame iteratively.
   while(NeedToReCalc) {
     NeedToReCalc = false;
-    for (su_it I = Start + 1, E = su_end(G); I != E; ++I) {
+    for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
       const VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A].first = A->getSlot();
@@ -143,8 +139,10 @@ void SchedulingBase::buildALAPStep() {
   // Build the time frame iteratively.
   while (NeedToReCalc) {
     NeedToReCalc = false;
-    for (int Idx = num_sus(G)/*skip exitroot*/- 2; Idx >= 0; --Idx){
+    for (int Idx = num_sus(G) - 1; Idx >= 0; --Idx){
       const VSUnit *A = su_begin(G)[Idx];
+      if (A == Exit) continue;
+      
       if (A->isScheduled()) {
         SUnitToTF[A].second = A->getSlot();
         continue;
