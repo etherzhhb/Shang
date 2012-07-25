@@ -455,7 +455,7 @@ void VSchedGraph::scheduleDatapath() {
     //Scheduler.addSoftConstraintsPenalties(1.0);
 
     // Schedule them ALAP.
-    Scheduler.buildASAPObject(1.0);
+    Scheduler.buildASAPObject(-1.0);
     bool succ = Scheduler.schedule();
     assert(succ && "Cannot schedule the data-path!");
     (void) succ;
