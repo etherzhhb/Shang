@@ -113,7 +113,7 @@ unsigned SchedulingBase::calculateALAP(const VSUnit *A) {
   unsigned NewStep = VSUnit::MaxSlot;
   for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
     const VSUnit *Use = *UI;
-    VDEdge UseEdge = Use->getEdgeFrom(A);
+    VDEdge UseEdge = getEdge(A, Use);
 
     // Ignore the back-edges when we are not pipelining the BB.
     if (UseEdge.isLoopCarried() && !MII) continue;

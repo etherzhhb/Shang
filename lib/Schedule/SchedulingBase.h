@@ -110,6 +110,10 @@ protected:
     return U->use_end();
   }
 
+  static VDEdge getEdge(const VSUnit *Src, const VSUnit *Dst) {
+    return Dst->getEdgeFrom(Src);
+  }
+
   /// @name PriorityQueue
   //{
   VSchedGraph &G;
