@@ -189,6 +189,8 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   }
 
   SubGraph.CPSUs.clear();
+  // Leave the exit root of the SubGraph in its CPSU list, so it will be deleted.
+  SubGraph.CPSUs.push_back(getExitRoot());
   SubGraph.DPSUs.clear();
 
   // 3. Merge the II Map.
