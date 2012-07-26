@@ -238,24 +238,16 @@ public:
   unsigned short getIdx() const { return InstIdx; }
   bool isDangling() const { return IsDangling; }
 
-  typedef DepSet::iterator edge_iterator;
-  edge_iterator edge_begin() { return Deps.begin(); }
-  edge_iterator edge_end() { return Deps.end(); }
-
-  typedef DepSet::const_iterator const_edge_iterator;
-  const_edge_iterator edge_begin() const { return Deps.begin(); }
-  const_edge_iterator edge_end() const { return Deps.end(); }
-
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
   void addDep(VSUnit *Src, VDEdge NewE);
 
-  typedef VSUnitDepIterator<edge_iterator, false> dep_iterator;
+  typedef VSUnitDepIterator<DepSet::iterator, false> dep_iterator;
   dep_iterator dep_begin() { return Deps.begin(); }
   dep_iterator dep_end() { return Deps.end(); }
 
-  typedef VSUnitDepIterator<const_edge_iterator, true> const_dep_iterator;
+  typedef VSUnitDepIterator<DepSet::const_iterator, true> const_dep_iterator;
   const_dep_iterator dep_begin() const { return Deps.begin(); }
   const_dep_iterator dep_end() const { return Deps.end(); }
 

@@ -122,15 +122,6 @@ VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
   return SU;
 }
 
-// Sort the schedule to place all control schedule unit at the beginning of the
-// AllSU vector.
-static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
-  if (LHS->isControl() != RHS->isControl())
-    return LHS->isControl();
-
-  return LHS->getIdx() < RHS->getIdx();
-}
-
 VSchedGraph::iterator
 VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   // 1. Merge the MI2SU map.
@@ -519,7 +510,7 @@ void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
 // TODO: Implement edge bundle, calculate the edge for
 void VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
   assert(Src != this && "Cannot add self-loop!");
-  edge_iterator at = Deps.find(Src);
+  DepSet::iterator at = Deps.find(Src);
 
   if (at == Deps.end()) {
     bool IsCrossBB = Src->getParentBB() != getParentBB();
