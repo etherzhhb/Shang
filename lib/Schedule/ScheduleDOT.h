@@ -42,7 +42,7 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
                                        VSUnit::use_iterator EI,
                                        const GraphType &Grap) {
     const VSUnit *Use = *EI;
-    VDEdge UseEdge = Use->getEdgeFrom(Node);
+    VDEdge UseEdge = Use->getEdgeFrom<true>(Node);
 
     switch (UseEdge.getEdgeType()) {
     case VDEdge::ValDep:          return "";
@@ -58,7 +58,7 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
   static std::string getEdgeSourceLabel(const VSUnit *Node,
                                         VSUnit::use_iterator EI) {
     const VSUnit *Use = *EI;
-    VDEdge UseEdge = Use->getEdgeFrom(Node);
+    VDEdge UseEdge = Use->getEdgeFrom<true>(Node);
 
     return utostr(UseEdge.getLatency()) + ',' + utostr(UseEdge.getDistance());
   }

@@ -69,8 +69,8 @@ struct SubGraphNode {
     if (U) {
       dbgs() << U->getIdx() << " {";
 
-      for (VSUnit::const_dep_iterator DI = U->dep_begin(), DE = U->dep_end();
-           DI != DE;++DI)
+      typedef VSUnit::const_dep_iterator it;
+      for (it DI = cp_begin(U), DE = cp_end(U); DI != DE;++DI)
         dbgs() << " [" << DI->getIdx() << "]";
 
       dbgs() << "}\n";
@@ -111,7 +111,7 @@ public:
     // the InstIdx of the VSUnit and this only works if they are sorted in
     // the VSUnits vector of SG.
     typedef VSchedGraph::iterator it;
-    for (it I = SG->cp_begin(), E = SG->cp_end(); I != E; ++I)
+    for (it I = cp_begin(SG), E = cp_end(SG); I != E; ++I)
       Nodes.insert(std::make_pair(*I, new SubGraphNode(*I, this)));
   }
 
@@ -119,7 +119,9 @@ public:
 
   ~SubGraph() { DeleteContainerSeconds(Nodes); }
 
-  VSUnit::const_dep_iterator dummy_end() const { return GraphEntry->dep_end(); }
+  VSUnit::const_dep_iterator dummy_end() const {
+    return cp_end(GraphEntry);
+  }
 
   // Create or loop up a node.
   SubGraphNode *getNode(const VSUnit *SU) {
@@ -137,14 +139,14 @@ public:
     nodes_iterator;
 
   nodes_iterator sub_graph_begin() {
-    VSchedGraph::const_iterator I = G->cp_begin();
-    while ((*I)->getIdx() < CurIdx && I != G->cp_end())
+    VSchedGraph::const_iterator I = cp_begin(G);
+    while ((*I)->getIdx() < CurIdx && I != cp_end(G))
       ++I;
 
     return nodes_iterator(I, *getNode(*I));
   }
   nodes_iterator sub_graph_end() {
-    return nodes_iterator(G->cp_end(), DummyNode);
+    return nodes_iterator(cp_end(G), DummyNode);
   }
 
   bool findAllCircuits();
@@ -217,8 +219,8 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
   blocked.set(CurNode->getIdx());
 
   VSUnitVec AkV;
-  for (VSUnit::const_dep_iterator I = CurNode->dep_begin(),
-       E = CurNode->dep_end(); I != E; ++I) {
+  typedef VSUnit::const_dep_iterator it;
+  for (it I = cp_begin(CurNode), E = cp_end(CurNode); I != E; ++I) {
     const VSUnit *N = *I;
 
     if (!const_cast<VSUnitFlags&>(SCC).test(N->getIdx())) continue;
@@ -347,13 +349,13 @@ const SubGraphNode &SubGraphNode::operator=(const SubGraphNode &RHS) {
 }
 
 SubGraphNode::ChildIt SubGraphNode::child_begin() const {
-  if (U) return ChildIt(U->dep_begin(), *this);
+  if (U) return ChildIt(cp_begin(U), *this);
   // The node outside the subgraph.
   return ChildIt(subGraph->dummy_end(), *this);
 }
 
 SubGraphNode::ChildIt SubGraphNode::child_end() const {
-  if (U) return ChildIt(U->dep_end(), *this);
+  if (U) return ChildIt(cp_end(U), *this);
 
   // The node outside the subgraph.
   return ChildIt(subGraph->dummy_end(), *this);

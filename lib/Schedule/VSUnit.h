@@ -115,7 +115,7 @@ public:
   }
 
   template<Types Type>
-  static VDEdge CreateCtrlOrValDep(int Latency) {
+  static VDEdge CreateDep(int Latency) {
     return VDEdge(Type, Latency, 0);
   }
 };
@@ -190,14 +190,16 @@ public:
 private:
   // Remember the dependencies of the scheduling unit.
   typedef DenseMap<VSUnit*, EdgeBundle> DepSet;
-  DepSet Deps;
+  DepSet CPDeps, DPDeps;
 
   // The atoms that using this atom.
   typedef std::set<VSUnit*> UseListTy;
-  UseListTy UseList;
+  UseListTy CPUseList, DPUseList;
 
+  template<bool IsCtrlPath>
   void addToUseList(VSUnit *User) {
-    UseList.insert(User);
+    if (IsCtrlPath) CPUseList.insert(User);
+    else            DPUseList.insert(User);
   }
 
   VSUnit(const VSUnit&);          // DO NOT IMPLEMENT
@@ -229,8 +231,10 @@ private:
   void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
   void cleanDepAndUse() {
-    Deps.clear();
-    UseList.clear();
+    CPDeps.clear();
+    DPDeps.clear();
+    CPUseList.clear();
+    DPUseList.clear();
   }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
@@ -241,29 +245,66 @@ public:
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
-  void addDep(VSUnit *Src, VDEdge NewE);
+  template<bool IsCtrlPath>
+  void addDep(VSUnit *Src, VDEdge NewE) {
+    assert(Src != this && "Cannot add self-loop!");
+    DepSet &Set = IsCtrlPath ? CPDeps : DPDeps;
+    DepSet::iterator at = Set.find(Src);
 
-  typedef VSUnitDepIterator<DepSet::iterator, false> dep_iterator;
-  dep_iterator dep_begin() { return Deps.begin(); }
-  dep_iterator dep_end() { return Deps.end(); }
+    if (at == Set.end()) {
+      bool IsCrossBB = Src->getParentBB() != getParentBB();
+      Set.insert(std::make_pair(Src, EdgeBundle(NewE, IsCrossBB)));
+      Src->addToUseList<IsCtrlPath>(this);
+      return;
+    }
 
-  typedef VSUnitDepIterator<DepSet::const_iterator, true> const_dep_iterator;
-  const_dep_iterator dep_begin() const { return Deps.begin(); }
-  const_dep_iterator dep_end() const { return Deps.end(); }
-
-  size_t num_deps() const { return Deps.size(); }
-  bool dep_empty() const { return Deps.empty(); }
-  // If the current atom depend on A?
-  bool isDepOn(const VSUnit *A) const { return getDepIt(A) != dep_end(); }
-
-  // If this Depend on A? return the position if found, return dep_end otherwise.
-  const_dep_iterator getDepIt(const VSUnit *A) const {
-    return Deps.find(const_cast<VSUnit*>(A));
+    at->second.addEdge(NewE);
   }
 
+  // Iterators for data-path dependencies and control-path dependencies.
+  typedef VSUnitDepIterator<DepSet::iterator, false> dep_iterator;
+  template<bool IsCtrlPath>
+  dep_iterator dep_begin() {
+    return IsCtrlPath ? CPDeps.begin() : DPDeps.begin();
+  }
+  template<bool IsCtrlPath>
+  dep_iterator dep_end() {
+    return IsCtrlPath ? CPDeps.end() : DPDeps.end();
+  }
+
+  typedef VSUnitDepIterator<DepSet::const_iterator, true> const_dep_iterator;
+  template<bool IsCtrlPath>
+  const_dep_iterator dep_begin() const {
+    return IsCtrlPath ? CPDeps.begin() : DPDeps.begin();
+  }
+  template<bool IsCtrlPath>
+  const_dep_iterator dep_end() const {
+    return IsCtrlPath ? CPDeps.end() : DPDeps.end();
+  }
+
+  template<bool IsCtrlPath>
+  size_t num_deps() const { return IsCtrlPath ? CPDeps.size() : DPDeps.size(); }
+
+  template<bool IsCtrlPath>
+  bool dep_empty() const { return IsCtrlPath ? CPDeps.empty() : DPDeps.empty(); }
+
+  // If the current atom depend on A?
+  template<bool IsCtrlPath>
+  bool isDepOn(const VSUnit *A) const {
+    return getDepIt<IsCtrlPath>(A) != dep_end<IsCtrlPath>();
+  }
+
+  // If this Depend on A? return the position if found, return dep_end otherwise.
+  template<bool IsCtrlPath>
+  const_dep_iterator getDepIt(const VSUnit *A) const {
+    return IsCtrlPath ? CPDeps.find(const_cast<VSUnit*>(A))
+                      : DPDeps.find(const_cast<VSUnit*>(A));
+  }
+
+  template<bool IsCtrlPath>
   VDEdge getEdgeFrom(const VSUnit *A) const {
-    assert(isDepOn(A) && "Current atom not depend on A!");
-    return getDepIt(A).getEdge();
+    assert(isDepOn<IsCtrlPath>(A) && "Current atom not depend on A!");
+    return getDepIt<IsCtrlPath>(A).getEdge();
   }
   //}
 
@@ -271,13 +312,31 @@ public:
   //{
   typedef UseListTy::iterator use_iterator;
   typedef UseListTy::const_iterator const_use_iterator;
-  use_iterator use_begin() { return UseList.begin(); }
-  const_use_iterator use_begin() const { return UseList.begin(); }
-  use_iterator use_end() { return UseList.end(); }
-  const_use_iterator use_end() const { return UseList.end(); }
+  template<bool IsCtrlPath>
+  use_iterator use_begin() {
+    return IsCtrlPath ? CPUseList.begin() : DPUseList.begin();
+  }
+  template<bool IsCtrlPath>
+  const_use_iterator use_begin() const {
+    return IsCtrlPath ? CPUseList.begin() : DPUseList.begin();
+  }
+  template<bool IsCtrlPath>
+  use_iterator use_end() {
+    return IsCtrlPath ? CPUseList.end() : DPUseList.end();
+  }
+  template<bool IsCtrlPath>
+  const_use_iterator use_end() const {
+    return IsCtrlPath ? CPUseList.end() : DPUseList.end();
+  }
 
-  bool use_empty() const { return UseList.empty(); }
-  size_t num_uses() const { return UseList.size(); }
+  template<bool IsCtrlPath>
+  bool use_empty() const {
+    return IsCtrlPath ? CPUseList.empty() : DPUseList.empty();
+  }
+  template<bool IsCtrlPath>
+  size_t num_uses() const {
+    return IsCtrlPath ? CPUseList.size() : DPUseList.size();
+  }
   //}
 
   unsigned countValDeps() const;
@@ -394,15 +453,95 @@ public:
   };
 };
 
+static inline VSUnit::dep_iterator cp_begin(VSUnit *U) {
+  return U->dep_begin<true>();
+}
+
+static inline VSUnit::dep_iterator cp_end(VSUnit *U) {
+  return U->dep_end<true>();
+}
+
+static inline VSUnit::const_dep_iterator cp_begin(const VSUnit *U) {
+  return U->dep_begin<true>();
+}
+
+static inline VSUnit::const_dep_iterator cp_end(const VSUnit *U) {
+  return U->dep_end<true>();
+}
+
+static inline size_t cp_empty(const VSUnit *G) {
+  return G->dep_empty<true>();
+}
+
+static inline VSUnit::dep_iterator dp_begin(VSUnit *U) {
+  return U->dep_begin<false>();
+}
+
+static inline VSUnit::dep_iterator dp_end(VSUnit *U) {
+  return U->dep_end<false>();
+}
+
+static inline VSUnit::const_dep_iterator dp_begin(const VSUnit *U) {
+  return U->dep_begin<false>();
+}
+
+static inline VSUnit::const_dep_iterator dp_end(const VSUnit *U) {
+  return U->dep_end<false>();
+}
+
+static inline size_t dp_empty(const VSUnit *G) {
+  return G->dep_empty<false>();
+}
+
+static inline VSUnit::use_iterator cuse_begin(VSUnit *U) {
+  return U->use_begin<true>();
+}
+
+static inline VSUnit::use_iterator cuse_end(VSUnit *U) {
+  return U->use_end<true>();
+}
+
+static inline VSUnit::const_use_iterator cuse_begin(const VSUnit *U) {
+  return U->use_begin<true>();
+}
+
+static inline VSUnit::const_use_iterator cuse_end(const VSUnit *U) {
+  return U->use_end<true>();
+}
+
+static inline size_t cuse_empty(const VSUnit *G) {
+  return G->use_empty<true>();
+}
+
+static inline VSUnit::use_iterator duse_begin(VSUnit *U) {
+  return U->use_begin<false>();
+}
+
+static inline VSUnit::use_iterator duse_end(VSUnit *U) {
+  return U->use_end<false>();
+}
+
+static inline VSUnit::const_use_iterator duse_begin(const VSUnit *U) {
+  return U->use_begin<false>();
+}
+
+static inline VSUnit::const_use_iterator duse_end(const VSUnit *U) {
+  return U->use_end<false>();
+}
+
+static inline size_t duse_empty(const VSUnit *G) {
+  return G->use_empty<false>();
+}
+
 template<> struct GraphTraits<Inverse<VSUnit*> > {
   typedef VSUnit NodeType;
   typedef VSUnit::dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dep_begin();
+    return cp_begin(N);
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dep_end();
+    return cp_end(N);
   }
 };
 template<> struct GraphTraits<Inverse<const VSUnit*> > {
@@ -410,21 +549,22 @@ template<> struct GraphTraits<Inverse<const VSUnit*> > {
   typedef VSUnit::const_dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dep_begin();
+    return cp_begin(N);
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dep_end();
+    return cp_end(N);
   }
 };
+
 template<> struct GraphTraits<VSUnit*> {
   typedef VSUnit NodeType;
   typedef VSUnit::use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->use_begin();
+    return cuse_begin(N);
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return N->use_end();
+    return cuse_end(N);
   }
 };
 template<> struct GraphTraits<const VSUnit*> {
@@ -432,10 +572,10 @@ template<> struct GraphTraits<const VSUnit*> {
   typedef VSUnit::const_use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->use_begin();
+    return cuse_begin(N);
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return N->use_end();
+    return cuse_end(N);
   }
 };
 
@@ -592,8 +732,8 @@ public:
 
     typedef TerminatorMapTy::iterator it;
     for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
-      if (I->second->use_empty())
-        Exit->addDep(I->second, VDEdge::CreateCtrlDep(0));
+      if (cuse_empty(I->second))
+        Exit->addDep<true>(I->second, VDEdge::CreateCtrlDep(0));
 
     return Exit;
   }
@@ -629,25 +769,42 @@ public:
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
-  // Control-path operations
-  size_t num_cps() const { return CPSUs.size(); }
-  iterator cp_begin() { return CPSUs.begin(); }
-  iterator cp_end() { return CPSUs.end(); }
-  const_iterator cp_begin() const { return CPSUs.begin(); }
-  const_iterator cp_end() const { return CPSUs.end(); }
+  // For Control-path operations and Data-path operations
+  size_t num_sus() const { return DPSUs.size() + CPSUs.size(); }
 
-  // Data-path operations
-  size_t num_dps() const { return DPSUs.size(); }
-  iterator dp_begin() { return DPSUs.begin(); }
-  iterator dp_end() { return DPSUs.end(); }
-  const_iterator dp_begin() const { return DPSUs.begin(); }
-  const_iterator dp_end() const { return DPSUs.end(); }
+  // Generalized iterators.
+  template<bool IsCtrlPath>
+  inline iterator begin() {
+    return IsCtrlPath ? CPSUs.begin() : DPSUs.begin();
+  }
 
-  size_t num_sus() const { return num_cps() + num_dps(); }
+  template<bool IsCtrlPath>
+  inline const_iterator begin() const {
+    return IsCtrlPath ? CPSUs.begin() : DPSUs.begin();
+  }
+
+  template<bool IsCtrlPath>
+  inline iterator end() {
+    return IsCtrlPath ? CPSUs.end() : DPSUs.end();
+  }
+
+  template<bool IsCtrlPath>
+  inline const_iterator end() const {
+    return IsCtrlPath ? CPSUs.end() : DPSUs.end();
+  }
+
+  template<bool IsCtrlPath>
+  inline size_t size() const { return IsCtrlPath ? CPSUs.size() : DPSUs.size(); }
 
   unsigned getNextSUIdx() const { return NextSUIdx; }
   void resetCPSchedule(unsigned MII);
   void resetDPSchedule();
+
+  template<bool IsCtrlPath>
+  void resetSchedule(unsigned MII) {
+    if (IsCtrlPath) resetCPSchedule(MII);
+    else            resetDPSchedule();
+  }
 
   unsigned getStartSlot(MachineBasicBlock *MBB) const {
     VSUnit *EntrySU = lookupSUnit(MBB);
@@ -712,13 +869,49 @@ public:
   void fixChainedDatapathRC(VSUnit *U);
 };
 
+static inline VSchedGraph::iterator cp_begin(VSchedGraph *G) {
+  return G->begin<true>();
+}
+
+static inline VSchedGraph::iterator cp_end(VSchedGraph *G) {
+  return G->end<true>();
+}
+
+static inline VSchedGraph::const_iterator cp_begin(const VSchedGraph *G) {
+  return G->begin<true>();
+}
+
+static inline VSchedGraph::const_iterator cp_end(const VSchedGraph *G) {
+  return G->end<true>();
+}
+
+static inline size_t num_cps(const VSchedGraph *G) {
+  return G->size<true>();
+}
+
+static inline VSchedGraph::iterator dp_begin(VSchedGraph *G) {
+  return G->begin<false>();
+}
+
+static inline VSchedGraph::iterator dp_end(VSchedGraph *G) {
+  return G->end<false>();
+}
+
+static inline VSchedGraph::const_iterator dp_begin(const VSchedGraph *G) {
+  return G->begin<false>();
+}
+
+static inline VSchedGraph::const_iterator dp_end(const VSchedGraph *G) {
+  return G->end<false>();
+}
+
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
   typedef VSchedGraph::const_iterator nodes_iterator;
   static nodes_iterator nodes_begin(const VSchedGraph *G) {
-    return G->cp_begin();
+    return cp_begin(G);
   }
   static nodes_iterator nodes_end(const VSchedGraph *G) {
-    return G->cp_end();
+    return cp_end(G);
   }
 };
 

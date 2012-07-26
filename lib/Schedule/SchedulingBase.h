@@ -172,32 +172,20 @@ protected:
   // traversing.
   typedef VSUnit::const_dep_iterator const_dep_it;
   static const_dep_it dep_begin(const VSUnit *U) {
-    return U->dep_begin();
+    return U->dep_begin<IsCtrlPath>();
   }
 
   static const_dep_it dep_end(const VSUnit *U) {
-    return U->dep_end();
+    return U->dep_end<IsCtrlPath>();
   }
 
   typedef VSUnit::const_use_iterator const_use_it;
   static const_use_it use_begin(const VSUnit *U) {
-    return U->use_begin();
+    return U->use_begin<IsCtrlPath>();
   }
 
   static const_use_it use_end(const VSUnit *U) {
-    return U->use_end();
-  }
-
-  static VDEdge getEdge(const VSUnit *Src, const VSUnit *Dst) {
-    return Dst->getEdgeFrom(Src);
-  }
-
-  static unsigned num_sus(const VSchedGraph &G) {
-    return G.num_cps();
-  }
-
-  static void resetSchedule(VSchedGraph &G, unsigned MII) {
-    G.resetCPSchedule(MII);
+    return U->use_end<IsCtrlPath>();
   }
 
   unsigned calculateASAP(const VSUnit *A);
@@ -205,7 +193,17 @@ protected:
   unsigned calculateALAP(const VSUnit *A);
   void buildALAPStep();
 
+  using SchedulingBase::scheduleCriticalPath;
 public:
+
+  iterator begin() const {
+    return G.begin<IsCtrlPath>();
+  }
+
+  iterator end() const {
+    return G.end<IsCtrlPath>();
+  }
+
   unsigned buildTimeFrameAndResetSchedule(bool reset);
   void buildTimeFrame();
   void printTimeFrame(raw_ostream &OS) const;
@@ -213,23 +211,7 @@ public:
 
   bool scheduleCriticalPath() {
     buildTimeFrameAndResetSchedule(true);
-    return SchedulingBase::scheduleCriticalPath(su_begin(G), su_end(G));
-  }
-
-  static iterator su_begin(VSchedGraph &G) {
-    return G.cp_begin();
-  }
-
-  static const_iterator su_begin(const VSchedGraph &G) {
-    return G.cp_begin();
-  }
-
-  static iterator su_end(VSchedGraph &G) {
-    return G.cp_end();
-  }
-
-  static const_iterator su_end(const VSchedGraph &G) {
-    return G.cp_end();
+    return scheduleCriticalPath(G.begin<IsCtrlPath>(), G.end<IsCtrlPath>());
   }
 
   void viewGraph() {
@@ -240,11 +222,11 @@ public:
 template <bool IsCtrlPath> struct GraphTraits<Scheduler<IsCtrlPath>*> 
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::iterator nodes_iterator;
-  static nodes_iterator nodes_begin(SchedulingBase *G) {
-    return Scheduler<IsCtrlPath>::su_begin(***G);
+  static nodes_iterator nodes_begin(Scheduler<IsCtrlPath> *G) {
+    return G->begin();
   }
-  static nodes_iterator nodes_end(SchedulingBase *G) {
-    return Scheduler<IsCtrlPath>::su_end(***G);
+  static nodes_iterator nodes_end(Scheduler<IsCtrlPath> *G) {
+    return G->end();
   }
 };
 
@@ -327,15 +309,15 @@ class SDCSchedulingBase {
   };
 public:
 
-  typedef VSchedGraph::iterator su_it;
+  typedef VSchedGraph::iterator iterator;
   // Set the variables' name in the model.
-  unsigned createLPAndVariables(su_it I, su_it E);
+  unsigned createLPAndVariables(iterator I, iterator E);
   unsigned addSoftConstraint(const VSUnit *Src, const VSUnit *Dst,
                              unsigned Slack, double Penalty);
 
   // Build the schedule object function.
-  void buildASAPObject(su_it I, su_it E, double weight);
-  void buildOptSlackObject(su_it I, su_it E, double weight);
+  void buildASAPObject(iterator I, iterator E, double weight);
+  void buildOptSlackObject(iterator I, iterator E, double weight);
   void addSoftConstraintsPenalties(double weight);
 
   // Currently the SDCScheduler cannot calculate the minimal latency between two
@@ -371,7 +353,7 @@ protected:
   bool solveLP(lprec *lp);
 
   // Build the schedule form the result of ILP.
-  void buildSchedule(lprec *lp, unsigned TotalRows, su_it I, su_it E);
+  void buildSchedule(lprec *lp, unsigned TotalRows, iterator I, iterator E);
 
 private:
   typedef std::vector<unsigned> B2SMapTy;
@@ -383,28 +365,48 @@ private:
 template<bool IsCtrlPath>
 class SDCScheduler : public SDCSchedulingBase, public Scheduler<IsCtrlPath> {
   // The schedule should satisfy the dependences.
-  void addDependencyConstraints(lprec *lp);
+  inline void addDependencyConstraints(lprec *lp);
   void addDependencyConstraints(lprec *lp, const VSUnit *U);
 
-  using SchedulingBase::G;
+  using Scheduler<IsCtrlPath>::G;
   typedef typename Scheduler<IsCtrlPath>::const_dep_it const_dep_it;
   using Scheduler<IsCtrlPath>::dep_begin;
   using Scheduler<IsCtrlPath>::dep_end;
-  using Scheduler<IsCtrlPath>::su_begin;
-  using Scheduler<IsCtrlPath>::su_end;
+  using Scheduler<IsCtrlPath>::begin;
+  using Scheduler<IsCtrlPath>::end;
+  using SDCSchedulingBase::createLPAndVariables;
+  using SDCSchedulingBase::buildASAPObject;
+  typedef SDCSchedulingBase::iterator iterator;
+
 public:
   explicit SDCScheduler(VSchedGraph &S) : Scheduler<IsCtrlPath>(S) {}
 
   unsigned createLPAndVariables() {
-    return SDCSchedulingBase::createLPAndVariables(su_begin(G), su_end(G));
+    return createLPAndVariables(begin(), end());
   }
 
   void buildASAPObject(double weight) {
-    SDCSchedulingBase::buildASAPObject(su_begin(G), su_end(G), weight);
+    buildASAPObject(begin(), end(), weight);
   }
 
   bool schedule();
 };
+
+template<>
+inline void SDCScheduler<true>::addDependencyConstraints(lprec *lp) {
+  for(VSchedGraph::const_iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
+    addDependencyConstraints(lp, *I);
+}
+
+template<>
+inline void SDCScheduler<false>::addDependencyConstraints(lprec *lp) {
+  for(VSchedGraph::const_iterator I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
+    addDependencyConstraints(lp, *I);
+  // The data-path scheduling units are also constrained by the control path
+  // scheduling units.
+  for(VSchedGraph::const_iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
+    addDependencyConstraints(lp, *I);
+}
 
 EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<false>);
 EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<true>);

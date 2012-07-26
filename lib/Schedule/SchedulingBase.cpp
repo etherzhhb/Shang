@@ -71,7 +71,7 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
   // Build the time frame iteratively.
   while(NeedToReCalc) {
     NeedToReCalc = false;
-    for (iterator I = su_begin(G), E = su_end(G); I != E; ++I) {
+    for (iterator I = begin(), E = end(); I != E; ++I) {
       const VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A].first = A->getSlot();
@@ -110,7 +110,7 @@ unsigned Scheduler<IsCtrlPath>::calculateALAP(const VSUnit *A) {
   unsigned NewStep = VSUnit::MaxSlot;
   for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
     const VSUnit *Use = *UI;
-    VDEdge UseEdge = getEdge(A, Use);
+    VDEdge UseEdge = Use->getEdgeFrom<IsCtrlPath>(A);
 
     // Ignore the back-edges when we are not pipelining the BB.
     if (UseEdge.isLoopCarried() && !MII) continue;
@@ -143,8 +143,8 @@ void Scheduler<IsCtrlPath>::buildALAPStep() {
   // Build the time frame iteratively.
   while (NeedToReCalc) {
     NeedToReCalc = false;
-    for (int Idx = num_sus(G) - 1; Idx >= 0; --Idx){
-      const VSUnit *A = su_begin(G)[Idx];
+    for (int Idx = G.size<IsCtrlPath>() - 1; Idx >= 0; --Idx){
+      const VSUnit *A = begin()[Idx];
       if (A == Exit) continue;
       
       if (A->isScheduled()) {
@@ -178,7 +178,7 @@ void Scheduler<IsCtrlPath>::buildALAPStep() {
 template<bool IsCtrlPath>
 void Scheduler<IsCtrlPath>::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (iterator I = su_begin(G), E = su_end(G); I != E; ++I) {
+  for (iterator I = begin(), E = end(); I != E; ++I) {
     const VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
@@ -198,7 +198,7 @@ void Scheduler<IsCtrlPath>::dumpTimeFrame() const {
 
 template<bool IsCtrlPath>
 unsigned Scheduler<IsCtrlPath>::buildTimeFrameAndResetSchedule(bool reset) {
-  if (reset) resetSchedule(G, getMII());
+  if (reset) G.resetSchedule<IsCtrlPath>(getMII());
 
   buildTimeFrame();
 
@@ -211,7 +211,7 @@ template class Scheduler<false>;
 unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  for (iterator I = G.cp_begin(), E = G.cp_end(); I != E; ++I) {
+  for (iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I) {
     const VSUnit *SU = *I;
     if (!SU->getFUId().isBound()) continue;
 

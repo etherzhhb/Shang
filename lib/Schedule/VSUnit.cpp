@@ -72,19 +72,6 @@ bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
   return MI->getOperand(2).getMBB() == getEntryBB() && enablePipeLine();
 }
 
-void VSchedGraph::verify() const {
-  if (getEntryRoot()->num_deps())
-    llvm_unreachable("Entry root should not have any dependence!");
-  if (getExitRoot()->num_uses())
-    llvm_unreachable("Exit root should not have any use!");
-
-  for (const_iterator I = cp_begin(), E = cp_end(); I != E; ++I)
-    verifySU(*I);
-
-  //for (const_iterator I = dp_begin(), E = dp_end(); I != E; ++I)
-  //  verifySU(*I);
-}
-
 void VSchedGraph::verifySU(const VSUnit *SU) const {
   typedef VSUnit::const_dep_iterator dep_it;
 
@@ -92,7 +79,7 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
   MachineBasicBlock *ParentMBB = SU->getParentBB();
   bool AnyDepFromTheSameParent = IsBBEntry;
 
-  for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI) {
+  for (dep_it DI = cp_begin(SU), DE = cp_end(SU); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
     assert((DI.getEdgeType() == VDEdge::MemDep
             || SU->getIdx() > Dep->getIdx())
@@ -103,10 +90,23 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
     AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
   }
 
-  assert((SU->isScheduled() || !SU->use_empty() || SU == getExitRoot())
+  assert((SU->isScheduled() || !cuse_empty(SU) || SU == getExitRoot())
           && "Unexpected deteched SU!");
   assert((SU->isScheduled() || SU->hasFixedTiming() || AnyDepFromTheSameParent)
          && "Find SU not constrained by the BB entry!");
+}
+
+void VSchedGraph::verify() const {
+  if (!cp_empty(getEntryRoot()) || !dp_empty(getEntryRoot()))
+    llvm_unreachable("Entry root should not have any dependence!");
+  if (!cuse_empty(getExitRoot()) || !duse_empty(getExitRoot()) )
+    llvm_unreachable("Exit root should not have any use!");
+
+  for (const_iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
+    verifySU(*I);
+
+  //for (const_iterator I = dp_begin(), E = dp_end(); I != E; ++I)
+  //  verifySU(*I);
 }
 
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
@@ -132,7 +132,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
                       SubGraph.InstToSUnits.end());
 
   // 2. Add the SUs in subgraph to the SU list of current SU list.
-  unsigned OldCPStart = num_cps();
+  unsigned OldCPStart = num_cps(this);
   unsigned NewIdxBase = NextSUIdx;
   assert(num_sus() == NextSUIdx - FirstSUIdx && "Index mis-matched!");
   VSUnit *Terminator = SubGraph.lookUpTerminator(SubGraph.getEntryBB());
@@ -142,7 +142,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   Terminator->cleanDepAndUse();
   unsigned TerminatorSlot = Terminator->getSlot();
 
-  for (iterator I = SubGraph.cp_begin(), E = SubGraph.cp_end(); I != E; ++I) {
+  for (iterator I = cp_begin(&SubGraph), E = cp_end(&SubGraph); I != E; ++I) {
     VSUnit *U = *I;
 
     // Ignore the virtual exit root.
@@ -168,10 +168,11 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
     // We need to build the new dependencies.
     U->cleanDepAndUse();
     // A dependencies to constrain the SU with local schedule.
-    Terminator->addDep(U, VDEdge::CreateFixTimingConstraint(ScheduleOffset));
+    VDEdge FixedTimingEdge = VDEdge::CreateFixTimingConstraint(ScheduleOffset);
+    Terminator->addDep<true>(U, FixedTimingEdge);
   }
 
-  for (iterator I = SubGraph.dp_begin(), E = SubGraph.dp_end(); I != E; ++I) {
+  for (iterator I = dp_begin(&SubGraph), E = dp_end(&SubGraph); I != E; ++I) {
     VSUnit *U = *I;
 
     // Update the index of the scheduled SU.
@@ -190,7 +191,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   //4. Merge the terminator map.
   Terminators.insert(SubGraph.Terminators.begin(), SubGraph.Terminators.end());
 
-  assert(NextSUIdx == Terminator->getIdx() + 1 && "Index mis-matched!");
+  assert(NextSUIdx == Terminator->getIdx() + 1u && "Index mis-matched!");
   // Return the iterator point to the first SU of the subgraph, and
   // we need to skip the entry node of the block, we need add 1 after OldCPStart.
   return CPSUs.begin() + OldCPStart + 1;
@@ -206,23 +207,19 @@ void VSchedGraph::topologicalSortCPSUs() {
   for (top_it I = top_it::begin(Exit), E = top_it::end(Exit); I != E; ++I)
     CPSUs[Idx++] = *I;
 
-  assert(Idx == num_cps() && "Bad topological sort!");
+  assert(Idx == num_cps(this) && "Bad topological sort!");
 }
 
 void VSchedGraph::prepareForDatapathSched() {
-  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I) {
+  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
     VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath op in to schedule list!");
     U->cleanDepAndUse();
   }
-
-  // Temporary Hack: Merge the data-path SU vector into the control-path SU
-  // vector.
-  CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
 }
 
 void VSchedGraph::resetCPSchedule(unsigned MII) {
-  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I) {
+  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }
@@ -237,12 +234,12 @@ void VSchedGraph::resetCPSchedule(unsigned MII) {
   // Make sure the PHI copy emit before the BB jump to other BBs.
   typedef VSUnit::dep_iterator dep_it;
   VSUnit *ExitRoot = getExitRoot();
-  for (dep_it I = ExitRoot->dep_begin(), E = ExitRoot->dep_end(); I != E; ++I)
+  for (dep_it I = cp_begin(ExitRoot), E = cp_begin(ExitRoot); I != E; ++I)
     if (I->isPHI()) I.getEdge().setLatency(MII);
 }
 
 void VSchedGraph::resetDPSchedule() {
-  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
+  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }
@@ -295,7 +292,7 @@ void VSchedGraph::scheduleLoop() {
   assert(succ && "Cannot remember II!");
   (void) succ;
 
-  fixPHISchedules(cp_begin(), cp_end());
+  fixPHISchedules(cp_begin(this), cp_end(this));
 }
 
 void VSchedGraph::viewGraph() {
@@ -364,7 +361,7 @@ void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
 void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
   // Perform depth first search to find node that reachable from Root.
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
-  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  WorkStack.push_back(std::make_pair(Root, dp_begin(Root)));
   Root->setIsDangling(false);
   MachineBasicBlock *RootBB = Root->getParentBB();
 
@@ -372,7 +369,7 @@ void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
     VSUnit *U = WorkStack.back().first;
     VSUnit::dep_iterator ChildIt = WorkStack.back().second;
 
-    if (ChildIt == U->dep_end()) {
+    if (ChildIt == U->dep_end<false>()) {
       WorkStack.pop_back();
       continue;
     }
@@ -384,12 +381,12 @@ void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
 
     // If the node is reachable from exit, then it is not dangling.
     ChildNode->setIsDangling(false);
-    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+    WorkStack.push_back(std::make_pair(ChildNode, dp_begin(ChildNode)));
   }
 }
 
 void VSchedGraph::addSoftConstraintsToBreakChains(SDCSchedulingBase &S) {
-  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
+  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
     VSUnit *U = *I;
 
     // Add soft constraints to prevent CtrlOps from being chained by Data-path Ops.
@@ -468,10 +465,10 @@ void VSchedGraph::scheduleDatapath() {
   }
 
   // Break the multi-cycles chains to expose more FU sharing opportunities.
-  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I)
-    if ((*I)->isControl()) clearDanglingFlagForTree(*I);
+  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
+    clearDanglingFlagForTree(*I);
 
-  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
+  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
     VSUnit *U = *I;
 
     if (U->isDangling()) U->scheduledTo(getEndSlot(U->getParentBB()));
@@ -507,21 +504,6 @@ void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
   }
 }
 
-// TODO: Implement edge bundle, calculate the edge for
-void VSUnit::addDep(VSUnit *Src, VDEdge NewE) {
-  assert(Src != this && "Cannot add self-loop!");
-  DepSet::iterator at = Deps.find(Src);
-
-  if (at == Deps.end()) {
-    bool IsCrossBB = Src->getParentBB() != getParentBB();
-    Deps.insert(std::make_pair(Src, EdgeBundle(NewE, IsCrossBB)));
-    Src->addToUseList(this);
-    return;
-  }
-
-  at->second.addEdge(NewE);
-}
-
 VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)
   : SchedSlot(0), IsDangling(true), HasFixedTiming(false), InstIdx(Idx),
     FUNum(FUNum) {
@@ -546,11 +528,11 @@ VSUnit *VSUnit::updateIdx(unsigned short Idx) {
 unsigned VSUnit::countValDeps() const {
   unsigned DepCounter = 0;
 
-  for(const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
-    if(I.getEdgeType() != VDEdge::ValDep) continue;
+  //for(const_dep_iterator I = cpdep_begin(), E = cpdep_end(); I != E; ++I) {
+  //  if(I.getEdgeType() != VDEdge::ValDep) continue;
 
-    ++DepCounter;
-  }
+  //  ++DepCounter;
+  //}
 
   return DepCounter;
 }
@@ -558,12 +540,12 @@ unsigned VSUnit::countValDeps() const {
 unsigned VSUnit::countValUses() const {
   unsigned DepCounter = 0;
 
-  for(const_use_iterator I = use_begin(), E = use_end(); I != E; ++I){
-    const VSUnit* V =*I;
-    if(V->getEdgeFrom(this).getEdgeType() != VDEdge::ValDep) continue;
+  //for(const_use_iterator I = cpuse_begin(), E = cpuse_end(); I != E; ++I){
+  //  const VSUnit* V =*I;
+  //  if(V->getCPEdgeFrom(this).getEdgeType() != VDEdge::ValDep) continue;
 
-    ++DepCounter;
-  }
+  //  ++DepCounter;
+  //}
 
   return DepCounter;
 }

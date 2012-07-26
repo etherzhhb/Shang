@@ -57,7 +57,7 @@ bool IterativeModuloScheduling::scheduleState() {
   ExcludeSlots.clear();
 
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
-  IMSQueueType ToSched(su_begin(G) + 1, su_end(G), ims_sort(*this));
+  IMSQueueType ToSched(cp_begin(&G) + 1, cp_end(&G), ims_sort(*this));
   while (!ToSched.empty()) {
     VSUnit *A = ToSched.top();
     ToSched.pop();
@@ -106,7 +106,7 @@ bool IterativeModuloScheduling::scheduleState() {
   DEBUG(dumpTimeFrame());
 
 #ifndef NDEBUG
-  verifyFUUsage(su_begin(G), su_end(G));
+  verifyFUUsage(cp_begin(&G), cp_end(&G));
 #endif
 
   return true;
@@ -139,7 +139,7 @@ bool ASAPScheduler::scheduleState() {
 
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
-  for (iterator I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
+  for (iterator I = cp_begin(&G) + 1, E = cp_end(&G); I != E; ++I) {
     VSUnit *A = *I;
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
@@ -192,7 +192,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
   typedef VSchedGraph::iterator iterator;
   MachineBasicBlock *PrevBB = S->getEntryBB();
 
-  for (iterator I = S->cp_begin(), E = S->cp_end(); I != E; ++I) {
+  for (iterator I = cp_begin(*S), E = cp_end(*S); I != E; ++I) {
     VSUnit *U = *I;
     // No need to assign the linear order for the SU which already has a fixed
     // timing constraint.
@@ -235,7 +235,7 @@ void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
   SmallVector<FuncUnitId, 2> ActiveFUsAtLastSlot;
 
   typedef VSUnit::const_dep_iterator dep_it;
-  for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+  for (dep_it DI = cp_begin(U), DE = cp_end(U); DI != DE; ++DI) {
     if (DI.getEdgeType() != VDEdge::FixedTiming) continue;
 
     if (DI.getLatency() % II) continue;
@@ -283,7 +283,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
     // FU conflict.
     VSUnit *BBEntry = S->lookupSUnit(ParentBB);
     assert(BBEntry && "EntrySU not found!");
-    FirstSU->addDep(BBEntry, VDEdge::CreateCtrlDep(1));    
+    FirstSU->addDep<true>(BBEntry, VDEdge::CreateCtrlDep(1));    
   }
 }
 
@@ -298,7 +298,7 @@ VSUnit *BasicLinearOrderGenerator::addLinOrdEdge(SUVecTy &SUs) {
     // Build a dependence edge from EalierSU to LaterSU.
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
-    LaterSU->addDep(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
+    LaterSU->addDep<true>(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
 
     LaterSU = EalierSU;
   }
@@ -320,7 +320,7 @@ VSUnit *BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
     if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id)
-      LaterSU->addDep(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
+      LaterSU->addDep<true>(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
 
     LaterSU = EalierSU;
     if (Id == EalierSU->getFUId()) FirstSU = EalierSU;    

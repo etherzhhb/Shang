@@ -842,7 +842,7 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
 
 unsigned VSchedGraph::emitSchedule() {
   // Merge the data-path SU vector to the control-path SU vector.
-  //CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
+  CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
   DPSUs.clear();
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);

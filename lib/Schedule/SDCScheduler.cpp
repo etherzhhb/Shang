@@ -51,7 +51,7 @@ unsigned SDCSchedulingBase::createStepVariable(const VSUnit* U, unsigned Col) {
   return Col + 1;
 }
 
-unsigned SDCSchedulingBase::createLPAndVariables(su_it I, su_it E) {
+unsigned SDCSchedulingBase::createLPAndVariables(iterator I, iterator E) {
   lp = make_lp(0, 0);
   unsigned Col =  1;
   while (I != E) {
@@ -135,7 +135,7 @@ void SDCSchedulingBase::addSoftConstraintsPenalties(double weight) {
   }
 }
 
-void SDCSchedulingBase::buildASAPObject(su_it I, su_it E, double weight) {
+void SDCSchedulingBase::buildASAPObject(iterator I, iterator E, double weight) {
   //Build the ASAP object function.
   while (I != E) {
     const VSUnit* U = *I++;
@@ -149,7 +149,7 @@ void SDCSchedulingBase::buildASAPObject(su_it I, su_it E, double weight) {
   }
 }
 
-void SDCSchedulingBase::buildOptSlackObject(su_it I, su_it E, double weight) {
+void SDCSchedulingBase::buildOptSlackObject(iterator I, iterator E, double weight) {
   while (I != E) {
     const VSUnit* U = *I++;
 
@@ -163,7 +163,7 @@ void SDCSchedulingBase::buildOptSlackObject(su_it I, su_it E, double weight) {
 }
 
 void SDCSchedulingBase::buildSchedule(lprec *lp, unsigned TotalRows,
-                                      su_it I, su_it E) {
+                                      iterator I, iterator E) {
   while (I != E) {
     VSUnit *U = *I++;
 
@@ -250,7 +250,7 @@ unsigned SDCSchedulingBase::calculateMinSlotsFromEntry(VSUnit *BBEntry,
   unsigned SlotsFromEntry = BBEntry->getSlot();
 
   typedef VSUnit::dep_iterator dep_it;
-  for (dep_it I = BBEntry->dep_begin(), E = BBEntry->dep_end(); I != E; ++I) {
+  for (dep_it I = cp_begin(BBEntry), E = cp_end(BBEntry); I != E; ++I) {
     VSUnit *PredTerminator = *I;
     //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
     //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
@@ -275,12 +275,12 @@ int SDCSchedulingBase::calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
   // The minimal slack from the predecessors of the BB to the entry of the BB.
   int MinInterBBSlack = 0;
 
-  for (use_it I = BBEntry->use_begin(), E = BBEntry->use_end(); I != E; ++I) {
+  for (use_it I = cuse_begin(BBEntry), E = cuse_end(BBEntry); I != E; ++I) {
     VSUnit *U = *I;
     if (U->getParentBB() != MBB) continue;
 
     unsigned USlot = U->getSlot();
-    for (dep_it DI = U->dep_begin(), DE = U->dep_end(); DI != DE; ++DI) {
+    for (dep_it DI = cp_begin(U), DE = cp_end(U); DI != DE; ++DI) {
       if (!DI.isCrossBB()) continue;
 
       MachineBasicBlock *SrcBB = DI->getParentBB();
@@ -312,14 +312,14 @@ void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
 
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
   VSUnit *ExitRoot = G.getExitRoot();
-  WorkStack.push_back(std::make_pair(ExitRoot, ExitRoot->dep_begin()));
+  WorkStack.push_back(std::make_pair(ExitRoot, cp_begin(ExitRoot)));
 
   // Visit the blocks in topological order, and ignore the pseudo exit node.
   while (WorkStack.size() > 1) {
     VSUnit *U = WorkStack.back().first;
     VSUnit::dep_iterator ChildIt = WorkStack.back().second;
 
-    if (ChildIt == U->dep_end()) {
+    if (ChildIt == cp_end(U)) {
       WorkStack.pop_back();
 
       // All dependencies visited, now visit the current BBEntry.
@@ -348,7 +348,7 @@ void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
     assert(ChildNode->isTerminator() && "Unexpected non-terminator node!");
     // Jump to the entry of the parent block of the terminator.
     ChildNode = G.lookupSUnit(ChildNode->getParentBB());
-    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+    WorkStack.push_back(std::make_pair(ChildNode, cp_begin(ChildNode)));
   }
 
   assert(WorkStack.back().first == ExitRoot && "Stack broken!");
@@ -402,11 +402,6 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp, const VSUnit 
   }
 }
 
-template<bool IsCtrlPath>
-void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
-  for(VSchedGraph::const_iterator I = su_begin(G), E = su_end(G); I != E; ++I)
-    addDependencyConstraints(lp, *I);
-}
 
 template<bool IsCtrlPath>
 bool SDCScheduler<IsCtrlPath>::schedule() {
@@ -425,7 +420,7 @@ bool SDCScheduler<IsCtrlPath>::schedule() {
   if (!solveLP(lp)) return false;
 
   // Schedule the state with the ILP result.
-  buildSchedule(lp, TotalRows, su_begin(G), su_end(G));
+  buildSchedule(lp, TotalRows, begin(), end());
 
   delete_lp(lp);
   lp = 0;

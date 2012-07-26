@@ -397,13 +397,13 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
         // Build the Src -> Dst dependence.
         unsigned Latency = G.getStepsToFinish(SrcMI);
         //if (MayBothActive || SrcMO != DstMO)
-        DstU->addDep(SrcU, VDEdge::CreateMemDep(Latency, 0));
+        DstU->addDep<true>(SrcU, VDEdge::CreateMemDep(Latency, 0));
 
         // Build the Dst -> Src (in next iteration) dependence, the dependence
         // occur even if SrcMI and DstMI are mutual exclusive.
         if (G.enablePipeLine()) {
           Latency = G.getStepsToFinish(SrcMI);
-          SrcU->addDep(DstU, VDEdge::CreateMemDep(Latency, 1));
+          SrcU->addDep<true>(DstU, VDEdge::CreateMemDep(Latency, 1));
         }
         // Go on handle next visited SUnit.
         continue;
@@ -429,7 +429,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
 
           if (LD.hasDep()) {
             unsigned Latency = G.getStepsToFinish(SrcMI);
-            DstU->addDep(SrcU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
+            DstU->addDep<true>(SrcU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
           }
         }
 
@@ -441,11 +441,11 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
 
         if (LD.hasDep()) {
           unsigned Latency = G.getStepsToFinish(SrcMI);
-          SrcU->addDep(DstU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
+          SrcU->addDep<true>(DstU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
         }
       } else if (MayBothActive) {
         unsigned Latency = G.getStepsToFinish(SrcMI);
-        DstU->addDep(SrcU, VDEdge::CreateMemDep(Latency, 0));
+        DstU->addDep<true>(SrcU, VDEdge::CreateMemDep(Latency, 0));
       }
     }
 
@@ -523,7 +523,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
       if (SrcSU == 0) continue;
 
       if (SrcBB != CurMBB || !CrossBBOnly)
-        A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<Type>(Latency - MIOffset));
+        A->addDep<true>(SrcSU, VDEdge::CreateDep<Type>(Latency - MIOffset));
 
       // If we are only adding cross basic block dependencies, do not add the
       // control dependencies from the entry of the same BB.
@@ -533,7 +533,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
         unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI);
         LatencyFromBBEntry -= MIOffset;
-        A->addDep(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
+        A->addDep<true>(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
       }
 
       continue;
@@ -553,7 +553,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
         LatencyFromBBEntry -= MIOffset;
         // FIXME: The latency of this constraint will be changed during
         // scheduling.
-        A->addDep(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
+        A->addDep<true>(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
       }
 
       // Note that the dangling node are not chained with its depending control
@@ -586,7 +586,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     Latency -= MIOffset;
-    A->addDep(SrcSU, VDEdge::CreateCtrlOrValDep<Type>(Latency));
+    A->addDep<true>(SrcSU, VDEdge::CreateDep<Type>(Latency));
   }
 }
 
@@ -623,7 +623,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &G){
     Latency = std::max(int(G.getStepsToFinish(SrcMI)), Latency);
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
-    PHISU->addDep(SrcSU, VDEdge::CreateMemDep(Latency, 1));
+    PHISU->addDep<true>(SrcSU, VDEdge::CreateMemDep(Latency, 1));
   }
 }
 
@@ -678,7 +678,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
         // loop carried dependency to cycle-accurate latency, and since we
         // have already move the PHI by II cycles later, we should not add
         // II to the latency again.
-        A->addDep(Dep, VDEdge::CreateMemDep(Latency/*+G.getII(ParentBB)*/, 0));
+        A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
         continue;
       }
 
@@ -690,11 +690,11 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       // A.
       if (isCtrl && Dep->isDatapath() && Latency == 0) Latency = 1;
 
-      A->addDep(Dep, VDEdge::CreateValDep(Latency));
+      A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
 
       // Constraint the schedule unit by the entry of the parent BB.
       if (Dep->getParentBB() != ParentBB)
-        A->addDep(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
+        A->addDep<false>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
 
       ++NumValDep;
     }
@@ -703,7 +703,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (NumValDep == 0 && !A->isScheduled())
-    A->addDep(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
+    A->addDep<true>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
 }
 
 template<bool CrossBBOnly>
@@ -721,12 +721,12 @@ void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
     addChainDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
-  if (!A->dep_empty() || !IsCtrl) return;
+  if (!cp_empty(A) || !IsCtrl) return;
 
   // Restrict the control-path operations within the BB boundaries.
   VSUnit *Entry = CrossBBOnly?G.getEntryRoot():G.lookupSUnit(A->getParentBB());
   unsigned LatencyFromBBEntry = CrossBBOnly ? 0 : calculateLatencyFromEntry(A);
-  A->addDep(Entry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
+  A->addDep<true>(Entry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
 }
 
 bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
@@ -775,14 +775,14 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G,
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
     typedef VSUnit::use_iterator use_it;
-    for (use_it UI = PHISU->use_begin(), UE = PHISU->use_end(); UI != UE; ++UI){
+    for (use_it UI = cuse_begin(PHISU), UE = cuse_end(PHISU); UI != UE; ++UI){
       VSUnit *PHIUser = *UI;
       if (PHIUser != CurTerminator)
-        PHISU->addDep(PHIUser, VDEdge::CreateMemDep(0, 1));
+        PHISU->addDep<true>(PHIUser, VDEdge::CreateMemDep(0, 1));
     }
 
     // Add the dependence edge PHI -> Loop back -> PHI_at_iteration.
-    PHISU->addDep(LoopOp, VDEdge::CreateMemDep(0, 1));
+    PHISU->addDep<true>(LoopOp, VDEdge::CreateMemDep(0, 1));
     //LoopOp->addDep(VDValDep::CreateValDep(PHISU, 0));
   }
 }
@@ -909,7 +909,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
 
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
-    if (VSU->use_empty() && VSU != Terminator) {
+    if (cuse_empty(VSU) && VSU != Terminator) {
       if (VSU->isDatapath()) continue;
 
       if (!G.isLoopOp(VSU->getRepresentativePtr()))
@@ -926,7 +926,7 @@ void VPreRegAllocSched::buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator) 
       //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
       //  --Latency;
 
-      Terminator->addDep(VSU, VDEdge::CreateCtrlDep(Latency));
+      Terminator->addDep<true>(VSU, VDEdge::CreateCtrlDep(Latency));
     }
   }
 }
@@ -945,7 +945,7 @@ void VPreRegAllocSched::addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU) {
     // Ignore the terminator that is not yet created, which mean we are ignoring
     // the loop back edges.
     if (VSUnit *PredTerminator = G.lookUpTerminator(PredBB))
-      EntrySU->addDep(PredTerminator, VDEdge::CreateCtrlDep(0));
+      EntrySU->addDep<true>(PredTerminator, VDEdge::CreateCtrlDep(0));
   }
 }
 
@@ -1008,7 +1008,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
         // so it will schedule before the last stage of a pipeline BB.
         VSUnit *PHISU = G.lookupSUnit(MI);
         assert(PHISU->isPHI() && "Expect PHISU merged by PHI!");
-        ExitSU->addDep(PHISU, VDEdge::CreateCtrlDep(0));
+        ExitSU->addDep<true>(PHISU, VDEdge::CreateCtrlDep(0));
         continue;
       } else { // Also merge the PHI moves.
         bool mapped = G.mapMI2SU(MI, ExitSU, 0);
@@ -1081,10 +1081,10 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
   G.prepareForDatapathSched();
 
-  for (su_it I = G.dp_begin(), E = G.dp_end(); I != E; ++I)
+  for (su_it I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
     addValDep(G, *I);
 
-  for (su_it I = G.cp_begin(), E = G.cp_end(); I != E; ++I)
+  for (su_it I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
     addValDep(G, *I);
 
   // Verify the schedule graph.
@@ -1102,7 +1102,7 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   LocalG.scheduleLoop();
 
   typedef VSchedGraph::iterator it;
-  for (it I = G.mergeSUsInSubGraph(LocalG), E = G.cp_end(); I != E; ++I)
+  for (it I = G.mergeSUsInSubGraph(LocalG), E = cp_end(&G); I != E; ++I)
     addChainDepForSU<true>(*I, G);
 
   addDepsForBBEntry(G, CurEntry);
