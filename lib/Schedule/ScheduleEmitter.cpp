@@ -841,17 +841,20 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 unsigned VSchedGraph::emitSchedule() {
+  // Merge the data-path SU vector to the control-path SU vector.
+  //CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
+  DPSUs.clear();
   // Sort the SUs by parent BB and its schedule.
-  std::sort(begin(), end(), top_sort_bb_and_slot);
+  std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);
   // Erase the virtual exit root right now, so that we can avoid the special
   // code to handle it.
-  assert(AllSUs.back() == getExitRoot() && "Exitroot at an unexpected position!");
-  AllSUs.resize(AllSUs.size() - 1);
+  assert(CPSUs.back() == getExitRoot() && "Exitroot at an unexpected position!");
+  CPSUs.resize(CPSUs.size() - 1);
 
   unsigned MBBStartSlot = EntrySlot;
-  iterator to_emit_begin = begin();
+  iterator to_emit_begin = CPSUs.begin();
   MachineBasicBlock *PrevBB = (*to_emit_begin)->getParentBB();
-  for (iterator I = to_emit_begin, E = end(); I != E; ++I) {
+  for (iterator I = to_emit_begin, E = CPSUs.end(); I != E; ++I) {
     MachineBasicBlock *CurBB = (*I)->getParentBB();
     if (CurBB == PrevBB) continue;
 
@@ -862,7 +865,7 @@ unsigned VSchedGraph::emitSchedule() {
   }
 
   // Dont forget the SUs in last BB.
-  MBBStartSlot = emitSchedule(to_emit_begin, end(), MBBStartSlot, PrevBB);
+  MBBStartSlot = emitSchedule(to_emit_begin, CPSUs.end(), MBBStartSlot, PrevBB);
   return MBBStartSlot;
 }
 

@@ -110,8 +110,8 @@ public:
     // Add the Create the nodes, node that we will address the Nodes by the
     // the InstIdx of the VSUnit and this only works if they are sorted in
     // the VSUnits vector of SG.
-    typedef VSchedGraph::sched_iterator it;
-    for (it I = SG->sched_begin(), E = SG->sched_end(); I != E; ++I)
+    typedef VSchedGraph::iterator it;
+    for (it I = SG->cp_begin(), E = SG->cp_end(); I != E; ++I)
       Nodes.insert(std::make_pair(*I, new SubGraphNode(*I, this)));
   }
 
@@ -133,18 +133,18 @@ public:
 
   // Iterate over the subgraph start from idx.
   // Node: The atom list of FSMState already sort by getIdx.
-  typedef mapped_iterator<VSchedGraph::sched_iterator, SubGraphNode>
+  typedef mapped_iterator<VSchedGraph::const_iterator, SubGraphNode>
     nodes_iterator;
 
   nodes_iterator sub_graph_begin() {
-    VSchedGraph::sched_iterator I = G->sched_begin();
-    while ((*I)->getIdx() < CurIdx && I != G->sched_end())
+    VSchedGraph::const_iterator I = G->cp_begin();
+    while ((*I)->getIdx() < CurIdx && I != G->cp_end())
       ++I;
 
     return nodes_iterator(I, *getNode(*I));
   }
   nodes_iterator sub_graph_end() {
-    return nodes_iterator(G->sched_end(), DummyNode);
+    return nodes_iterator(G->cp_end(), DummyNode);
   }
 
   bool findAllCircuits();

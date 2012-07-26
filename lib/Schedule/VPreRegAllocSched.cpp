@@ -1081,7 +1081,10 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
   G.prepareForDatapathSched();
 
-  for (su_it I = G.begin(), E = G.end(); I != E; ++I)
+  for (su_it I = G.dp_begin(), E = G.dp_end(); I != E; ++I)
+    addValDep(G, *I);
+
+  for (su_it I = G.cp_begin(), E = G.cp_end(); I != E; ++I)
     addValDep(G, *I);
 
   // Verify the schedule graph.
@@ -1095,13 +1098,12 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   buildControlPathGraph(LocalG, MBB);
   // Todo: Simply set the terminator SU as the exit root?
   LocalG.createExitRoot(VExit);
-  LocalG.prepareForCtrlSched();
   LocalG.verify();
   LocalG.scheduleLoop();
 
   typedef VSchedGraph::iterator it;
-  for (it I = G.mergeSUsInSubGraph(LocalG), E = G.end(); I != E; ++I)
-    if ((*I)->isControl()) addChainDepForSU<true>(*I, G);
+  for (it I = G.mergeSUsInSubGraph(LocalG), E = G.cp_end(); I != E; ++I)
+    addChainDepForSU<true>(*I, G);
 
   addDepsForBBEntry(G, CurEntry);
 }
@@ -1128,8 +1130,6 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   }
 
   G.createExitRoot(VExit);
-  // Sort the schedule units after all units are built.
-  G.prepareForCtrlSched();
   // Verify the schedule graph.
   G.verify();
 }

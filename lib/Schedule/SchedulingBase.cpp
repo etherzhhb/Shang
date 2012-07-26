@@ -71,7 +71,7 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
   // Build the time frame iteratively.
   while(NeedToReCalc) {
     NeedToReCalc = false;
-    for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
+    for (iterator I = su_begin(G), E = su_end(G); I != E; ++I) {
       const VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A].first = A->getSlot();
@@ -178,7 +178,7 @@ void Scheduler<IsCtrlPath>::buildALAPStep() {
 template<bool IsCtrlPath>
 void Scheduler<IsCtrlPath>::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
+  for (iterator I = su_begin(G), E = su_end(G); I != E; ++I) {
     const VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
@@ -198,7 +198,7 @@ void Scheduler<IsCtrlPath>::dumpTimeFrame() const {
 
 template<bool IsCtrlPath>
 unsigned Scheduler<IsCtrlPath>::buildTimeFrameAndResetSchedule(bool reset) {
-  if (reset) G.resetSchedule(getMII());
+  if (reset) resetSchedule(G, getMII());
 
   buildTimeFrame();
 
@@ -211,8 +211,7 @@ template class Scheduler<false>;
 unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  typedef VSchedGraph::sched_iterator sched_iterator;
-  for (sched_iterator I = G.sched_begin(), E = G.sched_end(); I != E; ++I) {
+  for (iterator I = G.cp_begin(), E = G.cp_end(); I != E; ++I) {
     const VSUnit *SU = *I;
     if (!SU->getFUId().isBound()) continue;
 
@@ -440,7 +439,7 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   revertFUUsage(U, step);
 }
 
-void SchedulingBase::verifyFUUsage(su_it I, su_it E) {
+void SchedulingBase::verifyFUUsage(iterator I, iterator E) {
   resetRT();
 
   while (I != E) {
@@ -474,16 +473,17 @@ unsigned SchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-bool SchedulingBase::allNodesSchedued(su_it I, su_it E) const {
+bool SchedulingBase::allNodesSchedued(const_iterator I, const_iterator E) const {
   while (I != E) {
     const VSUnit *A = *I++;
+
     if (!A->isScheduled()) return false;
   }
 
   return true;
 }
 
-bool SchedulingBase::scheduleCriticalPath(su_it I, su_it E) {
+bool SchedulingBase::scheduleCriticalPath(iterator I, iterator E) {
   while (I != E) {
     VSUnit *A = *I++;
 
@@ -498,8 +498,4 @@ bool SchedulingBase::scheduleCriticalPath(su_it I, su_it E) {
   }
 
   return true;
-}
-
-void SchedulingBase::viewGraph() {
-  ViewGraph(this, G.getEntryBB()->getName());
 }

@@ -29,7 +29,6 @@ void LPObjFn::setLPObj(lprec *lp) const {
   std::vector<REAL> Coefficients;
 
   //Build the ASAP object function.
-  typedef VSchedGraph::sched_iterator it;
   for(const_iterator I = begin(), E = end(); I != E; ++I) {
     Indices.push_back(I->first);
     Coefficients.push_back(I->second);
@@ -405,7 +404,7 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp, const VSUnit 
 
 template<bool IsCtrlPath>
 void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
-  for(VSchedGraph::sched_iterator I = su_begin(G), E = su_end(G); I != E; ++I)
+  for(VSchedGraph::const_iterator I = su_begin(G), E = su_end(G); I != E; ++I)
     addDependencyConstraints(lp, *I);
 }
 

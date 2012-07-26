@@ -50,7 +50,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-  G.resetSchedule(getMII());
+  G.resetCPSchedule(getMII());
   buildTimeFrame();
   // Reset exclude slots and resource table.
   resetRT();
@@ -139,7 +139,7 @@ bool ASAPScheduler::scheduleState() {
 
   BasicLinearOrderGenerator::addLinOrdEdge(*this);
 
-  for (su_it I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
+  for (iterator I = su_begin(G) + 1, E = su_end(G); I != E; ++I) {
     VSUnit *A = *I;
     assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
@@ -189,10 +189,10 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
   ConflictListTy ConflictList;
   std::vector<VSUnit*> PipeBreakers;
 
-  typedef VSchedGraph::sched_iterator sched_it;
+  typedef VSchedGraph::iterator iterator;
   MachineBasicBlock *PrevBB = S->getEntryBB();
 
-  for (sched_it I = S->sched_begin(), E = S->sched_end(); I != E; ++I) {
+  for (iterator I = S->cp_begin(), E = S->cp_end(); I != E; ++I) {
     VSUnit *U = *I;
     // No need to assign the linear order for the SU which already has a fixed
     // timing constraint.
@@ -221,7 +221,7 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
 
   addLinOrdEdge(ConflictList, PipeBreakers);
 
-  S->topologicalSortScheduleUnits();
+  S->topologicalSortCPSUs();
 }
 
 void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {

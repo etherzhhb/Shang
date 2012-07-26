@@ -465,12 +465,12 @@ class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
   typedef SUnitVecTy::iterator iterator;
+  typedef SUnitVecTy::const_iterator const_iterator;
   enum { NullSUIdx = 0u, FirstSUIdx = 1u };
   DetialLatencyInfo &DLInfo;
 private:
-  SUnitVecTy AllSUs;
-  // The VSUnits to schedule.
-  ArrayRef<VSUnit*> SUsToSched;
+  // Scheduling units in data-path and control-path.
+  SUnitVecTy DPSUs, CPSUs;
   VSUnit *Exit;
   // The number of schedule unit.
   unsigned NextSUIdx;
@@ -502,7 +502,8 @@ public:
       EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
-    std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
+    assert(DPSUs.empty() && "Schedule is not emitted?");
+    std::for_each(CPSUs.begin(), CPSUs.end(), deleter<VSUnit>);
     delete Exit;
   }
 
@@ -568,20 +569,17 @@ public:
     return true;
   }
 
-  // Sort the schedule units to place control operations at the beginning of
-  // the SU list, so we can only schedule the control operations
-  void prepareForCtrlSched();
   // Extend the to schedule SU list to all SU in current schedule graph.
   void prepareForDatapathSched();
 
-  void topologicalSortScheduleUnits();
+  void topologicalSortCPSUs();
 
   VSUnit *createTerminator(MachineBasicBlock *MBB) {
     VSUnit *&SU = Terminators[MBB];
     assert(SU == 0 && "Terminator already exist!");
     SU = new VSUnit(NextSUIdx++, 0);
 
-    AllSUs.push_back(SU);
+    CPSUs.push_back(SU);
     return SU;
   }
 
@@ -598,7 +596,7 @@ public:
     Exit = new VSUnit(NextSUIdx++, 0);
     Exit->addPtr(MBB, 0);
 
-    AllSUs.push_back(Exit);
+    CPSUs.push_back(Exit);
 
     typedef TerminatorMapTy::iterator it;
     for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
@@ -631,7 +629,7 @@ public:
 
   /// @name Roots
   //{
-  VSUnit *getEntryRoot() const { return AllSUs.front(); }
+  VSUnit *getEntryRoot() const { return CPSUs.front(); }
   MachineBasicBlock *getEntryBB() const {
     return getEntryRoot()->getParentBB();
   }
@@ -639,14 +637,25 @@ public:
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
-  iterator begin() { return AllSUs.begin(); }
-  iterator end() { return AllSUs.end(); }
-  typedef ArrayRef<VSUnit*>::iterator sched_iterator;
-  sched_iterator sched_begin()  const { return SUsToSched.begin(); }
-  sched_iterator sched_end()    const { return SUsToSched.end(); }
-  size_t num_scheds() const { return SUsToSched.size(); }
+  // Control-path operations
+  size_t num_cps() const { return CPSUs.size(); }
+  iterator cp_begin() { return CPSUs.begin(); }
+  iterator cp_end() { return CPSUs.end(); }
+  const_iterator cp_begin() const { return CPSUs.begin(); }
+  const_iterator cp_end() const { return CPSUs.end(); }
+
+  // Data-path operations
+  size_t num_dps() const { return DPSUs.size(); }
+  iterator dp_begin() { return DPSUs.begin(); }
+  iterator dp_end() { return DPSUs.end(); }
+  const_iterator dp_begin() const { return DPSUs.begin(); }
+  const_iterator dp_end() const { return DPSUs.end(); }
+
+  size_t num_sus() const { return num_cps() + num_dps(); }
+
   unsigned getNextSUIdx() const { return NextSUIdx; }
-  void resetSchedule(unsigned MII);
+  void resetCPSchedule(unsigned MII);
+  void resetDPSchedule();
 
   unsigned getStartSlot(MachineBasicBlock *MBB) const {
     VSUnit *EntrySU = lookupSUnit(MBB);
@@ -712,12 +721,12 @@ public:
 };
 
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
-  typedef VSchedGraph::sched_iterator nodes_iterator;
-  static nodes_iterator nodes_begin(VSchedGraph *G) {
-    return G->sched_begin();
+  typedef VSchedGraph::const_iterator nodes_iterator;
+  static nodes_iterator nodes_begin(const VSchedGraph *G) {
+    return G->cp_begin();
   }
-  static nodes_iterator nodes_end(VSchedGraph *G) {
-    return G->sched_end();
+  static nodes_iterator nodes_end(const VSchedGraph *G) {
+    return G->cp_end();
   }
 };
 

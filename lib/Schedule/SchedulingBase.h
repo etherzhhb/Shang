@@ -90,11 +90,13 @@ public:
   VSchedGraph *operator->() const { return &G; }
 
   virtual bool scheduleState() { return false; };
+
   // Return true when resource constraints preserved after citical path
   // scheduled
-  typedef VSchedGraph::sched_iterator su_it;
-  bool scheduleCriticalPath(su_it I, su_it E);
-  bool allNodesSchedued(su_it I, su_it E) const;
+  typedef VSchedGraph::iterator iterator;
+  bool scheduleCriticalPath(iterator I, iterator E);
+  typedef VSchedGraph::const_iterator const_iterator;
+  bool allNodesSchedued(const_iterator I, const_iterator E) const;
 
   /// @name TimeFrame
   //{
@@ -139,7 +141,7 @@ public:
   bool tryTakeResAtStep(const VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);
-  void verifyFUUsage(su_it I, su_it E);
+  void verifyFUUsage(iterator I, iterator E);
 
   unsigned computeRecMII();
   unsigned computeResMII();
@@ -158,7 +160,6 @@ public:
     CriticalPathEnd = G.EntrySlot + L;
   }
 
-  void viewGraph();
 };
 
 template<bool IsCtrlPath>
@@ -191,16 +192,12 @@ protected:
     return Dst->getEdgeFrom(Src);
   }
 
-  static su_it su_begin(const VSchedGraph &G) {
-    return G.sched_begin();
-  }
-
-  static su_it su_end(const VSchedGraph &G) {
-    return G.sched_end();
-  }
-
   static unsigned num_sus(const VSchedGraph &G) {
-    return G.num_scheds();
+    return G.num_cps();
+  }
+
+  static void resetSchedule(VSchedGraph &G, unsigned MII) {
+    G.resetCPSchedule(MII);
   }
 
   unsigned calculateASAP(const VSUnit *A);
@@ -218,16 +215,36 @@ public:
     buildTimeFrameAndResetSchedule(true);
     return SchedulingBase::scheduleCriticalPath(su_begin(G), su_end(G));
   }
+
+  static iterator su_begin(VSchedGraph &G) {
+    return G.cp_begin();
+  }
+
+  static const_iterator su_begin(const VSchedGraph &G) {
+    return G.cp_begin();
+  }
+
+  static iterator su_end(VSchedGraph &G) {
+    return G.cp_end();
+  }
+
+  static const_iterator su_end(const VSchedGraph &G) {
+    return G.cp_end();
+  }
+
+  void viewGraph() {
+    ViewGraph(this, G.getEntryBB()->getName());
+  }
 };
 
-template <> struct GraphTraits<SchedulingBase*> 
+template <bool IsCtrlPath> struct GraphTraits<Scheduler<IsCtrlPath>*> 
     : public GraphTraits<VSchedGraph*> {
-  typedef VSchedGraph::sched_iterator nodes_iterator;
+  typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(SchedulingBase *G) {
-    return (*G)->sched_begin();
+    return Scheduler<IsCtrlPath>::su_begin(***G);
   }
   static nodes_iterator nodes_end(SchedulingBase *G) {
-    return (*G)->sched_end();
+    return Scheduler<IsCtrlPath>::su_end(***G);
   }
 };
 
@@ -310,7 +327,7 @@ class SDCSchedulingBase {
   };
 public:
 
-  typedef VSchedGraph::sched_iterator su_it;
+  typedef VSchedGraph::iterator su_it;
   // Set the variables' name in the model.
   unsigned createLPAndVariables(su_it I, su_it E);
   unsigned addSoftConstraint(const VSUnit *Src, const VSUnit *Dst,

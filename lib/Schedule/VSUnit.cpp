@@ -78,8 +78,11 @@ void VSchedGraph::verify() const {
   if (getExitRoot()->num_uses())
     llvm_unreachable("Exit root should not have any use!");
 
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I)
+  for (const_iterator I = cp_begin(), E = cp_end(); I != E; ++I)
     verifySU(*I);
+
+  //for (const_iterator I = dp_begin(), E = dp_end(); I != E; ++I)
+  //  verifySU(*I);
 }
 
 void VSchedGraph::verifySU(const VSUnit *SU) const {
@@ -109,12 +112,13 @@ void VSchedGraph::verifySU(const VSUnit *SU) const {
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {
   VSUnit *SU = new VSUnit(NextSUIdx++, fuid);
 
-  AllSUs.push_back(SU);
-
   MachineInstr *MI = Ptr;
   bool mapped = mapMI2SU(Ptr, SU, MI ? DLInfo.getStepsToFinish(MI) : 0);
   (void) mapped;
   assert(mapped && "Cannot add SU to the inst2su map!");
+
+  if (SU->isDatapath()) DPSUs.push_back(SU);
+  else                  CPSUs.push_back(SU);
   return SU;
 }
 
@@ -137,8 +141,9 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
                       SubGraph.InstToSUnits.end());
 
   // 2. Add the SUs in subgraph to the SU list of current SU list.
+  unsigned OldCPStart = num_cps();
   unsigned NewIdxBase = NextSUIdx;
-  assert(AllSUs.size() == NextSUIdx - FirstSUIdx && "Index mis-matched!");
+  assert(num_sus() == NextSUIdx - FirstSUIdx && "Index mis-matched!");
   VSUnit *Terminator = SubGraph.lookUpTerminator(SubGraph.getEntryBB());
   assert(Terminator && "Terminator SU not found!");
   // We need to clear the dependencies of the terminator before we adding
@@ -146,28 +151,20 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   Terminator->cleanDepAndUse();
   unsigned TerminatorSlot = Terminator->getSlot();
 
-  for (iterator I = SubGraph.begin(), E = SubGraph.end(); I != E; ++I) {
+  for (iterator I = SubGraph.cp_begin(), E = SubGraph.cp_end(); I != E; ++I) {
     VSUnit *U = *I;
 
     // Ignore the virtual exit root.
     if (U == SubGraph.getExitRoot()) continue;
 
     // Update the index of the scheduled SU.
-    AllSUs.push_back(U->updateIdx(NewIdxBase + U->getIdx() - FirstSUIdx));
+    CPSUs.push_back(U->updateIdx(NewIdxBase + U->getIdx() - FirstSUIdx));
     ++NextSUIdx;
 
     // We may need to build a fixed timing dependencies according to the
     // schedule of U.
     unsigned USlot = U->getSlot();
     U->resetSchedule();
-
-    // Do not add the edge from a data-path SU, which is not scheduled yet.
-    // And do not add self-loop to the terminator.
-    if (U->isDatapath()) {
-      assert(U->num_deps() == 0 && U->num_uses() == 0
-             && "Unexpected data-path dependencies!");
-      continue;
-    }
 
     // All scheduled control SU has fixed a timing constraint.
     U->setHasFixedTiming();
@@ -183,7 +180,16 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
     Terminator->addDep(U, VDEdge::CreateFixTimingConstraint(ScheduleOffset));
   }
 
-  SubGraph.AllSUs.clear();
+  for (iterator I = SubGraph.dp_begin(), E = SubGraph.dp_end(); I != E; ++I) {
+    VSUnit *U = *I;
+
+    // Update the index of the scheduled SU.
+    DPSUs.push_back(U->updateIdx(NewIdxBase + U->getIdx() - FirstSUIdx));
+    ++NextSUIdx;
+  }
+
+  SubGraph.CPSUs.clear();
+  SubGraph.DPSUs.clear();
 
   // 3. Merge the II Map.
   IIMap.insert(SubGraph.IIMap.begin(), SubGraph.IIMap.end());
@@ -191,12 +197,13 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   //4. Merge the terminator map.
   Terminators.insert(SubGraph.Terminators.begin(), SubGraph.Terminators.end());
 
-  // No need to subtract by FirstSUIdx because we need to skip the entry node
-  // of the block.
-  return AllSUs.begin() + NewIdxBase/*- FirstSUIdx*/;
+  assert(NextSUIdx == Terminator->getIdx() + 1 && "Index mis-matched!");
+  // Return the iterator point to the first SU of the subgraph, and
+  // we need to skip the entry node of the block, we need add 1 after OldCPStart.
+  return CPSUs.begin() + OldCPStart + 1;
 }
 
-void VSchedGraph::topologicalSortScheduleUnits() {
+void VSchedGraph::topologicalSortCPSUs() {
   unsigned Idx = 0;
   VSUnit *Exit = getExitRoot();
   typedef po_iterator<VSUnit*, SmallPtrSet<VSUnit*, 64>, false,
@@ -204,44 +211,25 @@ void VSchedGraph::topologicalSortScheduleUnits() {
           top_it;
 
   for (top_it I = top_it::begin(Exit), E = top_it::end(Exit); I != E; ++I)
-    AllSUs[Idx++] = *I;
+    CPSUs[Idx++] = *I;
 
-  assert(Idx == num_scheds() && "Bad topological sort!");
-}
-
-void VSchedGraph::prepareForCtrlSched() {
-  unsigned NumCtrls = 0;
-  std::sort(AllSUs.begin(), AllSUs.end(), sort_by_type);
-
-#ifndef NDEBUG
-  int LastIdx = -1;
-#endif
-  for (iterator I = begin(), E = end(); I != E; ++I) {
-    VSUnit *U = *I;
-    if (U->isDatapath())
-      break;
-
-    ++NumCtrls;
-#ifndef NDEBUG
-    assert(LastIdx < U->getIdx() && "Schedule units not sorted!");
-#endif
-  }
-
-  SUsToSched = ArrayRef<VSUnit*>(AllSUs.data(), NumCtrls);
+  assert(Idx == num_cps() && "Bad topological sort!");
 }
 
 void VSchedGraph::prepareForDatapathSched() {
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I) {
     VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath op in to schedule list!");
     U->cleanDepAndUse();
   }
 
-  SUsToSched = ArrayRef<VSUnit*>(AllSUs);
+  // Temporary Hack: Merge the data-path SU vector into the control-path SU
+  // vector.
+  CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
 }
 
-void VSchedGraph::resetSchedule(unsigned MII) {
-  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+void VSchedGraph::resetCPSchedule(unsigned MII) {
+  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }
@@ -258,6 +246,13 @@ void VSchedGraph::resetSchedule(unsigned MII) {
   VSUnit *ExitRoot = getExitRoot();
   for (dep_it I = ExitRoot->dep_begin(), E = ExitRoot->dep_end(); I != E; ++I)
     if (I->isPHI()) I.getEdge().setLatency(MII);
+}
+
+void VSchedGraph::resetDPSchedule() {
+  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    U->resetSchedule();
+  }
 }
 
 void VSchedGraph::scheduleLoop() {
@@ -307,7 +302,7 @@ void VSchedGraph::scheduleLoop() {
   assert(succ && "Cannot remember II!");
   (void) succ;
 
-  fixPHISchedules(begin(), begin() + num_scheds());
+  fixPHISchedules(cp_begin(), cp_end());
 }
 
 void VSchedGraph::viewGraph() {
@@ -401,9 +396,8 @@ void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
 }
 
 void VSchedGraph::addSoftConstraintsToBreakChains(SDCSchedulingBase &S) {
-  for (iterator I = begin(), E = end(); I != E; ++I) {
+  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
     VSUnit *U = *I;
-    if (U->isControl()) continue;
 
     // Add soft constraints to prevent CtrlOps from being chained by Data-path Ops.
     assert(U->num_instrs() == 1 && "Data-path SU with more than 1 MIs!");
@@ -481,15 +475,11 @@ void VSchedGraph::scheduleDatapath() {
   }
 
   // Break the multi-cycles chains to expose more FU sharing opportunities.
-  for (iterator I = begin(), E = end(); I != E; ++I) {
-    VSUnit *U = *I;
-    if (U->isControl()) clearDanglingFlagForTree(U);
-  }
+  for (iterator I = cp_begin(), E = cp_end(); I != E; ++I)
+    if ((*I)->isControl()) clearDanglingFlagForTree(*I);
 
-  for (iterator I = begin(), E = end(); I != E; ++I) {
+  for (iterator I = dp_begin(), E = dp_end(); I != E; ++I) {
     VSUnit *U = *I;
-
-    if (U->isControl()) continue;
 
     if (U->isDangling()) U->scheduledTo(getEndSlot(U->getParentBB()));
 
