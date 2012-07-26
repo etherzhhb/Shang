@@ -210,14 +210,6 @@ void VSchedGraph::topologicalSortCPSUs() {
   assert(Idx == num_cps(this) && "Bad topological sort!");
 }
 
-void VSchedGraph::prepareForDatapathSched() {
-  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
-    VSUnit *U = *I;
-    assert(U->isControl() && "Unexpected datapath op in to schedule list!");
-    U->cleanCPDepAndUse();
-  }
-}
-
 void VSchedGraph::resetCPSchedule(unsigned MII) {
   for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
     VSUnit *U = *I;

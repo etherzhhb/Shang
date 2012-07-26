@@ -151,13 +151,15 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   typedef VSchedGraph::iterator iterator;
   void addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU);
-  void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB);
-  void buildDataPathGraph(VSchedGraph &G);
+  void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB,
+                             std::vector<VSUnit*> &NewSUs);
+  void buildDataPathGraph(VSchedGraph &G, ArrayRef<VSUnit*> NewSUs);
 
   void buildPipeLineDepEdges(VSchedGraph &G);
 
   typedef MachineBasicBlock::iterator instr_it;
-  void buildExitRoot(VSchedGraph &G, MachineInstr *FirstTerminator);
+  void buildExitRoot(VSchedGraph &G, MachineInstr *FirstTerminator,
+                     std::vector<VSUnit*> &NewSUs);
 
   void buildTerminatorDeps(VSchedGraph &G, VSUnit *Terminator);
 
@@ -238,8 +240,6 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   DEBUG(G.viewGraph());
   G.scheduleControlPath();
-
-  buildDataPathGraph(G);
   DEBUG(G.viewGraph());
   G.scheduleDatapath();
 
@@ -647,7 +647,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       const MachineOperand &MO = MI->getOperand(i);
       VSUnit *Dep = getDefSU(MO, G, DepSrc);
       // Avoid self-edge
-      if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isScheduled()))
+      if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isControl()))
         continue;
 
       // Dirty Hack: Get the detail latency.
@@ -945,7 +945,8 @@ void VPreRegAllocSched::addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU) {
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
-                                      MachineInstr *FirstTerminator) {
+                                      MachineInstr *FirstTerminator,
+                                      std::vector<VSUnit*> &NewSUs) {
   SmallVector<MachineInstr*, 8> Exits;
   // We need wait all operation finish before the exit operation active, compute
   // the latency from operations need to wait to the exit operation.
@@ -966,11 +967,13 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     if (G.isLoopOp(I)) {
       VSUnit *LoopOp = G.createVSUnit(MI);
       addChainDepForSU<false>(LoopOp, G);
+      NewSUs.push_back(LoopOp);
       continue;
     }
   }
   
   VSUnit *ExitSU = G.createTerminator(MBB);
+  NewSUs.push_back(ExitSU);
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;
     // Ignore the VOpMvPhis, which are handled, and also ignore the looping-back
@@ -1033,22 +1036,22 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   buildTerminatorDeps(G, ExitSU);
 }
 
-void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
-                                              MachineBasicBlock *MBB) {
+void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G, 
+                                              MachineBasicBlock *MBB,
+                                              std::vector<VSUnit*> &NewSUs) {
   instr_it BI = MBB->begin();
-  std::vector<VSUnit*> SUs;
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
     G.addInstr(MI);
     if (VSUnit *U = buildSUnit(MI, G))
-      SUs.push_back(U);
+      NewSUs.push_back(U);
 
     ++BI;
   }
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   typedef std::vector<VSUnit*>::iterator it;
-  for (it I = SUs.begin(), E = SUs.end(); I != E; ++I)
+  for (it I = NewSUs.begin(), E = NewSUs.end(); I != E; ++I)
     if ((*I)->isControl()) addChainDepForSU<false>(*I, G);
 
   // Merge the loop PHI moves into the PHI Node, after the intra iteration
@@ -1064,33 +1067,28 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
   }
 
   // Create the exit node, now BI points to the first terminator.
-  buildExitRoot(G, BI);
+  buildExitRoot(G, BI, NewSUs);
 
   // Build loop edges if necessary.
   if (G.enablePipeLine()) buildPipeLineDepEdges(G);
 
   // Build the memory edges.
-  buildMemDepEdges(G, SUs);
+  buildMemDepEdges(G, NewSUs);
 }
 
-void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
-  G.prepareForDatapathSched();
-
-  for (iterator I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
+void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G,
+                                           ArrayRef<VSUnit*> NewSUs) {
+  typedef ArrayRef<VSUnit*>::iterator iterator;
+  for (iterator I = NewSUs.begin(), E = NewSUs.end(); I != E; ++I)
     addValDep(G, *I);
-
-  for (iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
-    addValDep(G, *I);
-
-  // Verify the schedule graph.
-  G.verify();
 }
 
 void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
                                           MachineBasicBlock *VExit) {
   VSchedGraph LocalG(G.DLInfo, true, 1);
+  std::vector<VSUnit*> NewSUs;
   VSUnit *CurEntry = LocalG.createVSUnit(MBB);
-  buildControlPathGraph(LocalG, MBB);
+  buildControlPathGraph(LocalG, MBB, NewSUs);
   // Todo: Simply set the terminator SU as the exit root?
   LocalG.createExitRoot(VExit);
   LocalG.verify();
@@ -1100,6 +1098,7 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   for (it I = G.mergeSUsInSubGraph(LocalG), E = cp_end(&G); I != E; ++I)
     addChainDepForSU<true>(*I, G);
 
+  buildDataPathGraph(G, NewSUs);
   addDepsForBBEntry(G, CurEntry);
 }
 
@@ -1108,6 +1107,7 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
                                                    MachineBasicBlock *VExit) {  
   ReversePostOrderTraversal<MachineBasicBlock*> Ord(Entry);
   typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+  std::vector<VSUnit*> NewSUs;
 
   for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
@@ -1121,7 +1121,9 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 
     VSUnit *CurEntry = G.createVSUnit(MBB);
     addDepsForBBEntry(G, CurEntry);
-    buildControlPathGraph(G, MBB);
+    NewSUs.clear();
+    buildControlPathGraph(G, MBB, NewSUs);
+    buildDataPathGraph(G, NewSUs);
   }
 
   G.createExitRoot(VExit);
