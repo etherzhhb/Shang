@@ -50,6 +50,7 @@ add_public_tablegen_target(VerilogBackendTableGen)
 add_llvm_target(VerilogBackend
   BBDelayAnalysis.cpp
   DatapathCodehMotion.cpp
+  DataPathPromotion.cpp
   DeadMemOpElimination.cpp
   FixMachineCode.cpp
   FixTerminators.cpp

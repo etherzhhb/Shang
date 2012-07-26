@@ -74,6 +74,7 @@ Pass *createRtlSSAAnalysisPass();
 Pass *createVerilogASTBuilderPass();
 Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
+Pass *createDataPathPromotionPass();
 
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
