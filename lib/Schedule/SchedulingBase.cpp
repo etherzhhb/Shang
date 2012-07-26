@@ -27,7 +27,8 @@
 
 using namespace llvm;
 //===----------------------------------------------------------------------===//
-void Scheduler::buildTimeFrame() {
+template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::buildTimeFrame() {
   VSUnit *EntryRoot = G.getEntryRoot();
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
 
@@ -42,7 +43,8 @@ void Scheduler::buildTimeFrame() {
   DEBUG(dumpTimeFrame());
 }
 
-unsigned Scheduler::calculateASAP(const VSUnit * A) {
+template<bool IsCtrlPath>
+unsigned Scheduler<IsCtrlPath>::calculateASAP(const VSUnit * A) {
   unsigned NewStep = 0;
   for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI) {
     const VSUnit *Dep = *DI;
@@ -62,7 +64,8 @@ unsigned Scheduler::calculateASAP(const VSUnit * A) {
   return NewStep;
 }
 
-void Scheduler::buildASAPStep() {
+template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::buildASAPStep() {
   bool NeedToReCalc = true;
 
   // Build the time frame iteratively.
@@ -102,7 +105,8 @@ void Scheduler::buildASAPStep() {
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-unsigned Scheduler::calculateALAP(const VSUnit *A) {
+template<bool IsCtrlPath>
+unsigned Scheduler<IsCtrlPath>::calculateALAP(const VSUnit *A) {
   unsigned NewStep = VSUnit::MaxSlot;
   for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
     const VSUnit *Use = *UI;
@@ -129,7 +133,8 @@ unsigned Scheduler::calculateALAP(const VSUnit *A) {
   return NewStep;
 }
 
-void Scheduler::buildALAPStep() {
+template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::buildALAPStep() {
   const VSUnit *Exit = G.getExitRoot();
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit].second = LastSlot;
@@ -170,7 +175,8 @@ void Scheduler::buildALAPStep() {
   }
 }
 
-void Scheduler::printTimeFrame(raw_ostream &OS) const {
+template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (su_it I = su_begin(G), E = su_end(G); I != E; ++I) {
     const VSUnit *A = *I;
@@ -185,17 +191,22 @@ void Scheduler::printTimeFrame(raw_ostream &OS) const {
   }
 }
 
-void Scheduler::dumpTimeFrame() const {
+template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-unsigned Scheduler::buildTimeFrameAndResetSchedule(bool reset) {
+template<bool IsCtrlPath>
+unsigned Scheduler<IsCtrlPath>::buildTimeFrameAndResetSchedule(bool reset) {
   if (reset) G.resetSchedule(getMII());
 
   buildTimeFrame();
 
   return CriticalPathEnd;
 }
+
+template class Scheduler<true>;
+template class Scheduler<false>;
 
 unsigned SchedulingBase::computeResMII() {
   // FIXME: Compute the resource area cost

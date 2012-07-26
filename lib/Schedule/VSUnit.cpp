@@ -400,7 +400,7 @@ void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
   }
 }
 
-void VSchedGraph::addSoftConstraintsToBreakChains(SDCScheduler &S) {
+void VSchedGraph::addSoftConstraintsToBreakChains(SDCSchedulingBase &S) {
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *U = *I;
     if (U->isControl()) continue;
@@ -446,8 +446,27 @@ void VSchedGraph::addSoftConstraintsToBreakChains(SDCScheduler &S) {
   }
 }
 
+void VSchedGraph::scheduleControlPath() {
+  SDCScheduler<true> Scheduler(*this);
+
+  Scheduler.buildTimeFrameAndResetSchedule(true);
+  BasicLinearOrderGenerator::addLinOrdEdge(Scheduler);
+  // Build the step variables, and no need to schedule at all if all SUs have
+  // been scheduled.
+  if (!Scheduler.createLPAndVariables()) return;
+
+  Scheduler.buildASAPObject(1.0);
+  //Scheduler.buildOptSlackObject(0.0);
+
+  bool success = Scheduler.schedule();
+  assert(success && "SDCScheduler fail!");
+  (void) success;
+
+  Scheduler.fixInterBBLatency(*this);
+}
+
 void VSchedGraph::scheduleDatapath() {
-  SDCScheduler Scheduler(*this);
+  SDCScheduler<false> Scheduler(*this);
 
   if (Scheduler.createLPAndVariables()) {
     // Add soft constraints to break the chain.

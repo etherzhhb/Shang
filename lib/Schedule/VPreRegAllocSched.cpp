@@ -175,7 +175,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void scheduleWholeFunctionBySDC(VSchedGraph &G);
   void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
                                   MachineBasicBlock *VExit);
   void pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
@@ -238,7 +237,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 
   DEBUG(G.viewGraph());
-  scheduleWholeFunctionBySDC(G);
+  G.scheduleControlPath();
 
   buildDataPathGraph(G);
   DEBUG(G.viewGraph());
@@ -1133,25 +1132,6 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   G.prepareForCtrlSched();
   // Verify the schedule graph.
   G.verify();
-}
-
-void VPreRegAllocSched::scheduleWholeFunctionBySDC(VSchedGraph &G) {
-  SDCScheduler Scheduler(G);
-
-  Scheduler.buildTimeFrameAndResetSchedule(true);
-  BasicLinearOrderGenerator::addLinOrdEdge(Scheduler);
-  // Build the step variables, and no need to schedule at all if all SUs have
-  // been scheduled.
-  if (!Scheduler.createLPAndVariables()) return;
-
-  Scheduler.buildASAPObject(1.0);
-  //Scheduler.buildOptSlackObject(0.0);
-
-  bool success = Scheduler.schedule();
-  assert(success && "SDCScheduler fail!");
-  (void) success;
-
-  Scheduler.fixInterBBLatency(G);
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {

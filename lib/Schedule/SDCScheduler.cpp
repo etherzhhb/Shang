@@ -355,7 +355,8 @@ void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
   assert(WorkStack.back().first == ExitRoot && "Stack broken!");
 }
 
-void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
+template<bool IsCtrlPath>
+void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp, const VSUnit *U) {
   unsigned DstIdx = 0;
   int DstSlot = U->getSlot();
   if (DstSlot == 0) DstIdx = getSUIdx(U);
@@ -402,12 +403,14 @@ void SDCScheduler::addDependencyConstraints(lprec *lp, const VSUnit *U) {
   }
 }
 
-void SDCScheduler::addDependencyConstraints(lprec *lp) {
+template<bool IsCtrlPath>
+void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
   for(VSchedGraph::sched_iterator I = su_begin(G), E = su_end(G); I != E; ++I)
     addDependencyConstraints(lp, *I);
 }
 
-bool SDCScheduler::schedule() {
+template<bool IsCtrlPath>
+bool SDCScheduler<IsCtrlPath>::schedule() {
   ObjFn.setLPObj(lp);
 
   set_add_rowmode(lp, TRUE);
@@ -431,3 +434,6 @@ bool SDCScheduler::schedule() {
   ObjFn.clear();
   return true;
 }
+
+template class SDCScheduler<false>;
+template class SDCScheduler<true>;

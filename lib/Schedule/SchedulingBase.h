@@ -89,7 +89,7 @@ public:
   VSchedGraph *operator*() const { return &G; }
   VSchedGraph *operator->() const { return &G; }
 
-  virtual bool scheduleState() = 0;
+  virtual bool scheduleState() { return false; };
   // Return true when resource constraints preserved after citical path
   // scheduled
   typedef VSchedGraph::sched_iterator su_it;
@@ -161,8 +161,10 @@ public:
   void viewGraph();
 };
 
+template<bool IsCtrlPath>
 class Scheduler : public SchedulingBase {
 protected:
+  friend class SchedulingBase;
   explicit Scheduler(VSchedGraph &S) : SchedulingBase(S) {}
 
   // Helper function for SU traversing, SU dependencies traversing and SU users
@@ -229,20 +231,23 @@ template <> struct GraphTraits<SchedulingBase*>
   }
 };
 
-class IterativeModuloScheduling : public Scheduler {
+EXTERN_TEMPLATE_INSTANTIATION(class Scheduler<false>);
+EXTERN_TEMPLATE_INSTANTIATION(class Scheduler<true>);
+
+class IterativeModuloScheduling : public Scheduler<true> {
   std::map<const VSUnit*, std::set<unsigned> > ExcludeSlots;
 
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
   VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
-  IterativeModuloScheduling(VSchedGraph &S) : Scheduler(S) {}
+  IterativeModuloScheduling(VSchedGraph &S) : Scheduler<true>(S) {}
 
   bool scheduleState();
 };
 
-struct ASAPScheduler : public Scheduler {
-  ASAPScheduler(VSchedGraph &S) : Scheduler(S) {}
+struct ASAPScheduler : public Scheduler<true> {
+  ASAPScheduler(VSchedGraph &S) : Scheduler<true>(S) {}
 
   bool scheduleState();
 };
@@ -321,7 +326,6 @@ public:
   // multi-cycles chains. Hence we need to fix the schedule, the implement detail
   // should be hidden by the function.
   void fixInterBBLatency(VSchedGraph &G);
-
 protected:
   lprec *lp;
   LPObjFn ObjFn;
@@ -359,12 +363,20 @@ private:
                               const B2SMapTy &Map, unsigned MinSlotsForEntry);
 };
 
-class SDCScheduler : public SDCSchedulingBase, public Scheduler {
+template<bool IsCtrlPath>
+class SDCScheduler : public SDCSchedulingBase, public Scheduler<IsCtrlPath> {
   // The schedule should satisfy the dependences.
   void addDependencyConstraints(lprec *lp);
   void addDependencyConstraints(lprec *lp, const VSUnit *U);
+
+  using SchedulingBase::G;
+  typedef typename Scheduler<IsCtrlPath>::const_dep_it const_dep_it;
+  using Scheduler<IsCtrlPath>::dep_begin;
+  using Scheduler<IsCtrlPath>::dep_end;
+  using Scheduler<IsCtrlPath>::su_begin;
+  using Scheduler<IsCtrlPath>::su_end;
 public:
-  explicit SDCScheduler(VSchedGraph &S) : Scheduler(S) {}
+  explicit SDCScheduler(VSchedGraph &S) : Scheduler<IsCtrlPath>(S) {}
 
   unsigned createLPAndVariables() {
     return SDCSchedulingBase::createLPAndVariables(su_begin(G), su_end(G));
@@ -374,14 +386,10 @@ public:
     SDCSchedulingBase::buildASAPObject(su_begin(G), su_end(G), weight);
   }
 
-  // Do nothing.
-  bool scheduleState() {
-    return false;
-  }
-
   bool schedule();
 };
 
-
+EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<false>);
+EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<true>);
 } // End namespace.
 #endif

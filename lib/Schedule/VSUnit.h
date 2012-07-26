@@ -38,7 +38,8 @@
 
 namespace llvm {
 class BitLevelInfo;
-class SDCScheduler;
+class SDCSchedulingBase; 
+template<bool> class SDCScheduler;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
@@ -492,7 +493,7 @@ private:
 
   static void clearDanglingFlagForTree(VSUnit *Root);
 
-  void addSoftConstraintsToBreakChains(SDCScheduler &S);
+  void addSoftConstraintsToBreakChains(SDCSchedulingBase &S);
 public:
   const unsigned EntrySlot;
 
@@ -698,6 +699,7 @@ public:
   void scheduleLoop();
   // Schedule datapath operations as late as possible after control operations
   // scheduled, this can reduce register usage.
+  void scheduleControlPath();
   void scheduleDatapath();
   unsigned emitSchedule();
   //}
