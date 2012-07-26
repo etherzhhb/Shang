@@ -436,20 +436,26 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case VTMISD::ADDCS:{    
-    return SelectSimpleNode(N, VTM::VOpAdd_c);
+  case VTMISD::ADDCS:{
+    unsigned FUSize = VTargetLowering::computeSizeInBits(SDValue(N, 0)) - 1;
+    unsigned Opcode = SelectOpCode<VFUs::AddSub, VTM::VOpAdd_c, VTM::VOpAdd>(FUSize);
+    return SelectSimpleNode(N, Opcode);
   }
 
   case VTMISD::ICmp:{
-    return SelectSimpleNode(N, VTM::VOpICmp_c);
+    unsigned Opcode = SelectOpCode<VFUs::ICmp, VTM::VOpICmp_c, VTM::VOpICmp>(N);
+    return SelectSimpleNode(N, Opcode);
   }
 
   case ISD::MUL:{
-    return SelectBinary(N, VTM::VOpMult_c);
+    unsigned Opcode = SelectOpCode<VFUs::Mult, VTM::VOpMult_c, VTM::VOpMult>(N);
+    return SelectBinary(N, Opcode);
   }
 
   case VTMISD::MULHiLo:{
-    return SelectBinary(N, VTM::VOpMultLoHi_c);
+    unsigned Opcode =
+      SelectOpCode<VFUs::Mult, VTM::VOpMultLoHi_c, VTM::VOpMultLoHi>(N);
+    return SelectBinary(N, Opcode);
   }
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
