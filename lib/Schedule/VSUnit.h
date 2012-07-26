@@ -230,7 +230,7 @@ private:
   VSUnit *updateIdx(unsigned short Idx);
   void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
-  void cleanDepAndUse() {
+  void cleanCPDepAndUse() {
     CPDeps.clear();
     DPDeps.clear();
     CPUseList.clear();

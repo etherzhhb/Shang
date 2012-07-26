@@ -139,7 +139,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   assert(Terminator && "Terminator SU not found!");
   // We need to clear the dependencies of the terminator before we adding
   // local schedule constraint.
-  Terminator->cleanDepAndUse();
+  Terminator->cleanCPDepAndUse();
   unsigned TerminatorSlot = Terminator->getSlot();
 
   for (iterator I = cp_begin(&SubGraph), E = cp_end(&SubGraph); I != E; ++I) {
@@ -166,7 +166,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
     assert(USlot && "Unexpected unscheduled SU!");
     unsigned ScheduleOffset = TerminatorSlot - USlot;
     // We need to build the new dependencies.
-    U->cleanDepAndUse();
+    U->cleanCPDepAndUse();
     // A dependencies to constrain the SU with local schedule.
     VDEdge FixedTimingEdge = VDEdge::CreateFixTimingConstraint(ScheduleOffset);
     Terminator->addDep<true>(U, FixedTimingEdge);
@@ -214,7 +214,7 @@ void VSchedGraph::prepareForDatapathSched() {
   for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
     VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath op in to schedule list!");
-    U->cleanDepAndUse();
+    U->cleanCPDepAndUse();
   }
 }
 

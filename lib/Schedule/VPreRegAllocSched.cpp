@@ -145,16 +145,16 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return G.lookupSUnit(Dep);
   }
 
-  void buildMemDepEdges(VSchedGraph &G, MachineBasicBlock *MBB);
+  void buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs);
 
   bool couldBePipelined(const MachineBasicBlock *MBB);
 
-  typedef VSchedGraph::iterator su_it;
+  typedef VSchedGraph::iterator iterator;
   void addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU);
   void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB);
   void buildDataPathGraph(VSchedGraph &G);
 
-  void buildPipeLineDepEdges(VSchedGraph &G, MachineBasicBlock *MBB);
+  void buildPipeLineDepEdges(VSchedGraph &G);
 
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &G, MachineInstr *FirstTerminator);
@@ -350,16 +350,16 @@ static inline bool mayAccessMemory(const MCInstrDesc &TID) {
   return TID.mayLoad() || TID.mayStore() || TID.isCall();
 }
 
-void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
-                                         MachineBasicBlock *MBB) {
+void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
   // The schedule unit and the corresponding memory operand.
   typedef std::vector<std::pair<MachineMemOperand*, VSUnit*> > MemOpMapTy;
-  MemOpMapTy VisitedMemOps;
+  MemOpMapTy VisitedOps;
   Loop *IRL = LI->getLoopFor(G.getEntryBB()->getBasicBlock());
 
-  typedef MachineBasicBlock::instr_iterator it;
-  for (it I = MBB->instr_begin(), E = MBB->instr_end(); I != E; ++I) {
-    MachineInstr *DstMI = I;
+  typedef ArrayRef<VSUnit*>::iterator it;
+  for (it I = SUs.begin(), E = SUs.end(); I != E; ++I) {
+    VSUnit *DstU = *I;
+    MachineInstr *DstMI = DstU->getRepresentativePtr();
     // Skip the non-memory operation and non-call operation.
     if (!mayAccessMemory(DstMI->getDesc())) continue;
 
@@ -379,11 +379,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
       }
     }
 
-    VSUnit *DstU = G.lookupSUnit(DstMI);
-    assert(DstU && "VSUnit for memory access not found!");
-
-    for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
-         I != E; ++I) {
+    typedef MemOpMapTy::iterator visited_it;
+    for (visited_it I = VisitedOps.begin(), E = VisitedOps.end(); I != E; ++I) {
       MachineMemOperand *SrcMO = I->first;
       VSUnit *SrcU = I->second;
 
@@ -450,7 +447,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G,
     }
 
     // Add the schedule unit to visited map.
-    VisitedMemOps.push_back(std::make_pair(DstMO, DstU));
+    VisitedOps.push_back(std::make_pair(DstMO, DstU));
   }
 }
 
@@ -756,17 +753,16 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   return FInfo->getInfo().enablePipeLine();
 }
 
-void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G,
-                                              MachineBasicBlock *CurBB) {
+void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G) {
   VSUnit *LoopOp = G.getLoopOp();
   assert(LoopOp && "Not in loop?");
+  MachineBasicBlock *CurBB = G.getEntryBB();
   VSUnit *CurTerminator = G.lookUpTerminator(CurBB);
   assert(LoopOp != CurTerminator && "Pipeline not enable!");
 
-  for (instr_it I = CurBB->begin(), E = CurBB->end();I != E && I->isPHI(); ++I) {
-    MachineInstr &PN = *I;
-    VSUnit *PHISU = G.lookupSUnit(&PN);
-    assert(PHISU && "Can not find SUnit for PHI!");
+  for (iterator I = cp_begin(&G) + 1, E = cp_end(&G);
+       I != E && (*I)->isPHI(); ++I) {
+    VSUnit *PHISU = *I;
 
     // Add dependence from PHI incoming value:
     // PHI_incoming -(RAW dep)-> PHI_at_next_iteration.
@@ -860,8 +856,7 @@ VSUnit *VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   case VTM::PHI:
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!G.enablePipeLine()) {
-      G.mapMI2SU(MI, G.lookupSUnit(MI->getParent()),
-                        G.getStepsFromEntry(MI));
+      G.mapMI2SU(MI, G.lookupSUnit(MI->getParent()), G.getStepsFromEntry(MI));
       return 0;
     }
     break;
@@ -1072,19 +1067,19 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
   buildExitRoot(G, BI);
 
   // Build loop edges if necessary.
-  if (G.enablePipeLine()) buildPipeLineDepEdges(G, MBB);
+  if (G.enablePipeLine()) buildPipeLineDepEdges(G);
 
   // Build the memory edges.
-  buildMemDepEdges(G, MBB);
+  buildMemDepEdges(G, SUs);
 }
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G) {
   G.prepareForDatapathSched();
 
-  for (su_it I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
+  for (iterator I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
     addValDep(G, *I);
 
-  for (su_it I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
+  for (iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
     addValDep(G, *I);
 
   // Verify the schedule graph.
