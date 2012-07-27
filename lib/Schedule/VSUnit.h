@@ -22,6 +22,7 @@
 
 #include "vtm/VInstrInfo.h"
 #include "vtm/FUInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -713,6 +714,25 @@ public:
 
     CPSUs.push_back(SU);
     return SU;
+  }
+  // Use mapped_iterator which is a simple iterator adapter that causes a
+  // function to be dereferenced whenever operator* is invoked on the iterator.
+  typedef
+  std::pointer_to_unary_function<std::pair<MachineBasicBlock*, VSUnit*>,
+                                 MachineBasicBlock*>
+  bb_getter;
+
+  typedef mapped_iterator<TerminatorMapTy::const_iterator, bb_getter>
+  bb_iterator;
+
+  bb_iterator bb_begin() const {
+    return map_iterator(Terminators.begin(),
+                        bb_getter(pair_first<MachineBasicBlock*, VSUnit*>));
+  }
+
+  bb_iterator bb_end() const {
+    return map_iterator(Terminators.end(),
+                        bb_getter(pair_first<MachineBasicBlock*, VSUnit*>));
   }
 
   VSUnit *lookUpTerminator(MachineBasicBlock *MBB) const {
