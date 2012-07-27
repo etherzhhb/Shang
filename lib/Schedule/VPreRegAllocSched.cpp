@@ -700,7 +700,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (NumValDep == 0 && !A->isScheduled())
-    A->addDep<true>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
+    A->addDep<false>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
 }
 
 template<bool CrossBBOnly>
