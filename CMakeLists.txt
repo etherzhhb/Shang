@@ -48,7 +48,6 @@ tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
 
 add_llvm_target(VerilogBackend
-  BBDelayAnalysis.cpp
   DatapathCodehMotion.cpp
   DeadMemOpElimination.cpp
   FixMachineCode.cpp

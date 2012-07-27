@@ -514,31 +514,6 @@ public:
     return getStepsToFinish(SrcInstr);
   }
 };
-
-// Compute the cycle latency of a given MBB.
-class CycleLatencyInfo : public DetialLatencyInfo {
-  typedef std::map<const MachineInstr*, unsigned> DepLatencyMap;
-  DepLatencyMap DepInfo;
-
-  typedef std::map<unsigned, std::pair<const MachineInstr*, unsigned> >
-          FULatencyInfo;
-  FULatencyInfo FUInfo;
-
-  unsigned updateFULatency(unsigned FUId, unsigned Latency, MachineInstr *MI);
-
-public:
-  CycleLatencyInfo(MachineRegisterInfo &MRI) : DetialLatencyInfo(MRI) {
-    reset();
-  }
-
-  unsigned computeLatency(MachineBasicBlock &MBB, bool reset = false);
-
-  void reset() {
-    DetialLatencyInfo::reset();
-    FUInfo.clear();
-    DepInfo.clear();
-  }
-};
 } // end namespace llvm
 
 #endif
