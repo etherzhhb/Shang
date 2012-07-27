@@ -27,9 +27,6 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
-#include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Target/TargetData.h"
-#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -59,8 +56,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // The loop Info
   MachineRegisterInfo *MRI;
   VFInfo *FInfo;
-
-  TargetData *TD;
 
   MachineLoopInfo *MLI;
   LoopInfo *LI;
@@ -185,12 +180,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   bool cleanUpRegisterClass(unsigned RegNum, const TargetRegisterClass *RC);
-
-  bool doInitialization(Module &M) {
-    TD = getAnalysisIfAvailable<TargetData>();
-    assert(TD && "TargetData will always available in a machine function pass!");
-    return false;
-  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void print(raw_ostream &O, const Module *M) const;
