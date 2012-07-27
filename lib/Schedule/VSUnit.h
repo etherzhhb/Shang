@@ -153,6 +153,7 @@ public:
   class VSUnitDepIterator : public IteratorType {
     typedef VSUnitDepIterator<IteratorType, IsConst> Self;
     typedef typename conditional<IsConst, const VSUnit, VSUnit>::type NodeType;
+    typedef typename conditional<IsConst, const VDEdge, VDEdge>::type EdgeType;
   public:
     VSUnitDepIterator(IteratorType i) : IteratorType(i) {}
 
@@ -162,7 +163,7 @@ public:
 
     NodeType *operator->() const { return operator*(); }
 
-    VDEdge getEdge() const { return IteratorType::operator->()->second; }
+    EdgeType &getEdge() const { return IteratorType::operator->()->second; }
 
     Self& operator++() {                // Preincrement
       IteratorType::operator++();
@@ -297,16 +298,29 @@ public:
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
   template<bool IsCtrlPath>
+  dep_iterator getDepIt(const VSUnit *A) {
+    return IsCtrlPath ? CPDeps.find(const_cast<VSUnit*>(A))
+                      : DPDeps.find(const_cast<VSUnit*>(A));
+  }
+
+  template<bool IsCtrlPath>
+  VDEdge &getEdgeFrom(const VSUnit *A) {
+    assert(isDepOn<IsCtrlPath>(A) && "Current atom not depend on A!");
+    return getDepIt<IsCtrlPath>(A).getEdge();
+  }
+
+  template<bool IsCtrlPath>
   const_dep_iterator getDepIt(const VSUnit *A) const {
     return IsCtrlPath ? CPDeps.find(const_cast<VSUnit*>(A))
                       : DPDeps.find(const_cast<VSUnit*>(A));
   }
 
   template<bool IsCtrlPath>
-  VDEdge getEdgeFrom(const VSUnit *A) const {
+  const VDEdge &getEdgeFrom(const VSUnit *A) const {
     assert(isDepOn<IsCtrlPath>(A) && "Current atom not depend on A!");
     return getDepIt<IsCtrlPath>(A).getEdge();
   }
+
   //}
 
   /// @name Use

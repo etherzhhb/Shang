@@ -1131,25 +1131,27 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   BasicLinearOrderGenerator::addLinOrdEdge(Scheduler);
   // Build the step variables, and no need to schedule at all if all SUs have
   // been scheduled.
-  if (Scheduler.createLPAndVariables()) {
-    //Scheduler.buildASAPObject(1.0);
-    //Scheduler.buildOptSlackObject(0.0);
-    for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I) {
-      MachineBasicBlock *MBB = *I;
-      double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
-      DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
-      // Min (BBEnd - BBStart) * BBFreq;
-      // => Max BBStart * BBFreq - BBEnd * BBFreq.
-      Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
-      Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
+  do {
+    Scheduler->resetCPSchedule(0);
+    if (Scheduler.createLPAndVariables()) {
+      //Scheduler.buildASAPObject(1.0);
+      //Scheduler.buildOptSlackObject(0.0);
+      for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I) {
+        MachineBasicBlock *MBB = *I;
+        double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
+        DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
+        // Min (BBEnd - BBStart) * BBFreq;
+        // => Max BBStart * BBFreq - BBEnd * BBFreq.
+        Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
+        Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
+      }
+
+      bool success = Scheduler.schedule();
+      assert(success && "SDCScheduler fail!");
+      (void) success;
+
     }
-
-    bool success = Scheduler.schedule();
-    assert(success && "SDCScheduler fail!");
-    (void) success;
-
-    Scheduler.fixInterBBLatency(G);
-  }
+  } while (Scheduler.fixInterBBLatency(G));
 
   G.scheduleDatapath();
 }

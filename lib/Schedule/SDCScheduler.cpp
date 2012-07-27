@@ -291,7 +291,7 @@ int SDCSchedulingBase::calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
       // Calculate the latency distributed between the SrcBB and the SnkBB.
       assert(USlot >= EntrySlot && SrcTerminator->getSlot() >= DI->getSlot()
               && "Bad schedule!");
-      int InterBBLatency = DI->getLatency() - (USlot - EntrySlot)
+      int InterBBLatency = DI.getLatency() - (USlot - EntrySlot)
                             - (SrcTerminator->getSlot() - DI->getSlot());
       // Calculate the minimal latency between the SrcBB and SnkBB.
       int ActualInterBBlatency = MinSlotsForEntry - SrcExitSlot;
@@ -300,6 +300,13 @@ int SDCSchedulingBase::calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
                               << ActualInterBBlatency << '\n');
       // Calculate the slack.
       int Slack = ActualInterBBlatency - InterBBLatency;
+      if (Slack >= 0) continue;
+
+      VDEdge &EdgeToFix = !U->hasFixedTiming() ?
+                          U->getEdgeFrom<true>(BBEntry) :
+                          SrcTerminator->getEdgeFrom<true>(*DI);
+
+      EdgeToFix.setLatency(EdgeToFix.getLatency() - Slack);
       MinInterBBSlack = std::min<int>(MinInterBBSlack, Slack);
     }
   }
@@ -307,20 +314,25 @@ int SDCSchedulingBase::calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
   return MinInterBBSlack;
 }
 
-void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
+bool SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
+  bool AnyLatencyFixed = false;
+
   B2SMapTy ExitSlots(G.num_bbs(), 0);
+  std::set<VSUnit*> Visited;
 
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
   VSUnit *ExitRoot = G.getExitRoot();
   WorkStack.push_back(std::make_pair(ExitRoot, cp_begin(ExitRoot)));
 
   // Visit the blocks in topological order, and ignore the pseudo exit node.
-  while (WorkStack.size() > 1) {
+  while (!WorkStack.empty()) {
     VSUnit *U = WorkStack.back().first;
     VSUnit::dep_iterator ChildIt = WorkStack.back().second;
 
     if (ChildIt == cp_end(U)) {
       WorkStack.pop_back();
+
+      if (WorkStack.size() == 1) break;
 
       // All dependencies visited, now visit the current BBEntry.
       assert(U->isBBEntry() && "Unexpected non-entry node!");
@@ -330,12 +342,10 @@ void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
         calulateMinInterBBSlack(U, G, ExitSlots, SlotsFromEntry);
 
       DEBUG(dbgs() << "Minimal Slack: " << MinInterBBSlack << '\n');
-      assert(MinInterBBSlack == 0
-             && "Inserting delay block to fix negative slack is not yet"
-                " implemented!");
 
+      AnyLatencyFixed |= MinInterBBSlack < 0;
       MachineBasicBlock *MBB = U->getParentBB();
-      unsigned ExitSlot = SlotsFromEntry + G.getTotalSlot(MBB);
+      unsigned ExitSlot = SlotsFromEntry + G.getTotalSlot(MBB) - MinInterBBSlack;
       assert(ExitSlot && "Bad schedule!");
       ExitSlots[MBB->getNumber()] = ExitSlot;
 
@@ -346,12 +356,15 @@ void SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
     ++WorkStack.back().second;
 
     assert(ChildNode->isTerminator() && "Unexpected non-terminator node!");
+    if (!Visited.insert(ChildNode).second) continue;
+
     // Jump to the entry of the parent block of the terminator.
     ChildNode = G.lookupSUnit(ChildNode->getParentBB());
     WorkStack.push_back(std::make_pair(ChildNode, cp_begin(ChildNode)));
   }
 
   assert(WorkStack.back().first == ExitRoot && "Stack broken!");
+  return AnyLatencyFixed;
 }
 
 template<bool IsCtrlPath>

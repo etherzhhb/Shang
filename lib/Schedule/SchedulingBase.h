@@ -324,7 +324,7 @@ public:
   // bb correctly, which leads to a wrong global code motion for the
   // multi-cycles chains. Hence we need to fix the schedule, the implement detail
   // should be hidden by the function.
-  void fixInterBBLatency(VSchedGraph &G);
+  bool fixInterBBLatency(VSchedGraph &G);
 
   void addObjectCoeff(const VSUnit *U, double Value) {
     // Ignore the constants.
