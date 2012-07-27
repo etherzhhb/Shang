@@ -325,6 +325,14 @@ public:
   // multi-cycles chains. Hence we need to fix the schedule, the implement detail
   // should be hidden by the function.
   void fixInterBBLatency(VSchedGraph &G);
+
+  void addObjectCoeff(const VSUnit *U, double Value) {
+    // Ignore the constants.
+    if (U->isScheduled()) return;
+    
+    ObjFn[getSUIdx(U)] += Value;
+  }
+
 protected:
   lprec *lp;
   LPObjFn ObjFn;

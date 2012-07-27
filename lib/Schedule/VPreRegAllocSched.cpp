@@ -34,8 +34,8 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
-#include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Allocator.h"
@@ -121,7 +121,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &G, MachineInstr *&Dep) {
     // Only care about the register dependences.
-    // FIXME: What about chains?
     if (!MO.isReg()) return 0;
 
     // The instruction do not depend the register defined by itself.
@@ -176,6 +175,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                                   MachineBasicBlock *VExit);
   void pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
                          MachineBasicBlock *VExit);
+  void schedule(VSchedGraph &G);
 
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
@@ -204,6 +204,8 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<LoopInfo>();
   AU.addRequired<ScalarEvolution>();
   AU.addPreserved<ScalarEvolution>();
+  AU.addRequired<MachineBlockFrequencyInfo>();
+  AU.addPreserved<MachineBlockFrequencyInfo>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
@@ -227,10 +229,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 
-  DEBUG(G.viewGraph());
-  G.scheduleControlPath();
-  DEBUG(G.viewGraph());
-  G.scheduleDatapath();
+  schedule(G);
 
   DEBUG(G.viewGraph());
   unsigned TotalCycles = G.emitSchedule();
@@ -1118,6 +1117,41 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   G.createExitRoot(VExit);
   // Verify the schedule graph.
   G.verify();
+}
+
+void VPreRegAllocSched::schedule(VSchedGraph &G) {
+  MachineBlockFrequencyInfo &MBFI = getAnalysis<MachineBlockFrequencyInfo>();
+  double FreqSum = 0.0;
+  for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I)
+    FreqSum += MBFI.getBlockFreq(*I).getFrequency();
+
+  SDCScheduler<true> Scheduler(G);
+
+  Scheduler.buildTimeFrameAndResetSchedule(true);
+  BasicLinearOrderGenerator::addLinOrdEdge(Scheduler);
+  // Build the step variables, and no need to schedule at all if all SUs have
+  // been scheduled.
+  if (Scheduler.createLPAndVariables()) {
+    //Scheduler.buildASAPObject(1.0);
+    //Scheduler.buildOptSlackObject(0.0);
+    for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I) {
+      MachineBasicBlock *MBB = *I;
+      double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
+      DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
+      // Min (BBEnd - BBStart) * BBFreq;
+      // => Max BBStart * BBFreq - BBEnd * BBFreq.
+      Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
+      Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
+    }
+
+    bool success = Scheduler.schedule();
+    assert(success && "SDCScheduler fail!");
+    (void) success;
+
+    Scheduler.fixInterBBLatency(G);
+  }
+
+  G.scheduleDatapath();
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
