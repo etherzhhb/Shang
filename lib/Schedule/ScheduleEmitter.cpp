@@ -826,6 +826,198 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   return MO;
 }
 
+typedef std::vector<unsigned> B2SMapTy;
+static unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry,
+                                           const B2SMapTy &ExitSlots) {
+  unsigned SlotsFromEntry = BBEntry->getSlot();
+
+  typedef VSUnit::dep_iterator dep_it;
+  for (dep_it I = cp_begin(BBEntry), E = cp_end(BBEntry); I != E; ++I) {
+    VSUnit *PredTerminator = *I;
+    //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
+    //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
+    //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
+
+    MachineBasicBlock *PredBB = PredTerminator->getParentBB();
+    unsigned PredDistance = ExitSlots[PredBB->getNumber()];
+    // Consider the latency of the control dependency edge.
+    assert(PredDistance && "Not visiting the BBs in topological order?");
+    SlotsFromEntry = std::min<unsigned>(SlotsFromEntry, PredDistance);
+  }
+
+  return SlotsFromEntry;
+}
+
+static int calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
+                                   const B2SMapTy &Map,
+                                   unsigned MinSlotsForEntry) {
+  unsigned EntrySlot = BBEntry->getSlot();
+  MachineBasicBlock *MBB = BBEntry->getParentBB();
+  typedef VSUnit::use_iterator use_it;
+  typedef VSUnit::dep_iterator dep_it;
+  // The minimal slack from the predecessors of the BB to the entry of the BB.
+  int MinInterBBSlack = 0;
+
+  for (use_it I = cuse_begin(BBEntry), E = cuse_end(BBEntry); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->getParentBB() != MBB) continue;
+
+    unsigned USlot = U->getSlot();
+    for (dep_it DI = cp_begin(U), DE = cp_end(U); DI != DE; ++DI) {
+      if (!DI.isCrossBB()) continue;
+
+      MachineBasicBlock *SrcBB = DI->getParentBB();
+      assert(SrcBB != MBB && "Not cross BB depenency!");
+      VSUnit *SrcTerminator = G.lookUpTerminator(SrcBB);
+      unsigned SrcExitSlot = Map[SrcBB->getNumber()];
+      assert(SrcExitSlot && "Unexpected cross BB back-edge!");
+      // Calculate the latency distributed between the SrcBB and the SnkBB.
+      assert(USlot >= EntrySlot && SrcTerminator->getSlot() >= DI->getSlot()
+              && "Bad schedule!");
+      int InterBBLatency = DI.getLatency() - (USlot - EntrySlot)
+                            - (SrcTerminator->getSlot() - DI->getSlot());
+      // Calculate the minimal latency between the SrcBB and SnkBB.
+      int ActualInterBBlatency = MinSlotsForEntry - SrcExitSlot;
+      DEBUG(dbgs().indent(4) << "Found InterBBLatency and ActualInterBBlatency"
+                              << InterBBLatency << ' '
+                              << ActualInterBBlatency << '\n');
+      // Calculate the slack.
+      int Slack = ActualInterBBlatency - InterBBLatency;
+      MinInterBBSlack = std::min<int>(MinInterBBSlack, Slack);
+    }
+  }
+
+  return MinInterBBSlack;
+}
+
+void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
+                                   MachineBasicBlock *To, unsigned Latency) {
+  MachineInstr *BRInstr = 0;
+  typedef MachineBasicBlock::reverse_instr_iterator reverse_iterator;
+
+  for (reverse_iterator I = From->instr_rbegin(), E = From->instr_rend();
+       I != E && I->isTerminator(); ++I) {
+    if (!VInstrInfo::isBrCndLike(I->getOpcode())) continue;
+
+    if (I->getOperand(1).getMBB() != To) continue;
+
+    BRInstr = &*I;
+    break;
+  }
+
+  assert(BRInstr && "The corresponding branch instruction not found!");
+
+  MachineFunction *MF = From->getParent();
+  MachineBasicBlock *DelayBlock = MF->CreateMachineBasicBlock();
+  MF->push_back(DelayBlock);
+
+  // Redirect the target block of the branch instruction to the newly created
+  // block, and modify the CFG.
+  BRInstr->getOperand(1).setMBB(DelayBlock);
+  From->replaceSuccessor(To, DelayBlock);
+  DelayBlock->addSuccessor(To);
+
+  // Also fix the PHIs in the original sink block.
+  typedef MachineBasicBlock::instr_iterator iterator;
+  for (iterator I = To->instr_begin(), E = To->instr_end();
+       I != E && I->isPHI(); ++I) {
+    for (unsigned i = 1, e = I->getNumOperands(); i != e; i += 2)
+      if (I->getOperand(i + 1).getMBB() == From) {
+        I->getOperand(i + 1).setMBB(DelayBlock);
+        break;
+      }
+  }
+
+  // Build the entry of the delay block.
+  VSUnit *EntrySU = createVSUnit(DelayBlock);
+  EntrySU->scheduledTo(EntrySlot);
+  EntrySU->setIsDangling(false);
+
+  // And the terminator.
+  MachineInstr *DelayBR
+    = BuildMI(DelayBlock, DebugLoc(), VInstrInfo::getDesc(VTM::VOpToState))
+       .addOperand(VInstrInfo::CreatePredicate()).addMBB(To)
+       .addOperand(VInstrInfo::CreatePredicate())
+       .addOperand(VInstrInfo::CreateTrace());
+
+  VSUnit *U = createTerminator(DelayBlock);
+  mapMI2SU(DelayBR, U, 0);
+  U->scheduledTo(EntrySlot + Latency);
+  U->setIsDangling(false);
+
+  addDummyLatencyEntry(DelayBR);
+
+  // TODO: Fix the dependencies edges.
+}
+
+bool VSchedGraph::insertDelayBlocks() {
+  bool AnyLatencyFixed = false;
+
+  B2SMapTy ExitSlots(num_bbs(), 0);
+  std::set<VSUnit*> Visited;
+
+  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
+  VSUnit *ExitRoot = getExitRoot();
+  WorkStack.push_back(std::make_pair(ExitRoot, cp_begin(ExitRoot)));
+
+  // Visit the blocks in topological order, and ignore the pseudo exit node.
+  for (;;) {
+    VSUnit *U = WorkStack.back().first;
+    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
+
+    if (ChildIt == cp_end(U)) {
+      WorkStack.pop_back();
+      // No need to visit the exit root.
+      if (WorkStack.empty()) break;
+
+      // All dependencies visited, now visit the current BBEntry.
+      assert(U->isBBEntry() && "Unexpected non-entry node!");
+      int CurDistance = calculateMinSlotsFromEntry(U, ExitSlots);
+
+      int MinInterBBSlack
+        = calulateMinInterBBSlack(U, *this, ExitSlots, CurDistance);
+
+      DEBUG(dbgs() << "Minimal Slack: " << MinInterBBSlack << '\n');
+
+      if (MinInterBBSlack < 0) {
+        typedef VSUnit::dep_iterator dep_it;
+        for (dep_it I = cp_begin(U), E = cp_end(U); I != E; ++I) {
+          VSUnit *PredTerminator = *I;
+          //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
+          //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
+          //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
+
+          MachineBasicBlock *PredBB = PredTerminator->getParentBB();
+          int PredDistance = ExitSlots[PredBB->getNumber()];
+          int ExtraLatency = CurDistance - PredDistance - MinInterBBSlack;
+          if (ExtraLatency <= 0) continue;
+
+          insertDelayBlock(PredBB, U->getParentBB(), ExtraLatency);
+        }
+      }
+
+      MachineBasicBlock *MBB = U->getParentBB();
+      unsigned ExitSlot = CurDistance + getTotalSlot(MBB) - MinInterBBSlack;
+      assert(ExitSlot && "Bad schedule!");
+      ExitSlots[MBB->getNumber()] = ExitSlot;
+
+      continue;
+    }
+
+    VSUnit *ChildNode = *ChildIt;
+    ++WorkStack.back().second;
+
+    assert(ChildNode->isTerminator() && "Unexpected non-terminator node!");
+    if (!Visited.insert(ChildNode).second) continue;
+
+    // Jump to the entry of the parent block of the terminator.
+    ChildNode = lookupSUnit(ChildNode->getParentBB());
+    WorkStack.push_back(std::make_pair(ChildNode, cp_begin(ChildNode)));
+  }
+
+  return AnyLatencyFixed;
+}
+
 static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getSlot() != RHS->getSlot())
     return LHS->getSlot() < RHS->getSlot();
@@ -841,15 +1033,19 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 unsigned VSchedGraph::emitSchedule() {
+  // Erase the virtual exit root right now, so that we can avoid the special
+  // code to handle it.
+  assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
+  CPSUs.resize(CPSUs.size() - 1);
+
+  // Insert the delay blocks to fix the inter-bb-latencies.
+  insertDelayBlocks();
+
   // Merge the data-path SU vector to the control-path SU vector.
   CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
   DPSUs.clear();
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);
-  // Erase the virtual exit root right now, so that we can avoid the special
-  // code to handle it.
-  assert(CPSUs.back() == getExitRoot() && "Exitroot at an unexpected position!");
-  CPSUs.resize(CPSUs.size() - 1);
 
   unsigned MBBStartSlot = EntrySlot;
   iterator to_emit_begin = CPSUs.begin();
@@ -866,6 +1062,10 @@ unsigned VSchedGraph::emitSchedule() {
 
   // Dont forget the SUs in last BB.
   MBBStartSlot = emitSchedule(to_emit_begin, CPSUs.end(), MBBStartSlot, PrevBB);
+
+  // Re-add the exit roots into the SU vector.
+  CPSUs.push_back(getExitRoot());
+
   return MBBStartSlot;
 }
 

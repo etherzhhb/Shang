@@ -23,6 +23,7 @@
 #include "vtm/SynSettings.h"
 #include "vtm/VFInfo.h"
 
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -437,8 +438,6 @@ void VSchedGraph::scheduleControlPath() {
   bool success = Scheduler.schedule();
   assert(success && "SDCScheduler fail!");
   (void) success;
-
-  Scheduler.fixInterBBLatency(*this);
 }
 
 void VSchedGraph::scheduleDatapath() {

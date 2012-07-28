@@ -320,12 +320,6 @@ public:
   void buildOptSlackObject(iterator I, iterator E, double weight);
   void addSoftConstraintsPenalties(double weight);
 
-  // Currently the SDCScheduler cannot calculate the minimal latency between two
-  // bb correctly, which leads to a wrong global code motion for the
-  // multi-cycles chains. Hence we need to fix the schedule, the implement detail
-  // should be hidden by the function.
-  bool fixInterBBLatency(VSchedGraph &G);
-
   void addObjectCoeff(const VSUnit *U, double Value) {
     // Ignore the constants.
     if (U->isScheduled()) return;
@@ -362,12 +356,6 @@ protected:
 
   // Build the schedule form the result of ILP.
   void buildSchedule(lprec *lp, unsigned TotalRows, iterator I, iterator E);
-
-private:
-  typedef std::vector<unsigned> B2SMapTy;
-  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry, const B2SMapTy &Map);
-  int calulateMinInterBBSlack(VSUnit *BBEntry,  VSchedGraph &G,
-                              const B2SMapTy &Map, unsigned MinSlotsForEntry);
 };
 
 template<bool IsCtrlPath>

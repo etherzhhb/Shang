@@ -641,6 +641,10 @@ private:
   static void clearDanglingFlagForTree(VSUnit *Root);
 
   void addSoftConstraintsToBreakChains(SDCSchedulingBase &S);
+
+  void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
+                        unsigned Latency);
+  bool insertDelayBlocks();
 public:
   const unsigned EntrySlot;
 
@@ -651,7 +655,6 @@ public:
   ~VSchedGraph() {
     assert(DPSUs.empty() && "Schedule is not emitted?");
     std::for_each(CPSUs.begin(), CPSUs.end(), deleter<VSUnit>);
-    delete Exit;
   }
 
   // Forwarding function from DetialLatencyInfo.
