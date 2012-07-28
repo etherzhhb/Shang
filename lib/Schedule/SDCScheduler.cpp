@@ -258,6 +258,7 @@ unsigned SDCSchedulingBase::calculateMinSlotsFromEntry(VSUnit *BBEntry,
 
     MachineBasicBlock *PredBB = PredTerminator->getParentBB();
     unsigned SlotsFromPredExit = Map[PredBB->getNumber()];
+    // Consider the latency of the control dependency edge.
     assert(SlotsFromPredExit && "Not visiting the BBs in topological order?");
     SlotsFromEntry = std::min<unsigned>(SlotsFromEntry, SlotsFromPredExit);
   }
@@ -325,14 +326,14 @@ bool SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
   WorkStack.push_back(std::make_pair(ExitRoot, cp_begin(ExitRoot)));
 
   // Visit the blocks in topological order, and ignore the pseudo exit node.
-  while (!WorkStack.empty()) {
+  for (;;) {
     VSUnit *U = WorkStack.back().first;
     VSUnit::dep_iterator ChildIt = WorkStack.back().second;
 
     if (ChildIt == cp_end(U)) {
       WorkStack.pop_back();
-
-      if (WorkStack.size() == 1) break;
+      // No need to visit the exit root.
+      if (WorkStack.empty()) break;
 
       // All dependencies visited, now visit the current BBEntry.
       assert(U->isBBEntry() && "Unexpected non-entry node!");
@@ -363,7 +364,6 @@ bool SDCSchedulingBase::fixInterBBLatency(VSchedGraph &G) {
     WorkStack.push_back(std::make_pair(ChildNode, cp_begin(ChildNode)));
   }
 
-  assert(WorkStack.back().first == ExitRoot && "Stack broken!");
   return AnyLatencyFixed;
 }
 
