@@ -218,12 +218,6 @@ void VSchedGraph::resetCPSchedule(unsigned MII) {
   }
 
   getEntryRoot()->scheduledTo(EntrySlot);
-  // Also schedule the LoopOp to MII step.
-  if (MII) {
-    assert(hasLoopOp() && "MII provided but LoopOp not exist!");
-    getLoopOp()->scheduledTo(EntrySlot + MII);
-  }
-
   // Make sure the PHI copy emit before the BB jump to other BBs.
   typedef VSUnit::dep_iterator dep_it;
   VSUnit *ExitRoot = getExitRoot();

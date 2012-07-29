@@ -906,6 +906,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     if (G.isLoopOp(I)) {
       VSUnit *LoopOp = G.createVSUnit(MI);
       addChainDepForSU<false>(LoopOp, G);
+      VSUnit *BBEntry = G.lookupSUnit(MBB);
+      // Schedule the LoopOp II slots after the entry SU.
+      LoopOp->addDep<true>(BBEntry, VDEdge::CreateMemDep(0, -1));
       NewSUs.push_back(LoopOp);
       continue;
     }

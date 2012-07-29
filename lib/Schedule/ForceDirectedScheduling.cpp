@@ -52,6 +52,13 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 bool IterativeModuloScheduling::scheduleState() {
   G.resetCPSchedule(getMII());
   buildTimeFrame();
+  VSUnit *LoopOp = G.getLoopOp();
+  assert(LoopOp && "Cannot find LoopOp in IMS scheduler!");
+  // Schedule the LoopOp to the end of the first stage.
+  unsigned LoopOpSlot = G.EntrySlot + getMII();
+  if (getASAPStep(LoopOp) > LoopOpSlot) return false;
+  LoopOp->scheduledTo(LoopOpSlot);
+
   // Reset exclude slots and resource table.
   resetRT();
   ExcludeSlots.clear();
