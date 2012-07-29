@@ -284,8 +284,6 @@ void VSchedGraph::scheduleLoop() {
   bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
   assert(succ && "Cannot remember II!");
   (void) succ;
-
-  fixPHISchedules(cp_begin(this), cp_end(this));
 }
 
 void VSchedGraph::viewGraph() {
@@ -334,20 +332,6 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
 
     unsigned Reg = MI->getOperand(0).getReg();
     DLInfo.MRI.setRegClass(Reg, &VTM::WireRegClass);
-  }
-}
-
-void VSchedGraph::fixPHISchedules(iterator su_begin, iterator su_end) {
-  // Fix the schedule of PHI's so we can emit the incoming copies at a right
-  // slot;
-  for (iterator I = su_begin, E = su_end; I != E; ++I) {
-    VSUnit *U = *I;
-    if (!U->isPHI()) continue;
-
-    MachineBasicBlock *MBB = U->getParentBB();
-    // Schedule the SU to the slot of the PHI Move.
-    U->scheduledTo(U->getSlot() + getII(MBB));
-    assert(U->getSlot() <= getEndSlot(MBB) && "Bad PHI schedule!");
   }
 }
 

@@ -151,8 +151,8 @@ public:
 
   bool findAllCircuits();
   bool circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
-               const VSUnitFlags &SCC, unsigned CurLat, unsigned CurDist);
-  void addRecurrence(unsigned CurLat, unsigned CurDist);
+               const VSUnitFlags &SCC, int CurLat, int CurDist);
+  void addRecurrence(int CurLat, int CurDist);
   void unblock(const VSUnit *N);
 };
 }
@@ -186,7 +186,9 @@ void SubGraph::unblock(const VSUnit *N) {
   BN.clear();
 }
 
-void SubGraph::addRecurrence(unsigned CurLat, unsigned CurDist) {
+void SubGraph::addRecurrence(int CurLat, int CurDist) {
+  if (CurDist <= 0) return;
+
   unsigned RecII = ceil(double(CurLat) / double(CurDist));
   //MSInfo->addRecurrence(RecII, Recurrence);
   RecMII = std::max(RecMII, RecII);
@@ -209,8 +211,7 @@ void SubGraph::addRecurrence(unsigned CurLat, unsigned CurDist) {
 }
 
 bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
-                       const VSUnitFlags &SCC, unsigned CurLat,
-                       unsigned CurDist) {
+                       const VSUnitFlags &SCC, int CurLat, int CurDist) {
   bool closed = false;
 
 #ifdef XDEBUG
@@ -225,8 +226,8 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
 
     if (!const_cast<VSUnitFlags&>(SCC).test(N->getIdx())) continue;
 
-    unsigned LatIncr = I.getLatency();
-    unsigned DistIncr = I.getDistance();
+    int LatIncr = I.getLatency();
+    int DistIncr = I.getDistance();
     AkV.push_back(N);
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.

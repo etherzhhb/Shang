@@ -61,7 +61,7 @@ public:
 private:
   uint8_t  EdgeType : 3;
   // Iterate distance.
-  uint16_t Distance : 13;
+  int16_t Distance : 13;
   // The latancy of this edge.
   int16_t  Latancy;
 
@@ -74,16 +74,16 @@ public:
 
   // Compute the latency considering the distance between iterations in a loop.
   inline int getLatency(unsigned II = 0) const {
-    return Latancy - int(II) * int(getDistance());
+    return Latancy - int(II) * getDistance();
   }
 
   void setLatency(unsigned latency) { Latancy = latency; }
   // Get the distance between iterations in a loop.
-  unsigned getDistance() const {
+  int getDistance() const {
     return Distance;
   }
   bool isLoopCarried() const {
-    return getDistance() > 0;
+    return getDistance() != 0;
   }
 
   inline bool operator==(const VDEdge &RHS) const {
@@ -186,7 +186,7 @@ public:
     bool hasSoftConstraint() const {
       return IteratorType::operator->()->second.HasSoftConstraints;
     }
-    unsigned getDistance() const { return getEdge().getDistance(); }
+    int getDistance() const { return getEdge().getDistance(); }
   };
 
 private:
@@ -636,7 +636,6 @@ private:
 
   unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
                         MachineBasicBlock *MBB);
-  void fixPHISchedules(iterator su_begin, iterator su_end);
 
   static void clearDanglingFlagForTree(VSUnit *Root);
 

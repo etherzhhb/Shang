@@ -573,41 +573,24 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
   }
 }
 
-void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &G){
-  assert(PHISU->isPHI() && "Expect PHI in addIncomingDepForPHI!");
-  MachineBasicBlock *CurMBB = G.getEntryBB();
+void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHIMove, VSchedGraph &G){
+  assert(G.enablePipeLine() && "Unexpected PHIMove!");
 
   // Find the incoming copy.
-  MachineInstr *IncomingCopy = PHISU->getPtrAt(1);
+  MachineInstr *IncomingCopy = PHIMove->getRepresentativePtr();
   assert(IncomingCopy->getOpcode() == VTM::VOpMvPhi && "Expect PHI move!");
-  DepLatInfoTy *LatInfo = G.getDepLatInfo(IncomingCopy);
-  assert(LatInfo && "Latency information for incoming copy not avaiable!");
 
-  for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {    
-    MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first.dyn_cast_mi());
-    // Get the latency from SrcMI to MI.
-    float DetailLatency = DetialLatencyInfo::getLatency(*I);
-    int Latency = int(ceil(DetailLatency));
-
-    // Simply ignore the edge from entry, it is not an anti-dependence.
-    if (SrcMI == 0 || SrcMI->getParent() != CurMBB)
-      continue;
-    
-    VSUnit *SrcSU = G.lookupSUnit(SrcMI);
-    assert(SrcSU && "Src SUnit not found!");
-    assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
-
-    // Avoid self-edge.
-    if (SrcSU == PHISU) continue;
-    
-    //assert(SrcSU->getIdx() > PHISU->getIdx() && "Expect back-edge!");
-
-    // Adjust the step between SrcMI and MI.
-    Latency = std::max(int(G.getStepsToFinish(SrcMI)), Latency);
-    // Call getLatencyTo to accumulate the intra-unit latency.
-    Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
-    PHISU->addDep<true>(SrcSU, VDEdge::CreateMemDep(Latency, 1));
-  }
+  unsigned Reg = IncomingCopy->getOperand(0).getReg();
+  assert(MRI->hasOneUse(Reg) && "Incoming copy has more than one use?");
+  MachineInstr *PN = &*MRI->use_begin(Reg);
+  assert(PN && PN->isPHI() && "Bad user of incoming copy!");
+  VSUnit *PHISU = G.lookupSUnit(PN);
+  assert(PHISU && "Schedule unit for PHI node not found!");
+  // Add the anti-dependency edge from the Incoming value copy to the PHI.
+  PHISU->addDep<true>(PHIMove, VDEdge::CreateMemDep(0, 1));
+  // Also add a dependencies from PHISU to the incoming copy SU, so the PHIMove
+  // SU will be schedule II slots after the PHISU.
+  PHIMove->addDep<true>(PHISU, VDEdge::CreateMemDep(0, -1));
 }
 
 void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
@@ -648,26 +631,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
 
       // If we got a back-edge, that should be a phinode.
-      if (Dep->getIdx() > A->getIdx()) {
-        assert(A->getRepresentativePtr().get_mi()->isPHI()
-               && "Expected backedge for PHI!");
-        // Prevent the data-path SU from being scheduled to the same slot with
-        // A.
-        if (Latency == 0 && Dep->isDatapath()) Latency = 1;
-
-        // The iterate distance for back-edge to PHI is always 1.
-        // A->addDep(Dep, VDEdge::CreateMemDep(Latency, 1));
-        // Since the II is already known, we can translate the distant of the
-        // loop carried dependency to cycle-accurate latency, and since we
-        // have already move the PHI by II cycles later, we should not add
-        // II to the latency again.
-        A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
-        continue;
-      }
-
-      // As explained above, the PHI is moved by II cycles later, we need to
-      // revert the move while building the dependency from the PHI.
-      if (Dep->isPHI()) Latency -= G.getII(ParentBB);
+      assert(Dep->getIdx()<=A->getIdx()&&"Unexpected back-edge in data-path!");
 
       // Prevent the data-path SU from being scheduled to the same slot with
       // A.
@@ -750,9 +714,6 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G) {
        I != E && (*I)->isPHI(); ++I) {
     VSUnit *PHISU = *I;
 
-    // Add dependence from PHI incoming value:
-    // PHI_incoming -(RAW dep)-> PHI_at_next_iteration.
-    addIncomingDepForPHI(PHISU, G);
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
@@ -856,16 +817,8 @@ VSUnit *VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   // The VOpDstMux should be merged to its user.
   case VTM::VOpDstMux: return 0;
   case VTM::VOpMvPhi:
-    if (G.isLoopPHIMove(MI)) {
-      unsigned Reg = MI->getOperand(0).getReg();
-      assert(MRI->hasOneUse(Reg) && "Incoming copy has more than one use?");
-      MachineInstr *PN = &*MRI->use_begin(Reg);
-      assert(PN && PN->isPHI() && "Bad user of incoming copy!");
-      VSUnit *PHISU = G.lookupSUnit(PN);
-      assert(PHISU && "Schedule unit for PHI node not found!");
-      G.mapMI2SU(MI, PHISU, 0);
-    }
-    return 0;
+    assert(G.isLoopPHIMove(MI) && "Unexpected PHIMove!");
+    break;
   }
 
   // TODO: Remember the register that live out this MBB.
@@ -988,11 +941,11 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
         assert(DepLat && "Operand latency information not available!");
         addChainDepForMI<VDEdge::CtrlDep, false>(MI, 0/*Offset*/, ExitSU, G,
                                                      *DepLat);
-        // Add the dependence from PHISU to ExitSU, we will constraint the PHI
-        // so it will schedule before the last stage of a pipeline BB.
-        VSUnit *PHISU = G.lookupSUnit(MI);
-        assert(PHISU->isPHI() && "Expect PHISU merged by PHI!");
-        ExitSU->addDep<true>(PHISU, VDEdge::CreateCtrlDep(0));
+        // Add the dependence from PHIMove to ExitSU, we will constraint the
+        // PHIMove so that it will schedule before the last stage of a pipeline
+        // BB.
+        VSUnit *PHIMove = G.lookupSUnit(MI);
+        ExitSU->addDep<true>(PHIMove, VDEdge::CreateCtrlDep(0));
         continue;
       } else { // Also merge the PHI moves.
         bool mapped = G.mapMI2SU(MI, ExitSU, 0);
@@ -1035,22 +988,20 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
     ++BI;
   }
 
+  for (instr_it I = BI; !I->isTerminator(); ++I) {
+    G.addInstr(I);
+
+    if (!G.isLoopPHIMove(I)) continue;
+    
+    VSUnit *PHIMove = buildSUnit(I, G);
+    NewSUs.push_back(PHIMove);
+    addIncomingDepForPHI(PHIMove, G);
+  }
+
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   typedef std::vector<VSUnit*>::iterator it;
   for (it I = NewSUs.begin(), E = NewSUs.end(); I != E; ++I)
     if ((*I)->isControl()) addChainDepForSU<false>(*I, G);
-
-  // Merge the loop PHI moves into the PHI Node, after the intra iteration
-  // dependence edge added. If we merge the PHI moves into the PHI schedule
-  // units before we adding intra iteration edges, the dependences of the PHI
-  // moves are added to the PHI schedule unit as intra iteration dependences,
-  // which is incorrect, all dependences of a PHI should be inter iteration
-  // dependences.
-  for (instr_it I = BI; !I->isTerminator(); ++I) {
-    G.addInstr(I);
-
-    if (G.isLoopPHIMove(I)) buildSUnit(I, G);
-  }
 
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(G, BI, NewSUs);
