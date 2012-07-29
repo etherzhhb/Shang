@@ -218,11 +218,6 @@ void VSchedGraph::resetCPSchedule(unsigned MII) {
   }
 
   getEntryRoot()->scheduledTo(EntrySlot);
-  // Make sure the PHI copy emit before the BB jump to other BBs.
-  typedef VSUnit::dep_iterator dep_it;
-  VSUnit *ExitRoot = getExitRoot();
-  for (dep_it I = cp_begin(ExitRoot), E = cp_begin(ExitRoot); I != E; ++I)
-    if (I->isPHI()) I.getEdge().setLatency(MII);
 }
 
 void VSchedGraph::resetDPSchedule() {

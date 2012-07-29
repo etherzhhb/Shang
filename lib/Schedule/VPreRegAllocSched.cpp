@@ -937,24 +937,14 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     MachineInstr *MI = I;
 
     if (MI->getOpcode() == VTM::VOpMvPhi) {
-      if (G.isLoopPHIMove(MI)) {
-        // Forward the edges to exit root, so the dependences of PHI moves
-        // can always finish in time.
-        const DetialLatencyInfo::DepLatInfoTy *DepLat = G.getDepLatInfo(MI);
-        assert(DepLat && "Operand latency information not available!");
-        addChainDepForMI<VDEdge::CtrlDep, false>(MI, 0/*Offset*/, ExitSU, G,
-                                                     *DepLat);
-        // Add the dependence from PHIMove to ExitSU, we will constraint the
-        // PHIMove so that it will schedule before the last stage of a pipeline
-        // BB.
-        VSUnit *PHIMove = G.lookupSUnit(MI);
-        ExitSU->addDep<true>(PHIMove, VDEdge::CreateCtrlDep(0));
-        continue;
-      } else { // Also merge the PHI moves.
+      if (!G.isLoopPHIMove(MI)) { // Also merge the PHI moves.
         bool mapped = G.mapMI2SU(MI, ExitSU, 0);
         (void) mapped;
         assert(mapped && "Cannot merge terminators!");
-      }
+      } else
+        // Do not erase the PHIMove from wait set, so that the ExitSU will
+        // wait until the PHIMove is finished.
+        continue;
 
       // No need to wait VOpMvPhi, because we are going to merge it into the
       // exit root.
@@ -968,7 +958,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
 
   // Add the control dependence edge edges to wait all operation finish.
   addChainDepForMI<VDEdge::CtrlDep, false>(ExitSU->getRepresentativePtr(),
-                                               0/*Offset*/, ExitSU, G, ExitDeps);
+                                           0/*Offset*/, ExitSU, G, ExitDeps);
   // Add the dependence of exit root.
   addChainDepForSU<false>(ExitSU, G);
 
