@@ -55,7 +55,7 @@ void VSchedGraph::dump() const {
   print(dbgs());
 }
 
-bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
+bool VSchedGraph::rememberLoopOp(MachineInstr *MI) {
   assert(MI->getDesc().isTerminator() && "Bad instruction!");
 
   if (!VInstrInfo::isBrCndLike(MI->getOpcode())) return false;

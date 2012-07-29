@@ -632,7 +632,7 @@ private:
   typedef std::map<MachineBasicBlock*, unsigned> IIMapTy;
   IIMapTy IIMap;
 
-  bool trySetLoopOp(MachineInstr *MI);
+  bool rememberLoopOp(MachineInstr *MI);
 
   unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
                         MachineBasicBlock *MBB);
@@ -779,7 +779,7 @@ public:
 
     // Set the current instruction as loop operation if it is jumping back
     // to the current state and we want to pipeline the state.
-    if (trySetLoopOp(MI) && enablePipeLine())
+    if (rememberLoopOp(MI) && enablePipeLine())
       return true;
 
     return false;
