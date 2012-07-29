@@ -518,61 +518,6 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     SmallVector<InSUInstInfo, 8> Insts;
     OpSlot SchedSlot(A->getSlot(), A->isControl());
 
-    // Insert the DiableFU instruction If necessary.
-    MachineInstr *RepMI = A->getRepresentativePtr();
-    if (RepMI) {
-      FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
-      MachineBasicBlock::iterator II = RepMI;
-      ++II;
-      MachineBasicBlock *MBB = RepMI->getParent();
-      DebugLoc dl = RepMI->getDebugLoc();
-
-      // Insert pseudo copy to model write until finish.
-      // FIXME: Insert for others MI rather than Representative MI?
-      if (A->getLatency() && VInstrInfo::isWriteUntilFinish(A->getOpcode())) {
-        assert(A->getOpcode() == VTM::VOpBRAMTrans &&
-               "Only support BRAMTrans at the moment.");
-        MachineOperand &MO = RepMI->getOperand(0);
-        unsigned OldR = MO.getReg();
-        const TargetRegisterClass *RC =
-          VRegisterInfo::getRepRegisterClass(A->getOpcode());
-        unsigned R = MRI.createVirtualRegister(RC);
-        // Change to the newly allocated register, and kill the new register
-        // with VOpPipelineStage.
-        MO.ChangeToRegister(R, true);
-        MachineInstr *PipeStage =
-          BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
-            .addOperand(VInstrInfo::CreateReg(OldR, VInstrInfo::getBitWidth(MO),
-                                             true))
-            .addOperand(VInstrInfo::CreateReg(R, VInstrInfo::getBitWidth(MO)))
-            .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(*VInstrInfo::getTraceOperand(RepMI));
-        assert(A->isControl() && "Only control operation write untill finish!");
-        OpSlot PipeSlot(SchedSlot.getSlot() + A->getLatency() - 1, false);
-        Insts.push_back(std::make_pair(PipeStage, PipeSlot));
-        // Copy the result 1 cycle later after the value is finished, note that
-        // the PipeStage is emit to a data path slot, to delay the VOpReadFU 1
-        // cycle later, we need to set its delay to 2, other wise the copy will
-        // emit right after the RepLI finish, instead of 1 cycle after the RepLI
-        // finish. FIXME: Set the right latency.
-        State.addDummyLatencyEntry(PipeStage, 2.0f);
-      }
-
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
-        MachineOperand FU = RepMI->getOperand(0);
-        FU.clearParent();
-        FU.setIsDef(false);
-        MachineInstr *DisableMI =
-          BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
-            .addOperand(FU).addImm(Id.getData())
-            .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(*VInstrInfo::getTraceOperand(RepMI));
-        // Add the instruction into the emit list, disable the FU 1 clock later.
-        Insts.push_back(std::make_pair(DisableMI, SchedSlot + 1));
-        State.addDummyLatencyEntry(DisableMI);
-      }
-    }
-
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
       MachineInstr *Inst = A->getPtrAt(i);
       // Ignore the entry node marker (null) and implicit define.
@@ -1018,18 +963,83 @@ bool VSchedGraph::insertDelayBlocks() {
   return AnyLatencyFixed;
 }
 
-static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
-  if (LHS->getSlot() != RHS->getSlot())
-    return LHS->getSlot() < RHS->getSlot();
+void VSchedGraph::insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U) {
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc dl = MI->getDebugLoc();
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  MachineBasicBlock::iterator IP = MI;
+  ++IP;
 
-  return LHS->getIdx() < RHS->getIdx();
+  // Insert pseudo copy to model write until finish.
+  // FIXME: Insert for others MI rather than Representative MI?
+  if (U->getLatency() && VInstrInfo::isWriteUntilFinish(U->getOpcode())) {
+    assert(U->getOpcode() == VTM::VOpBRAMTrans &&
+           "Only support BRAMTrans at the moment.");
+    MachineOperand &MO = MI->getOperand(0);
+    unsigned OldR = MO.getReg();
+    const TargetRegisterClass *RC
+      = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
+    unsigned R = DLInfo.MRI.createVirtualRegister(RC);
+    // Change to the newly allocated register, and kill the new register
+    // with VOpPipelineStage.
+    MO.ChangeToRegister(R, true);
+    unsigned ResultWidth = VInstrInfo::getBitWidth(MO);
+    MachineInstr *PipeStage =
+      BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
+        .addOperand(VInstrInfo::CreateReg(OldR, ResultWidth, true))
+        .addOperand(VInstrInfo::CreateReg(R, ResultWidth))
+        .addOperand(*VInstrInfo::getPredOperand(MI))
+        .addOperand(*VInstrInfo::getTraceOperand(MI));
+    assert(U->isControl() && "Only control operation write untill finish!");
+
+    // DIRTY HACK: Now the mapMI2SU cannot mixing data-path operations and
+    // control operations, we need to add the PipeStage and create the mapping
+    // mamually.
+    U->addPtr(PipeStage, U->getLatency() - 1);
+    SUnitMapType::iterator where;
+    bool inserted;
+    tie(where, inserted) = InstToSUnits.insert(std::make_pair(PipeStage, U));
+    assert(inserted && "Mapping from I already exist!");
+
+    // Copy the result 1 cycle later after the value is finished, note that
+    // the PipeStage is emit to a data path slot, to delay the VOpReadFU 1
+    // cycle later, we need to set its delay to 2, other wise the copy will
+    // emit right after the RepLI finish, instead of 1 cycle after the RepLI
+    // finish. FIXME: Set the right latency.
+    addDummyLatencyEntry(PipeStage, 2.0f);
+  }
+
+  if (!Id.isTrivial()) {
+    assert(Id.getFUType() != VFUs::Mux && "Unexpected FU type!");
+    MachineOperand FU = MI->getOperand(0);
+    FU.clearParent();
+    FU.setIsDef(false);
+    MachineInstr *DisableMI =
+      BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
+      .addOperand(FU).addImm(Id.getData())
+      .addOperand(*VInstrInfo::getPredOperand(MI))
+      .addOperand(*VInstrInfo::getTraceOperand(MI));
+    // Add the instruction into the emit list, disable the FU 1 clock later.
+    mapMI2SU(DisableMI, U, 1);
+    addDummyLatencyEntry(DisableMI);
+  }
+}
+
+void VSchedGraph::insertReadFUAndDisableFU() {
+  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
+    if (MachineInstr *MI = (*I)->getRepresentativePtr())
+      insertReadFUAndDisableFU(MI, *I);
+
 }
 
 static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getParentBB() != RHS->getParentBB())
     return LHS->getParentBB()->getNumber() < RHS->getParentBB()->getNumber();
 
-  return top_sort_slot(LHS, RHS);
+  if (LHS->getSlot() != RHS->getSlot())
+    return LHS->getSlot() < RHS->getSlot();
+
+  return LHS->getIdx() < RHS->getIdx();
 }
 
 unsigned VSchedGraph::emitSchedule() {
@@ -1038,6 +1048,8 @@ unsigned VSchedGraph::emitSchedule() {
   assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
   CPSUs.resize(CPSUs.size() - 1);
 
+  // Break the chains.
+  insertReadFUAndDisableFU();
   // Insert the delay blocks to fix the inter-bb-latencies.
   insertDelayBlocks();
 

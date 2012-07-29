@@ -652,6 +652,11 @@ private:
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
   bool insertDelayBlocks();
+
+  // Insert the copy operations which copy the result of the operations to
+  // registers, so that we can break the chain.
+  void insertReadFUAndDisableFU();
+  void insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U);
 public:
   const unsigned EntrySlot;
 
