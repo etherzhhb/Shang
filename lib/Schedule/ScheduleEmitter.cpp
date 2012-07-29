@@ -963,11 +963,15 @@ bool VSchedGraph::insertDelayBlocks() {
   return AnyLatencyFixed;
 }
 
-void VSchedGraph::insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U) {
+void VSchedGraph::insertDisableFU(MachineInstr *MI, VSUnit *U) {
+  MachineRegisterInfo &MRI = DLInfo.MRI;
+  const TargetRegisterClass *RC
+    = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
+
   MachineBasicBlock *MBB = MI->getParent();
   DebugLoc dl = MI->getDebugLoc();
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
-  MachineBasicBlock::iterator IP = MI;
+  MachineBasicBlock::instr_iterator IP = MI;
   ++IP;
 
   // Insert pseudo copy to model write until finish.
@@ -977,9 +981,7 @@ void VSchedGraph::insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U) {
            "Only support BRAMTrans at the moment.");
     MachineOperand &MO = MI->getOperand(0);
     unsigned OldR = MO.getReg();
-    const TargetRegisterClass *RC
-      = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
-    unsigned R = DLInfo.MRI.createVirtualRegister(RC);
+    unsigned R = MRI.createVirtualRegister(RC);
     // Change to the newly allocated register, and kill the new register
     // with VOpPipelineStage.
     MO.ChangeToRegister(R, true);
@@ -1009,7 +1011,7 @@ void VSchedGraph::insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U) {
     addDummyLatencyEntry(PipeStage, 2.0f);
   }
 
-  if (!Id.isTrivial()) {
+  if (Id.isBound()) {
     assert(Id.getFUType() != VFUs::Mux && "Unexpected FU type!");
     MachineOperand FU = MI->getOperand(0);
     FU.clearParent();
@@ -1025,21 +1027,82 @@ void VSchedGraph::insertReadFUAndDisableFU(MachineInstr *MI, VSUnit *U) {
   }
 }
 
-void VSchedGraph::insertReadFUAndDisableFU() {
-  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
-    if (MachineInstr *MI = (*I)->getRepresentativePtr())
-      insertReadFUAndDisableFU(MI, *I);
+void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U) {
+  MachineRegisterInfo &MRI = DLInfo.MRI;
+  const TargetRegisterClass *RC
+    = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
 
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc dl = MI->getDebugLoc();
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  MachineBasicBlock::instr_iterator IP = MI;
+  ++IP;
+
+  unsigned StepsToCopy = getStepsToFinish(MI);
+  if (StepsToCopy == 0) return;
+
+  unsigned Slot = U->getSlot();
+  unsigned ResultWire = MI->getOperand(0).getReg();
+  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
+  MRI.setRegClass(ResultWire, RC);
+  unsigned ResultReg = 0;
+
+  typedef MachineRegisterInfo::use_iterator reg_use_iterator;
+  for (reg_use_iterator I = MRI.use_begin(ResultWire);
+       I != MachineRegisterInfo::use_end(); /*++I*/) {
+    MachineInstr &UseMI = *I;
+    MachineOperand &UseMO = (I++).getOperand();
+    VSUnit *UseSU = lookupSUnit(&UseMI);
+    if (UseSU == U) continue;
+
+    assert(UseSU && "Cannot find Use SU!");
+    if (UseSU->getSlot() - Slot <= StepsToCopy + (UseSU->isDatapath() ? -1 : 1))
+      continue;
+
+    if (ResultReg == 0) ResultReg = MRI.createVirtualRegister(&VTM::DRRegClass);
+    UseMO.ChangeToRegister(ResultReg, false);
+  }
+
+  // If emit the VOpReadFU, even there is no instruction using the result wire,
+  // because we need to wait the MI by the VOpReadFU.
+  assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
+         && "Unexpected predicated MI!");
+  MachineInstr *ReadFU
+    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
+        .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
+        .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
+        .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
+        .addOperand(*VInstrInfo::getTraceOperand(MI));
+  mapMI2SU(ReadFU, U, StepsToCopy);
+  addDummyLatencyEntry(ReadFU);
+}
+
+static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
+  if (LHS->getSlot() != RHS->getSlot())
+    return LHS->getSlot() < RHS->getSlot();
+
+  return LHS->getIdx() < RHS->getIdx();
+}
+
+void VSchedGraph::insertReadFUAndDisableFU() {
+  // Sort the SUs by parent BB and its schedule.
+  std::sort(CPSUs.begin(), CPSUs.end(), top_sort_slot);
+
+  for (iterator I = CPSUs.begin(), E = CPSUs.end(); I != E; ++I)
+    if (MachineInstr *MI = (*I)->getRepresentativePtr()) {
+      // Ignore data-path operations at the moment.
+      if (VInstrInfo::isDatapath(MI->getOpcode())) continue;
+
+      insertDisableFU(MI, *I);
+      insertReadFU(MI, *I);
+    }
 }
 
 static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getParentBB() != RHS->getParentBB())
     return LHS->getParentBB()->getNumber() < RHS->getParentBB()->getNumber();
 
-  if (LHS->getSlot() != RHS->getSlot())
-    return LHS->getSlot() < RHS->getSlot();
-
-  return LHS->getIdx() < RHS->getIdx();
+  return top_sort_slot(LHS, RHS);
 }
 
 unsigned VSchedGraph::emitSchedule() {
@@ -1047,15 +1110,15 @@ unsigned VSchedGraph::emitSchedule() {
   // code to handle it.
   assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
   CPSUs.resize(CPSUs.size() - 1);
-
-  // Break the chains.
-  insertReadFUAndDisableFU();
   // Insert the delay blocks to fix the inter-bb-latencies.
   insertDelayBlocks();
 
   // Merge the data-path SU vector to the control-path SU vector.
   CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
   DPSUs.clear();
+  // Break the chains.
+  insertReadFUAndDisableFU();
+
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);
 
