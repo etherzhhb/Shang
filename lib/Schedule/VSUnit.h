@@ -631,16 +631,24 @@ private:
   TerminatorMapTy Terminators;
   typedef std::map<MachineBasicBlock*, unsigned> IIMapTy;
   IIMapTy IIMap;
-
+  // If the MI is a branch instruction that branching back to the entry of its
+  // parent BB, remember it.
   bool rememberLoopOp(MachineInstr *MI);
 
+  // Emit the schedule of the instructions in MBB.
   unsigned emitSchedule(iterator su_begin, iterator su_end, unsigned StartSlot,
                         MachineBasicBlock *MBB);
 
+  // Clear the dangling flag of the VSUnits which is reachable from Root via
+  // dependencies chain.
   static void clearDanglingFlagForTree(VSUnit *Root);
 
   void addSoftConstraintsToBreakChains(SDCSchedulingBase &S);
 
+  // Insert the delay block between BBs, because the scheduler assume that
+  // EndSlot(SrcBB) == StartSlot(SnkBB) for all Edges (SrcBB, Snk) in CFG,
+  // however the equation may not hold, hence we need to insert extra delay
+  // blocks to introduce necessary delay.
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
   bool insertDelayBlocks();
