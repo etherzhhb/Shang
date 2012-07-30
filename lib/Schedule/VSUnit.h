@@ -380,7 +380,7 @@ public:
   // Get the latency from RepresentativeInst to MI.
   int8_t getLatencyFor(MachineInstr *MI) const;
   int8_t getLatencyAt(unsigned Idx) const {
-    assert(Idx && "Cannot get latency at index 0!");
+    if (Idx == 0) return 0;
     return latencies[Idx];
   }
 

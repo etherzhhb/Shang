@@ -525,7 +525,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         if (Inst->isPHI())
           emitPHIDef(Inst);
         else {
-          OpSlot S = SchedSlot +  (i ? A->getLatencyAt(i) : 0);
+          OpSlot S = SchedSlot +  A->getLatencyAt(i);
           S = OpSlot::detailStepCeil(S.getDetailStep(),
                                      VInstrInfo::isDatapath(Inst->getOpcode()));
           Insts.push_back(std::make_pair(Inst, S));

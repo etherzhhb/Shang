@@ -471,7 +471,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
 
   for (unsigned i = 0, e = U->num_instrs(); i < e; ++i) {
     // Do not consider positive intra schedule unit latency at the moment.
-    int IntraLatency = i ? std::min(int(U->getLatencyAt(i)), 0) : 0;
+    int IntraLatency = std::min(int(U->getLatencyAt(i)), 0);
     int InstLatency = calculateLatencyFromEntry(U->getPtrAt(i));
     Latency = std::max(Latency, InstLatency - IntraLatency);
   }
@@ -604,7 +604,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
 
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);
-    float IntraSULatency = I ? A->getLatencyAt(I) : 0;
+    float IntraSULatency = A->getLatencyAt(I);
     // Prevent the data-path dependency from scheduling to the same slot with
     // the MI with the Control SU.
     if (IntraSULatency < 0 && isCtrl)
@@ -664,7 +664,7 @@ void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *Deps = G.getDepLatInfo(MI);
     assert(Deps && "Operand latency information not available!");
-    int MIOffset = I ? A->getLatencyAt(I) : 0;
+    int MIOffset = A->getLatencyAt(I);
     addChainDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
