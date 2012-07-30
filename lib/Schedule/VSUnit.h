@@ -656,8 +656,8 @@ private:
   // Insert the copy operations which copy the result of the operations to
   // registers, so that we can break the chain.
   void insertReadFUAndDisableFU();
-  void insertDisableFU(MachineInstr *MI, VSUnit *U);
-  void insertReadFU(MachineInstr *MI, VSUnit *U);
+  void insertDisableFU(VSUnit *U);
+  void insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset = 0);
 public:
   const unsigned EntrySlot;
 

@@ -957,7 +957,9 @@ bool VSchedGraph::insertDelayBlocks() {
   return AnyLatencyFixed;
 }
 
-void VSchedGraph::insertDisableFU(MachineInstr *MI, VSUnit *U) {
+void VSchedGraph::insertDisableFU(VSUnit *U) {
+  MachineInstr *MI = U->getRepresentativePtr();
+  assert(MI && "Unexpected BBEntry SU!");
   MachineRegisterInfo &MRI = DLInfo.MRI;
   const TargetRegisterClass *RC
     = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
@@ -1014,12 +1016,11 @@ void VSchedGraph::insertDisableFU(MachineInstr *MI, VSUnit *U) {
   }
 }
 
-void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U) {
-
+void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   unsigned StepsToCopy = getStepsToFinish(MI);
   if (StepsToCopy == 0) return;
 
-  unsigned Slot = U->getSlot();
+  unsigned Slot = U->getSlot() + Offset;
   unsigned ResultWire = MI->getOperand(0).getReg();
   MachineRegisterInfo &MRI = DLInfo.MRI;
   const TargetRegisterClass *RC
@@ -1087,7 +1088,7 @@ void VSchedGraph::insertReadFUAndDisableFU() {
     if (MachineInstr *MI = (*I)->getRepresentativePtr()) {
       // Ignore data-path operations at the moment.
       if (VInstrInfo::isControl(MI->getOpcode()))
-        insertDisableFU(MI, *I);
+        insertDisableFU(*I);
 
       insertReadFU(MI, *I);
     }
