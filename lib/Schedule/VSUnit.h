@@ -719,8 +719,8 @@ public:
   iterator mergeSUsInSubGraph(VSchedGraph &SubGraph);
 
   // VSUnit Creating/Mapping/Merging
-  bool mapMI2SU(InstPtrTy Ptr, VSUnit *SU, int8_t latency) {
-    if (SU->num_instrs() && Ptr.isMI()
+  bool mapMI2SU(InstPtrTy Ptr, VSUnit *SU, int8_t latency, bool Mixed = false) {
+    if (!Mixed && SU->num_instrs() && Ptr.isMI()
         && SU->isDatapath() != VInstrInfo::isDatapath(Ptr->getOpcode()))
       return false;
 

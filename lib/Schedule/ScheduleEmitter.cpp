@@ -994,14 +994,7 @@ void VSchedGraph::insertDisableFU(MachineInstr *MI, VSUnit *U) {
         .addOperand(*VInstrInfo::getTraceOperand(MI));
     assert(U->isControl() && "Only control operation write untill finish!");
 
-    // DIRTY HACK: Now the mapMI2SU cannot mixing data-path operations and
-    // control operations, we need to add the PipeStage and create the mapping
-    // mamually.
-    U->addPtr(PipeStage, U->getLatency() - 1);
-    SUnitMapType::iterator where;
-    bool inserted;
-    tie(where, inserted) = InstToSUnits.insert(std::make_pair(PipeStage, U));
-    assert(inserted && "Mapping from I already exist!");
+    mapMI2SU(PipeStage, U, U->getLatency() - 1, true);
 
     // Copy the result 1 cycle later after the value is finished, note that
     // the PipeStage is emit to a data path slot, to delay the VOpReadFU 1
@@ -1073,7 +1066,7 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U) {
         .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
         .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
         .addOperand(*VInstrInfo::getTraceOperand(MI));
-  mapMI2SU(ReadFU, U, StepsToCopy);
+  mapMI2SU(ReadFU, U, StepsToCopy, true);
   addDummyLatencyEntry(ReadFU);
 }
 
