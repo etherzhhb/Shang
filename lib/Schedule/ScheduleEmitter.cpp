@@ -697,12 +697,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     Defs.pop_back();
 
     MachineOperand MO = WD->getOperand();
-
-    // FIXME: Do we need this?
-    // This operand will delete with its origin instruction.
-    // Eliminate the dead register.
-    //if (MRI.use_empty(MO.getReg()))
-    //  continue;
+    // Do not copy to a wire.
+    if (VRegisterInfo::IsWire(MO.getReg(), &MRI)) continue;
 
     if (WD->shouldBeCopied() && !isCopyLike) {
       unsigned Slot = CopySlot.getSlot();
@@ -1049,7 +1045,10 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U) {
     if (UseSU == U) continue;
 
     assert(UseSU && "Cannot find Use SU!");
-    if (UseSU->getSlot() - Slot <= StepsToCopy + (UseSU->isDatapath() ? -1 : 1))
+    int UseSlot = int(UseSU->getSlot()) + UseSU->getLatencyFor(&UseMI);
+    bool IsUseDatapath = VInstrInfo::isDatapath(UseMI.getOpcode());
+
+    if (UseSlot - Slot <= StepsToCopy + (IsUseDatapath ? -1 : 0))
       continue;
 
     if (ResultReg == 0) ResultReg = MRI.createVirtualRegister(&VTM::DRRegClass);
