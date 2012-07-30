@@ -516,7 +516,6 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     VSUnit *A = *I;
 
     SmallVector<InSUInstInfo, 8> Insts;
-    OpSlot SchedSlot(A->getSlot(), A->isControl());
 
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
       MachineInstr *Inst = A->getPtrAt(i);
@@ -525,10 +524,9 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         if (Inst->isPHI())
           emitPHIDef(Inst);
         else {
-          OpSlot S = SchedSlot +  A->getLatencyAt(i);
-          S = OpSlot::detailStepCeil(S.getDetailStep(),
-                                     VInstrInfo::isDatapath(Inst->getOpcode()));
-          Insts.push_back(std::make_pair(Inst, S));
+          unsigned S = A->getSlot() +  A->getLatencyAt(i);
+          bool IsCtrl = VInstrInfo::isControl(Inst->getOpcode());
+          Insts.push_back(std::make_pair(Inst, OpSlot(S, IsCtrl)));
         }
       }
     }
@@ -1017,24 +1015,29 @@ void VSchedGraph::insertDisableFU(MachineInstr *MI, VSUnit *U) {
 }
 
 void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U) {
-  MachineRegisterInfo &MRI = DLInfo.MRI;
-  const TargetRegisterClass *RC
-    = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
-
-  MachineBasicBlock *MBB = MI->getParent();
-  DebugLoc dl = MI->getDebugLoc();
-  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
-  MachineBasicBlock::instr_iterator IP = MI;
-  ++IP;
 
   unsigned StepsToCopy = getStepsToFinish(MI);
   if (StepsToCopy == 0) return;
 
   unsigned Slot = U->getSlot();
   unsigned ResultWire = MI->getOperand(0).getReg();
+  MachineRegisterInfo &MRI = DLInfo.MRI;
+  const TargetRegisterClass *RC
+    = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
+
+  // Chained operation, no need to copy its result.
+  if (MRI.getRegClass(ResultWire) == RC) return;
+
+  assert(!VRegisterInfo::IsWire(ResultWire, &MRI) && "Result is already a wire!");
   unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
   MRI.setRegClass(ResultWire, RC);
   unsigned ResultReg = 0;
+
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc dl = MI->getDebugLoc();
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  MachineBasicBlock::instr_iterator IP = MI;
+  ++IP;
 
   typedef MachineRegisterInfo::use_iterator reg_use_iterator;
   for (reg_use_iterator I = MRI.use_begin(ResultWire);
@@ -1083,9 +1086,9 @@ void VSchedGraph::insertReadFUAndDisableFU() {
   for (iterator I = CPSUs.begin(), E = CPSUs.end(); I != E; ++I)
     if (MachineInstr *MI = (*I)->getRepresentativePtr()) {
       // Ignore data-path operations at the moment.
-      if (VInstrInfo::isDatapath(MI->getOpcode())) continue;
+      if (VInstrInfo::isControl(MI->getOpcode()))
+        insertDisableFU(MI, *I);
 
-      insertDisableFU(MI, *I);
       insertReadFU(MI, *I);
     }
 }
