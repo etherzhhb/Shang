@@ -988,8 +988,7 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
         .addOperand(VInstrInfo::CreateReg(R, ResultWidth))
         .addOperand(*VInstrInfo::getPredOperand(MI))
         .addOperand(*VInstrInfo::getTraceOperand(MI));
-    assert(U->isControl() && "Only control operation write untill finish!");
-
+    assert(U->isControl() && "Only control operation write until finish!");
     mapMI2SU(PipeStage, U, U->getLatency() - 1, true);
 
     // Copy the result 1 cycle later after the value is finished, note that
@@ -998,6 +997,8 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
     // emit right after the RepLI finish, instead of 1 cycle after the RepLI
     // finish. FIXME: Set the right latency.
     addDummyLatencyEntry(PipeStage, 2.0f);
+    // Copy the result of the pipe stage to register if it has any user.
+    if (!MRI.use_empty(OldR)) insertReadFU(PipeStage, U, U->getLatency() - 1);
   }
 
   if (Id.isBound()) {
