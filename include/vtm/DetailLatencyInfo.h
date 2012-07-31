@@ -101,7 +101,7 @@ public:
   MachineRegisterInfo *MRI;
 
 private:
-  bool WaitAllOps;
+  const bool WaitAllOps;
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
@@ -137,8 +137,8 @@ public:
   DetialLatencyInfo();
   // Add the a machine instruction and compute the corresponding latency
   // information, return true if the MI is a control operation, false otherwise.
-  void addInstr(const MachineInstr *MI) {
-    addInstrInternal(MI, false);
+  const DepLatInfoTy &addInstr(const MachineInstr *MI) {
+    return addInstrInternal(MI, false);
   }
 
   // Build the back-edge latency information of PHIs.
@@ -208,15 +208,8 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const;
 
-  void setMRI(MachineRegisterInfo *mri){
-    MRI = mri;
-  }
-
-  void setWaitAllOps(bool WaitAllOpsTmp) {
-    WaitAllOps = WaitAllOpsTmp;
-  }
-
   bool runOnMachineFunction(MachineFunction &MF) {
+    MRI = &MF.getRegInfo();
     return true;
   }
 

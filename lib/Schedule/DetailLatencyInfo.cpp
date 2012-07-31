@@ -2,10 +2,14 @@
 
 using namespace llvm;
 
+static cl::opt<bool>
+EnableBLC("vtm-enable-blc", cl::desc("Enable bit level chaining"),
+cl::init(true));
+
 char DetialLatencyInfo::ID = 0;
 
-INITIALIZE_PASS(DetialLatencyInfo, "Detail-latency-info",
-                "detail latency info",
+INITIALIZE_PASS(DetialLatencyInfo, "detail-latency-info",
+                "Calculating the latency of instructions",
                 false, true)
 
 DetialLatencyInfo::DetialLatencyInfo() : MachineFunctionPass(ID), MRI(0), 
@@ -24,10 +28,6 @@ void DetialLatencyInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 
 typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
 typedef DepLatInfoTy::mapped_type LatInfoTy;
-
-static cl::opt<bool>
-EnableBLC("vtm-enable-blc", cl::desc("Enable bit level chaining"),
-  cl::init(true));
 
 static void updateLatency(DepLatInfoTy &CurLatInfo, InstPtrTy Src,
                           float MSBLatency, float LSBLatency) {

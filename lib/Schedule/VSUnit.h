@@ -597,16 +597,16 @@ template<> struct GraphTraits<const VSUnit*> {
 
 // Use tree iterator.
 typedef df_iterator<VSUnit*, SmallPtrSet<VSUnit*, 8>, false,
-  GraphTraits<VSUnit*> > usetree_iterator;
+                    GraphTraits<VSUnit*> > usetree_iterator;
 typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
-  GraphTraits<const VSUnit*> > const_usetree_iterator;
+                    GraphTraits<const VSUnit*> > const_usetree_iterator;
 
 // Predecessor tree iterator, travel the tree from exit node.
 typedef df_iterator<VSUnit*, SmallPtrSet<VSUnit*, 8>, false,
-  GraphTraits<Inverse<VSUnit*> > > deptree_iterator;
+                    GraphTraits<Inverse<VSUnit*> > > deptree_iterator;
 
 typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
-  GraphTraits<Inverse<const VSUnit*> > > const_deptree_iterator;
+                    GraphTraits<Inverse<const VSUnit*> > > const_deptree_iterator;
 
 
 class VSchedGraph {
@@ -659,6 +659,7 @@ private:
   void insertReadFUAndDisableFU();
   void insertDisableFU(VSUnit *U);
   void insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset = 0);
+
 public:
   const unsigned EntrySlot;
 
@@ -691,8 +692,8 @@ public:
     return DLInfo.getChainingLatency(SrcInstr, DstInstr);
   }
 
-  void addInstr(const MachineInstr *MI) {
-    DLInfo.addInstr(MI);
+  const DepLatInfoTy &addInstr(const MachineInstr *MI) {
+    return DLInfo.addInstr(MI);
   }
 
   void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info) {

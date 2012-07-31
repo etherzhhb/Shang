@@ -231,14 +231,12 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MLI = &getAnalysis<MachineLoopInfo>();
   LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
+
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   MF.push_back(VirtualExit);
   
-  DetialLatencyInfo *DLInfo = &getAnalysis<DetialLatencyInfo>() ;
-  DLInfo->setMRI(MRI);
-  DLInfo->setWaitAllOps(false);
-  VSchedGraph G(*DLInfo, false, 1);
+  VSchedGraph G(getAnalysis<DetialLatencyInfo>(), false, 1);
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 
