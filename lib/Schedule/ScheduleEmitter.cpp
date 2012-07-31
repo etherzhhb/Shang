@@ -645,6 +645,31 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
       // If the wire define and the copy wrap around?
       if (WrappedAround)
+        // In fact, there is a BUG:
+        // Supposed we have an instruction (operation) Op0, which defines
+        // virtual register A, and there are the users of A, say Op1, Op2, where
+        // Op1 is not wrap around but Op2 does:
+        // Op2 use A
+        // ...
+        // A = Op0
+        // ...
+        // Op1 use A
+        // To preserve the SSA from, we need to insert a PHI: 
+        // A' = PHI A, Same BB, Undef, Other BBs
+        // Op2 use A'
+        // ...
+        // A = Op0
+        // ...
+        // Op1 use A
+        // In fact, the generated code is looks like this:
+        // A' = PHI A, Same BB, Undef, Other BBs
+        // Op2 use A'
+        // ...
+        // A = Op0
+        // ...
+        // Op1 use A' <----------- Use the wrong value.
+        // Fortunately, this bug is hidden by the PHIElimination and
+        // AdjustLIForBundles pass.
         WireNum = createPHI(WireNum, BitWidth, SchedSlot.getSlot(), true);
 
       WireDef WDef = createWireDef(WireNum, MO, Pred, SchedSlot, CopySlot);
