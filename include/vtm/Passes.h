@@ -88,7 +88,6 @@ void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeCFGShortestPathPass(PassRegistry &Registry);
 
 void initializeHyperBlockFormationPass(PassRegistry &Registry);
-void initializeBBDelayAnalysisPass(PassRegistry &Registry);
 
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 void initializeRtlSSAAnalysisPass(PassRegistry &Registry);

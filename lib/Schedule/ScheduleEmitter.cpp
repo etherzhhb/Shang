@@ -621,8 +621,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
     if (MO.isDef()) {
       if (MRI.use_empty(RegNo)) {
-        // Need to fix the register class even the register define is dead.
-        MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
+        MO.ChangeToRegister(0, true);
         continue;
       }
 

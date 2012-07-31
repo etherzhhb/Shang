@@ -285,8 +285,8 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
       UsedByWire = &at->second;
       // Is the wire define already visited out of order?
       if (!inserted) return UsedByWire;
-    } else {
-      assert(DefRegNo && UsedByWire && "Datapath dose not defines wire?");
+    } else if (DefRegNo) {
+      assert(UsedByWire && "Datapath dose not defines wire?");
       unsigned UseRegNo = RegNo;
       // Make sure we had visit and extend the wire dependences.
       if (MRI->getRegClass(UseRegNo) == &VTM::WireRegClass) {

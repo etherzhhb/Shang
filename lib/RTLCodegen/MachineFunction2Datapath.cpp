@@ -189,6 +189,9 @@ VASTValPtr DatapathBuilder::buildBitSlice(MachineInstr *MI) {
 VASTValPtr DatapathBuilder::createAndIndexExpr(MachineInstr *MI,
                                                bool mayExisted) {
   unsigned RegNo = MI->getOperand(0).getReg();
+  // Ignore the dead data-path.
+  if (RegNo == 0) return 0;
+  
   assert(TargetRegisterInfo::isVirtualRegister(RegNo)
          && "Expected virtual register!");
   VASTValPtr &Expr = Idx2Expr[RegNo];
