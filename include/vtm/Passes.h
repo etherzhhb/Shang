@@ -26,11 +26,13 @@ class TargetMachine;
 class PassRegistry;
 class TargetIntrinsicInfo;
 class VTargetMachine;
+class MachineRegisterInfo;
 
 extern char &AdjustLIForBundlesID;
 
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
+Pass *createDetialLatencyInfoPass();
 // Always inline function.
 Pass *createHLSInlinerPass();
 Pass *createTrivialLoopUnrollPass();
@@ -74,11 +76,12 @@ Pass *createRtlSSAAnalysisPass();
 Pass *createVerilogASTBuilderPass();
 Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
-
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
 //
+void initializeDetialLatencyInfoPass(PassRegistry &Registry);
+void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
 void initializeVAliasAnalysisPass(PassRegistry &Registry);
 void initializeAdjustLIForBundlesPass(PassRegistry &Registry);
 void initializePrebindMuxBasePass(PassRegistry &Registry);

@@ -23,6 +23,7 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/FUInfo.h"
 #include "vtm/Utilities.h"
+#include "vtm/DetailLatencyInfo.h"
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
