@@ -62,7 +62,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   AliasAnalysis *AA;
   ScalarEvolution *SE;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID) {}
+  VPreRegAllocSched() : MachineFunctionPass(ID) {
+    initializeVPreRegAllocSchedPass(*PassRegistry::getPassRegistry());
+  }
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -194,6 +196,16 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 //===----------------------------------------------------------------------===//
 char VPreRegAllocSched::ID = 0;
 
+INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
+  "Verilog pre reg allocet sched", false, false)
+INITIALIZE_PASS_DEPENDENCY(LoopInfo)
+INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
+INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
+INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
+INITIALIZE_PASS_DEPENDENCY(DetialLatencyInfo)
+INITIALIZE_PASS_END(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
+  "Verilog pre reg allocet sched", false, false)
+
 Pass *llvm::createVPreRegAllocSchedPass() {
   return new VPreRegAllocSched();
 }
@@ -208,6 +220,7 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
+  AU.addRequired<DetialLatencyInfo>();
 }
 
 bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
@@ -221,9 +234,11 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   MF.push_back(VirtualExit);
-
-  DetialLatencyInfo DLInfo(*MRI, false);
-  VSchedGraph G(DLInfo, false, 1);
+  
+  DetialLatencyInfo *DLInfo = &getAnalysis<DetialLatencyInfo>() ;
+  DLInfo->setMRI(MRI);
+  DLInfo->setWaitAllOps(false);
+  VSchedGraph G(*DLInfo, false, 1);
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 

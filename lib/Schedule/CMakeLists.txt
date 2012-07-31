@@ -19,6 +19,7 @@ add_llvm_library(VTMSchedule
   VRegAllocSimple.cpp
   VAliasAnalysis.cpp
   SDCScheduler.cpp
+  DetailLatencyInfo.cpp
 )
 
 target_link_libraries (

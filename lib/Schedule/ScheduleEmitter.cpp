@@ -959,7 +959,7 @@ bool VSchedGraph::insertDelayBlocks() {
 void VSchedGraph::insertDisableFU(VSUnit *U) {
   MachineInstr *MI = U->getRepresentativePtr();
   assert(MI && "Unexpected BBEntry SU!");
-  MachineRegisterInfo &MRI = DLInfo.MRI;
+  MachineRegisterInfo &MRI = *DLInfo.MRI;
   const TargetRegisterClass *RC
     = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
 
@@ -1022,7 +1022,7 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
 
   unsigned Slot = U->getSlot() + Offset;
   unsigned ResultWire = MI->getOperand(0).getReg();
-  MachineRegisterInfo &MRI = DLInfo.MRI;
+  MachineRegisterInfo &MRI = *DLInfo.MRI;
   const TargetRegisterClass *RC
     = VRegisterInfo::getRepRegisterClass(MI->getOpcode());
 
