@@ -219,7 +219,7 @@ public:
 };
 
 template <bool IsCtrlPath> struct GraphTraits<Scheduler<IsCtrlPath>*> 
-    : public GraphTraits<VSchedGraph*> {
+    : public GraphTraits<VSchedGraphWrapper<IsCtrlPath> > {
   typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(Scheduler<IsCtrlPath> *G) {
     return G->begin();

@@ -27,7 +27,6 @@
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
@@ -549,65 +548,51 @@ static inline size_t duse_empty(const VSUnit *G) {
   return G->use_empty<false>();
 }
 
-template<> struct GraphTraits<Inverse<VSUnit*> > {
+template<bool IsCtrlPath> struct VSUnitDepGraphTraits {
   typedef VSUnit NodeType;
   typedef VSUnit::dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return cp_begin(N);
+    return N->dep_begin<IsCtrlPath>();
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return cp_end(N);
+    return N->dep_end<IsCtrlPath>();
   }
 };
-template<> struct GraphTraits<Inverse<const VSUnit*> > {
+template<bool IsCtrlPath> struct ConstVSUnitDepGraphTraits {
   typedef const VSUnit NodeType;
   typedef VSUnit::const_dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return cp_begin(N);
+    return N->dep_begin<IsCtrlPath>();
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return cp_end(N);
+    return N->dep_end<IsCtrlPath>();
   }
 };
 
-template<> struct GraphTraits<VSUnit*> {
+template<bool IsCtrlPath> struct VSUnitUseGraphTraits {
   typedef VSUnit NodeType;
   typedef VSUnit::use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return cuse_begin(N);
+    return N->use_begin<IsCtrlPath>();
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return cuse_end(N);
+    return N->use_end<IsCtrlPath>();
   }
 };
-template<> struct GraphTraits<const VSUnit*> {
+template<bool IsCtrlPath> struct ConstVSUnitUseGraphTraits {
   typedef const VSUnit NodeType;
   typedef VSUnit::const_use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return cuse_begin(N);
+    return N->use_begin<IsCtrlPath>();
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return cuse_end(N);
+    return N->use_end<IsCtrlPath>();
   }
 };
-
-// Use tree iterator.
-typedef df_iterator<VSUnit*, SmallPtrSet<VSUnit*, 8>, false,
-                    GraphTraits<VSUnit*> > usetree_iterator;
-typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
-                    GraphTraits<const VSUnit*> > const_usetree_iterator;
-
-// Predecessor tree iterator, travel the tree from exit node.
-typedef df_iterator<VSUnit*, SmallPtrSet<VSUnit*, 8>, false,
-                    GraphTraits<Inverse<VSUnit*> > > deptree_iterator;
-
-typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
-                    GraphTraits<Inverse<const VSUnit*> > > const_deptree_iterator;
-
 
 class VSchedGraph {
 public:
@@ -954,16 +939,6 @@ static inline VSchedGraph::const_iterator dp_end(const VSchedGraph *G) {
   return G->end<false>();
 }
 
-template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
-  typedef VSchedGraph::const_iterator nodes_iterator;
-  static nodes_iterator nodes_begin(const VSchedGraph *G) {
-    return cp_begin(G);
-  }
-  static nodes_iterator nodes_end(const VSchedGraph *G) {
-    return cp_end(G);
-  }
-};
-
 template<VDEdge::Types Type>
 int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
                          VSchedGraph &G) const {
@@ -1009,6 +984,69 @@ VSchedGraph::getCtrlStepBetween<VDEdge::MemDep>(const MachineInstr *SrcInstr,
                                                 const {
   return DLInfo.getCtrlStepBetween<false>(SrcInstr, DstInstr);
 }
+
+// The wrapper for control-path dependencies graph and data-path dependencies
+// graph.
+template<bool IsCtrlPath>
+struct VSchedGraphWrapper {
+  const VSchedGraph *G;
+  std::vector<const VSUnit*> SUs;
+
+  /*implicit*/ inline VSchedGraphWrapper(const VSchedGraph *G);
+
+  const VSchedGraph *operator->() const { return G; }
+
+  typedef std::vector<const VSUnit*>::const_iterator const_iterator;
+  const_iterator begin() const { return SUs.begin(); }
+  const_iterator end() const { return SUs.end(); }
+
+  unsigned size() const { return SUs.size(); }
+};
+
+template<>
+inline VSchedGraphWrapper<true>::VSchedGraphWrapper(const VSchedGraph *G)
+  : G(G), SUs(cp_begin(G), cp_end(G)) {}
+
+template<>
+inline VSchedGraphWrapper<false>::VSchedGraphWrapper(const VSchedGraph *G)
+  : G(G), SUs(dp_begin(G), dp_end(G))
+{
+  // The control-path scheduling units are also in the data-path
+  // dependencies graph.
+  SUs.insert(SUs.end(), cp_begin(G), cp_end(G));
+}
+
+template <bool IsCtrlPath>
+struct GraphTraits<VSchedGraphWrapper<IsCtrlPath> >{
+  typedef VSchedGraphWrapper<IsCtrlPath> GraphType;
+  typedef const VSUnit NodeType;
+  typedef VSUnit::const_use_iterator ChildIteratorType;
+
+  static NodeType *getEntryNode(const GraphType &G) {
+    return G->getEntryRoot();
+  }
+
+  static ChildIteratorType child_begin(NodeType *N) {
+    return N->use_begin<IsCtrlPath>();
+  }
+
+  static ChildIteratorType child_end(NodeType *N) {
+    return N->use_end<IsCtrlPath>();
+  }
+
+  typedef typename GraphType::const_iterator nodes_iterator;
+  static nodes_iterator nodes_begin(const GraphType &G) {
+    return G.begin();
+  }
+
+  static nodes_iterator nodes_end(const GraphType &G) {
+    return G.end();
+  }
+
+  static unsigned size(const GraphType &G) {
+    return G.size();
+  }
+};
 } // end namespace
 
 #endif

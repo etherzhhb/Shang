@@ -202,7 +202,7 @@ void VSchedGraph::topologicalSortCPSUs() {
   unsigned Idx = 0;
   VSUnit *Exit = getExitRoot();
   typedef po_iterator<VSUnit*, SmallPtrSet<VSUnit*, 64>, false,
-                      GraphTraits<Inverse<VSUnit*> > >
+                      VSUnitDepGraphTraits<true> >
           top_it;
 
   for (top_it I = top_it::begin(Exit), E = top_it::end(Exit); I != E; ++I)
