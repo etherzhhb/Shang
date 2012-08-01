@@ -132,16 +132,6 @@ protected:
 public:
   DetialLatencyInfo();
 
-  // Build the back-edge latency information of PHIs.
-  void buildPHIBELatInfo(const MachineInstr *MI, DepLatInfoTy &Info) {
-    assert(MI->isPHI() && "Expect PHI!");
-    // Simply add the back-edge dependence information of the which not
-    // available at the first scan, but already available now.
-    // Because PHINodes not depends on PHINodes in the same BB, we should ignore
-    // PHINodes if it appear as an operand.
-    addInstrInternal(MI, Info, true);
-  }
-
   // Get the source register and the corresponding latency to DstMI
   const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
     LatencyMapTy::const_iterator at = LatencyMap.find(DstMI);
