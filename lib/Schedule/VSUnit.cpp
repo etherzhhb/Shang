@@ -589,6 +589,6 @@ void VSUnit::print(raw_ostream &OS) const {
     }
   }
 
-  OS << getFUId() << "\nAt slot: " << getSlot();
+  OS << getFUId() << "\nAt slot: " << getSlot() << " latency: " << getLatency();
   if (isDangling()) OS << " <Dangling>";
 }
