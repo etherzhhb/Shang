@@ -38,6 +38,7 @@
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/GraphWriter.h"
@@ -668,7 +669,29 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
     }
   }
 
-  if (isCtrl) return;
+  if (isCtrl) {
+    typedef df_iterator<VSUnit*, std::set<VSUnit*>, false,
+                        VSUnitDepGraphTraits<false> >
+            dep_tree_iterator;
+    // Make sure the value of data-path operation is copied to register before
+    // its control-path user start.
+    // Inserting the dependencies will change the dependencies tree, hence we
+    // need to store the whole dependencies tree to somewhere else first.
+    // In addition, we also need to skip A itself by skipping the first node in
+    // depth-first order..
+    std::vector<VSUnit*> DepChildren(llvm::next(dep_tree_iterator::begin(A)),
+                                     dep_tree_iterator::end(A));
+    typedef std::vector<VSUnit*>::iterator iterator;
+    for (iterator I = DepChildren.begin(), E = DepChildren.end(); I != E; ++I) {
+      VSUnit *U = *I;
+
+      if (U->isControl()) continue;
+
+      A->addDep<false>(U, VDEdge::CreateValDep(U->getLatency()));
+    }
+
+    return;
+  }
 
   assert(A->num_instrs() == 1 && "Unexpected multiple MI in data-path operation!");
   MachineInstr *MI = A->getRepresentativePtr();
