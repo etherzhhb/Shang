@@ -123,11 +123,8 @@ private:
   // Add the latency information from SrcMI to CurLatInfo.
   template<bool IsCtrlDep>
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
-    DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
-    float OperandDelay);
-  // Also remember the operations that do not use by any others operations in
-  // the same bb.
-  std::set<const MachineInstr*> MIsToWait, MIsToRead;
+                       DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
+                       float OperandDelay);
 
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
@@ -157,20 +154,14 @@ public:
     return at == LatencyMap.end() ? 0 : &at->second;
   }
 
+  typedef const std::set<const MachineInstr*> MISetTy;
   // All operation must finish before the BB exit, this function build the
   // information about the latency from instruction to the BB exit.
-  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info);
-
-  // Erase the instructions from exit set.
-  void eraseFromWaitSet(const MachineInstr *MI);
+  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info,
+                       MISetTy &MIsToWait, MISetTy &MIsToRead);
 
   void addDummyLatencyEntry(const MachineInstr *MI, float l = 0.0f) {
     CachedLatencies.insert(std::make_pair(MI, l));
-  }
-
-  void resetExitSet() {
-    MIsToWait.clear();
-    MIsToRead.clear();
   }
 
   void clearCachedLatencies() { CachedLatencies.clear(); }
@@ -178,7 +169,6 @@ public:
   void reset() {
     LatencyMap.clear();
     clearCachedLatencies();
-    resetExitSet();
   }
 
   float getMaxLatency(const MachineInstr *MI) const {
@@ -192,7 +182,7 @@ public:
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
   float getChainingLatency(const MachineInstr *SrcInstr,
-    const MachineInstr *DstInstr) const;
+                           const MachineInstr *DstInstr) const;
 
   static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
 

@@ -61,6 +61,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   LoopInfo *LI;
   AliasAnalysis *AA;
   ScalarEvolution *SE;
+  // Also remember the operations that do not use by any others operations in
+  // the same bb.
+  std::set<const MachineInstr*> MIsToWait, MIsToRead;
 
   VPreRegAllocSched() : MachineFunctionPass(ID) {
     initializeVPreRegAllocSchedPass(*PassRegistry::getPassRegistry());
@@ -147,8 +150,22 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   typedef VSchedGraph::iterator iterator;
   void addDepsForBBEntry(VSchedGraph &G, VSUnit *EntrySU);
+
+  /// Maintain the wait sets, which contain the MI that need to wait before
+  /// leaving the BB.
+  // Erase the instructions from exit set.
+  void eraseFromWaitSet(const MachineInstr *MI) {
+    MIsToRead.erase(MI);
+    MIsToWait.erase(MI);
+  }
+
+  void updateWaitSets(MachineInstr *MI, const DepLatInfoTy &Deps,
+                      MachineBasicBlock *MBB);
+
   void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB,
                              std::vector<VSUnit*> &NewSUs);
+
+
   void buildDataPathGraph(VSchedGraph &G, ArrayRef<VSUnit*> NewSUs);
 
   void buildPipeLineDepEdges(VSchedGraph &G);
@@ -913,7 +930,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     }
 
     // Compute the dependence information.
-    G.addInstr(MI);
+    const DepLatInfoTy &Deps = G.addInstr(MI);
+    updateWaitSets(MI, Deps, MBB);
 
     // Build the schedule unit for loop back operation.
     if (G.isLoopOp(I)) {
@@ -936,7 +954,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     if (!I->isTerminator() || G.isLoopOp(I)) continue;
 
     // No need to wait the terminator.
-    G.eraseFromWaitSet(MI);
+    eraseFromWaitSet(MI);
 
     // Build a exit root or merge the terminators into the exit root.
     bool mapped = G.mapMI2SU(MI, ExitSU, 0);
@@ -961,12 +979,12 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
 
       // No need to wait VOpMvPhi, because we are going to merge it into the
       // exit root.
-      G.eraseFromWaitSet(MI);
+      eraseFromWaitSet(MI);
     } else if (G.isLoopOp(I))
       continue;
 
     // Build datapath latency information for the terminator.
-    G.buildExitMIInfo(MI, ExitDeps);
+    G.buildExitMIInfo(MI, ExitDeps, MIsToWait, MIsToRead);
   }
 
   // Add the control dependence edge edges to wait all operation finish.
@@ -981,13 +999,66 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   buildTerminatorDeps(G, ExitSU);
 }
 
+void VPreRegAllocSched::updateWaitSets(MachineInstr *MI,
+                                       const DepLatInfoTy &Deps,
+                                       MachineBasicBlock *MBB ) {
+  // Compute the instruction which are need to wait before leaving the BB.
+  bool IsControl = VInstrInfo::isControl(MI->getOpcode());
+
+  // Iterate from use to define.
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
+
+    // Only care about a use register.
+    if (!MO.isReg() || MO.isDef() || MO.getReg() == 0)
+      continue;
+
+    unsigned SrcReg = MO.getReg();
+    MachineInstr *SrcMI = MRI->getVRegDef(SrcReg);
+    assert(SrcMI && "Virtual register use without define!");
+
+    if (MBB != SrcMI->getParent()) continue;
+
+    // Now MI is actually depends on SrcMI in this MBB, no need to wait it
+    // explicitly.
+    MIsToWait.erase(SrcMI);
+
+    // SrcMI is read by a data-path operation, we need to wait its result before
+    // exiting the BB if there is no other control operation read it.
+    if (VInstrInfo::isControl(SrcMI->getOpcode()) && !IsControl)
+      MIsToRead.insert(SrcMI);
+  }
+
+  if (IsControl || false /*Disable Dangling*/) MIsToWait.insert(MI);
+
+  if (!IsControl) return;
+
+  typedef DepLatInfoTy::const_iterator it;
+  for (it I = Deps.begin(), E = Deps.end(); I != E; ++I) {
+    const MachineInstr *SrcMI = I->first;
+    if (SrcMI == 0 || MBB != SrcMI->getParent())
+      continue;
+
+    // SrcMI (or its user) is read by MI, no need to wait it explicitly.
+    MIsToRead.erase(SrcMI);
+  }
+}
+
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G, 
                                               MachineBasicBlock *MBB,
                                               std::vector<VSUnit*> &NewSUs) {
+  // Clean the context
+  MIsToWait.clear();
+  MIsToRead.clear();
+
   instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
-    G.addInstr(MI);
+
+    const DepLatInfoTy &Deps = G.addInstr(MI);
+
+    updateWaitSets(MI, Deps, MBB);
+
     if (VSUnit *U = buildSUnit(MI, G))
       NewSUs.push_back(U);
 
@@ -995,7 +1066,8 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
   }
 
   for (instr_it I = BI; !I->isTerminator(); ++I) {
-    G.addInstr(I);
+    const DepLatInfoTy &Deps = G.addInstr(I);
+    updateWaitSets(I, Deps, MBB);
 
     if (!G.isLoopPHIMove(I)) continue;
     
@@ -1054,7 +1126,6 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 
   for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
-    G.DLInfo.resetExitSet();
 
     if (couldBePipelined(MBB)) {
       // Perform software pipelining with local scheduling algorithm.

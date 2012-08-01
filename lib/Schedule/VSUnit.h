@@ -696,13 +696,10 @@ public:
     return DLInfo.addInstr(MI);
   }
 
-  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info) {
-    DLInfo.buildExitMIInfo(ExitMI, Info);
-  }
-
-  // Erase the instructions from exit set.
-  void eraseFromWaitSet(const MachineInstr *MI) {
-    DLInfo.eraseFromWaitSet(MI);
+  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info,
+                       const std::set<const MachineInstr*> &MIsToWait,
+                       const std::set<const MachineInstr*> &MIsToRead) {
+    DLInfo.buildExitMIInfo(ExitMI, Info, MIsToWait, MIsToRead);
   }
 
   template<VDEdge::Types Type>

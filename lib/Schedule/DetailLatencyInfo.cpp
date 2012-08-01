@@ -303,11 +303,6 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   return true;
 }
 
-void DetialLatencyInfo::eraseFromWaitSet(const MachineInstr *MI) {
-  MIsToWait.erase(MI);
-  MIsToRead.erase(MI);
-}
-
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   DepLatInfoTy &CurLatInfo = LatencyMap[MI];
@@ -344,57 +339,31 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // If we build the Latency Info for SrcMI successfully, that means SrcMI
     // have user now.
     if (CurMBB != SrcMI->getParent()) continue;
-
-    // Now MI is actually depends on SrcMI in this MBB, no need to wait them
-    // explicitly.
-    MIsToWait.erase(SrcMI);
-
-    // SrcMI is read by a data-path operation, we need to wait its result before
-    // exiting the BB if there is no other control operation read it.
-    if (VInstrInfo::isControl(SrcMI->getOpcode()) && !IsControl)
-      MIsToRead.insert(SrcMI);
   }
 
-  // Find all MIs that are read by other control operation, and we do not need
-  // to read them explicitly.
-  if (IsControl)
-    for (DepLatInfoTy::iterator I = CurLatInfo.begin(), E = CurLatInfo.end();
-      I != E; ++I) {
-        const MachineInstr *SrcMI = I->first;
-        if (SrcMI == 0 || CurMBB != SrcMI->getParent())
-          continue;
+  // Compute the latency of MI.
+  float Latency = computeLatencyFor(MI);
 
-        MIsToRead.erase(SrcMI);
-    }
+  // We will not get any latency information if a datapath operation do not
+  // depends any control operation in the same BB.
+  if (CurLatInfo.empty() && !IsControl) {
+    float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
+    CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(latency, latency)));
+  }
 
-    // Align the compute the latency of MI.
-    float Latency = computeLatencyFor(MI);
-
-    // Assume MI do not have any user in the same BB, if it has, it will be
-    // deleted later.
-    if (IsControl || WaitAllOps)
-      MIsToWait.insert(MI);
-
-    // We will not get any latency information if a datapath operation do not
-    // depends any control operation in the same BB.
-    if (CurLatInfo.empty() && !IsControl) {
-      float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
-      CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(latency, latency)));
-    }
-
-    return CurLatInfo;
+  return CurLatInfo;
 }
 
 void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
-                                        DepLatInfoTy &Info) {
-  typedef std::set<const MachineInstr*>::const_iterator exit_it;
+                                        DepLatInfoTy &Info,
+                                        MISetTy &MIsToWait, MISetTy &MIsToRead){
+  typedef MISetTy::const_iterator exit_it;
   // Exiting directly, no need to read the result fore fore exting.
   for (exit_it I = MIsToWait.begin(), E = MIsToWait.end(); I != E; ++I)
     buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
 
   // Exiting via data-path operation, the value need to be read before exiting.
-  for (exit_it I = MIsToRead.begin(), E = MIsToRead.end();
-    I != E; ++I)
+  for (exit_it I = MIsToRead.begin(), E = MIsToRead.end(); I != E; ++I)
     buildDepLatInfo<false>(*I, ExitMI, Info, 0, 0.0);
 }
 
