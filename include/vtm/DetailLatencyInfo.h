@@ -130,11 +130,6 @@ protected:
 
 public:
   DetialLatencyInfo();
-  // Add the a machine instruction and compute the corresponding latency
-  // information, return true if the MI is a control operation, false otherwise.
-  const DepLatInfoTy &addInstr(const MachineInstr *MI) {
-    return addInstrInternal(MI, false);
-  }
 
   // Build the back-edge latency information of PHIs.
   const DepLatInfoTy &buildPHIBELatInfo(const MachineInstr *MI) {
@@ -199,10 +194,7 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const;
 
-  bool runOnMachineFunction(MachineFunction &MF) {
-    MRI = &MF.getRegInfo();
-    return true;
-  }
+  bool runOnMachineFunction(MachineFunction &MF);
 
   void releaseMemory() { reset(); }
 };

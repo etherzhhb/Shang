@@ -159,8 +159,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     MIsToWait.erase(MI);
   }
 
-  void updateWaitSets(MachineInstr *MI, const DepLatInfoTy &Deps,
-                      MachineBasicBlock *MBB);
+  void updateWaitSets(MachineInstr *MI, VSchedGraph &G);
 
   void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB,
                              std::vector<VSUnit*> &NewSUs);
@@ -929,9 +928,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
       continue;
     }
 
-    // Compute the dependence information.
-    const DepLatInfoTy &Deps = G.addInstr(MI);
-    updateWaitSets(MI, Deps, MBB);
+    updateWaitSets(MI, G);
 
     // Build the schedule unit for loop back operation.
     if (G.isLoopOp(I)) {
@@ -999,9 +996,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   buildTerminatorDeps(G, ExitSU);
 }
 
-void VPreRegAllocSched::updateWaitSets(MachineInstr *MI,
-                                       const DepLatInfoTy &Deps,
-                                       MachineBasicBlock *MBB ) {
+void VPreRegAllocSched::updateWaitSets(MachineInstr *MI, VSchedGraph &G) {
+  const DepLatInfoTy &Deps = *G.getDepLatInfo(MI);
+  MachineBasicBlock *MBB = MI->getParent();
+
   // Compute the instruction which are need to wait before leaving the BB.
   bool IsControl = VInstrInfo::isControl(MI->getOpcode());
 
@@ -1053,11 +1051,9 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 
   instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
-    MachineInstr *MI = BI;    
+    MachineInstr *MI = BI;
 
-    const DepLatInfoTy &Deps = G.addInstr(MI);
-
-    updateWaitSets(MI, Deps, MBB);
+    updateWaitSets(MI, G);
 
     if (VSUnit *U = buildSUnit(MI, G))
       NewSUs.push_back(U);
@@ -1066,8 +1062,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
   }
 
   for (instr_it I = BI; !I->isTerminator(); ++I) {
-    const DepLatInfoTy &Deps = G.addInstr(I);
-    updateWaitSets(I, Deps, MBB);
+    updateWaitSets(I, G);
 
     if (!G.isLoopPHIMove(I)) continue;
     

@@ -15,6 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/DetailLatencyInfo.h"
+#include "llvm/ADT/PostOrderIterator.h"
 
 using namespace llvm;
 
@@ -389,4 +390,19 @@ float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
   // Compute the latency correspond to detail slot.
   float latency = getMaxLatency(SrcInstr);
   return adjustChainingLatency(latency, SrcInstr, DstInstr);
+}
+
+bool DetialLatencyInfo::runOnMachineFunction(MachineFunction &MF) {
+  MRI = &MF.getRegInfo();
+
+  ReversePostOrderTraversal<MachineBasicBlock*> Ord(MF.begin());
+  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+  typedef MachineBasicBlock::instr_iterator mi_it;
+
+  // Iterate the BBs in topological order.
+  for (rpo_it BI = Ord.begin(), BE = Ord.end(); BI != BE; ++BI)
+    for (mi_it I = (*BI)->instr_begin(), E = (*BI)->instr_end(); I != E; ++I)
+      addInstrInternal(I,  LatencyMap[I], false);
+
+  return false;
 }

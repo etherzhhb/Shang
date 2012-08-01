@@ -692,10 +692,6 @@ public:
     return DLInfo.getChainingLatency(SrcInstr, DstInstr);
   }
 
-  const DepLatInfoTy &addInstr(const MachineInstr *MI) {
-    return DLInfo.addInstr(MI);
-  }
-
   void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info,
                        const std::set<const MachineInstr*> &MIsToWait,
                        const std::set<const MachineInstr*> &MIsToRead) {
