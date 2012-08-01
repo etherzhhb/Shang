@@ -120,9 +120,9 @@ private:
   LatencyMapTy LatencyMap;
   // Add the latency information from SrcMI to CurLatInfo.
   template<bool IsCtrlDep>
-  bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
-                       DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
-                       float OperandDelay);
+  bool buildDepLatInfo(const MachineInstr *SrcMI, DepLatInfoTy &CurLatInfo,
+                       unsigned OperandWidth, float OperandDelay,
+                       unsigned DstOpcode = VTM::INSTRUCTION_LIST_END);
 
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
@@ -136,6 +136,12 @@ public:
   const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
     LatencyMapTy::const_iterator at = LatencyMap.find(DstMI);
     return at == LatencyMap.end() ? 0 : &at->second;
+  }
+
+  // Get the latencies from the control-path dependences to the copy operation
+  // which copy MI's result to register.
+  void buildLatenciesToCopy(const MachineInstr *MI, DepLatInfoTy &Info) {
+    buildDepLatInfo<false>(MI, Info, 0, 0.0, VTM::VOpReadFU);
   }
 
   typedef const std::set<const MachineInstr*> MISetTy;

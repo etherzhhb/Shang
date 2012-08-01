@@ -176,25 +176,18 @@ static LatInfoTy getParallelLatency(float SrcMSBLatency, float SrcLSBLatency,
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
-static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
-                                   const MachineInstr *DstInstr) {
-  assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
-  assert(SrcInstr != DstInstr && "Computing latency of self loop?");
-  const MCInstrDesc &DstTID = DstInstr->getDesc();
-  unsigned DstOpC = DstTID.getOpcode();
-  const MCInstrDesc &SrcTID = SrcInstr->getDesc();
-  unsigned SrcOpC = SrcTID.getOpcode();
-
-  bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpC);
-  bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpC);
+static float adjustChainingLatency(float Latency, unsigned SrcOpcode,
+                                   unsigned DstOpcode) {
+  bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpcode);
+  bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpcode);
 
   float Delta = DetialLatencyInfo::DeltaLatency;
 
   if (DstReadAtEmit && SrcWriteUntilFInish) {
-    if (SrcOpC == VTM::VOpMvPhi) {
-      assert((DstOpC == TargetOpcode::PHI || DstOpC == VTM::VOpMvPhi
-        || VInstrInfo::getDesc(DstOpC).isTerminator())
-        && "VOpMvPhi should only used by PHIs or terminators!!");
+    if (SrcOpcode == VTM::VOpMvPhi) {
+      assert((DstOpcode == TargetOpcode::PHI || DstOpcode == VTM::VOpMvPhi
+              || VInstrInfo::getDesc(DstOpcode).isTerminator())
+             && "VOpMvPhi should only used by PHIs or terminators!!");
       // The latency from VOpMvPhi to PHI is exactly 0, because the VOpMvPhi is
       // simply identical to the PHI at next iteration.
       return 0.0f;
@@ -236,10 +229,9 @@ bool DetialLatencyInfo::propagateFromLSB2MSB(unsigned Opcode) {
 
 template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
-                                        const MachineInstr *DstMI,// Not needed
                                         DepLatInfoTy &CurLatInfo,
                                         unsigned OperandWidth,
-                                        float OperandDelay) {
+                                        float OperandDelay, unsigned DstOpcode){
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
@@ -247,7 +239,8 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   float SrcMSBLatency = getCachedLatencyResult(SrcMI);
   if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, SrcMSBLatency)) {
-    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
+    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI->getOpcode(),
+                                          DstOpcode);
     // If we are only reading the lower part of the result of SrcMI, and the
     // LSB of the result of SrcMI are available before SrcMI completely finish,
     // we can read the subword before SrcMI finish.
@@ -258,7 +251,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
         assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
         SrcMSBLatency =
           BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth,
-          SrcMSBLatency);
+                                                SrcMSBLatency);
       }
     }
   } else // IsCtrlDep
@@ -351,7 +344,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
     } else
       OpDelay = VInstrInfo::getOperandLatency(MI, i);
 
-    if (!buildDepLatInfo<false>(SrcMI, MI, CurLatInfo, OpSize, OpDelay))
+    if (!buildDepLatInfo<false>(SrcMI, CurLatInfo, OpSize, OpDelay,
+                                MI->getOpcode()))
       continue;
 
     // If we build the Latency Info for SrcMI successfully, that means SrcMI
@@ -378,19 +372,19 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
   typedef MISetTy::const_iterator exit_it;
   // Exiting directly, no need to read the result fore fore exting.
   for (exit_it I = MIsToWait.begin(), E = MIsToWait.end(); I != E; ++I)
-    buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
+    buildDepLatInfo<true>(*I, Info, 0, 0.0, ExitMI->getOpcode());
 
   // Exiting via data-path operation, the value need to be read before exiting.
   for (exit_it I = MIsToRead.begin(), E = MIsToRead.end(); I != E; ++I)
-    buildDepLatInfo<false>(*I, ExitMI, Info, 0, 0.0);
+    buildDepLatInfo<false>(*I, Info, 0, 0.0, ExitMI->getOpcode());
 }
-
 
 float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                             const MachineInstr *DstInstr) const{
   // Compute the latency correspond to detail slot.
   float latency = getMaxLatency(SrcInstr);
-  return adjustChainingLatency(latency, SrcInstr, DstInstr);
+  return adjustChainingLatency(latency, SrcInstr->getOpcode(),
+                               DstInstr->getOpcode());
 }
 
 bool DetialLatencyInfo::runOnMachineFunction(MachineFunction &MF) {
