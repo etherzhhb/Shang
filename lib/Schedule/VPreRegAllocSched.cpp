@@ -662,10 +662,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
 
       // Constraint the schedule unit by the entry of the parent BB.
-      if (Dep->getParentBB() != ParentBB)
-        A->addDep<false>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
-
-      ++NumValDep;
+      if (Dep->getParentBB() == ParentBB) ++NumValDep;
     }
   }
 
@@ -692,7 +689,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       int Latency = int(LatencyToCopy) - int(StepsToFinish);
       assert(Latency >= 0 && "Bad latency!");
       A->addDep<false>(SrcSU, VDEdge::CreateValDep(Latency));
-      ++NumValDep;
+
+      if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
     }
   }
 
