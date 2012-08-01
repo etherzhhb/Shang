@@ -126,19 +126,20 @@ private:
 
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
+                                       DepLatInfoTy &CurLatInfo,
                                        bool IgnorePHISrc);
 
 public:
   DetialLatencyInfo();
 
   // Build the back-edge latency information of PHIs.
-  const DepLatInfoTy &buildPHIBELatInfo(const MachineInstr *MI) {
+  void buildPHIBELatInfo(const MachineInstr *MI, DepLatInfoTy &Info) {
     assert(MI->isPHI() && "Expect PHI!");
     // Simply add the back-edge dependence information of the which not
     // available at the first scan, but already available now.
     // Because PHINodes not depends on PHINodes in the same BB, we should ignore
     // PHINodes if it appear as an operand.
-    return addInstrInternal(MI, true);
+    addInstrInternal(MI, Info, true);
   }
 
   // Get the source register and the corresponding latency to DstMI

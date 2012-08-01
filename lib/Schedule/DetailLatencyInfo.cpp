@@ -321,8 +321,9 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 }
 
 const DetialLatencyInfo::DepLatInfoTy &
-DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
-  DepLatInfoTy &CurLatInfo = LatencyMap[MI];
+DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
+                                    DepLatInfoTy &CurLatInfo,
+                                    bool IgnorePHISrc) {
   const MachineBasicBlock *CurMBB = MI->getParent();
 
   const MCInstrDesc &TID = MI->getDesc();
