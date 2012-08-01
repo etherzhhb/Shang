@@ -115,10 +115,10 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   template<bool CrossBBOnly>
   void addChainDepForSU(VSUnit *A, VSchedGraph &G);
 
-  typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
+  typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<VDEdge::Types Type, bool CrossBBOnly>
   void addChainDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
-                        VSchedGraph &G, DepLatInfoTy &LatInfo);
+                        VSchedGraph &G, const DepLatInfoTy &LatInfo);
   // Add the dependence from the incoming value of PHI to PHI.
   void addIncomingDepForPHI(VSUnit *PN, VSchedGraph &G);
 
@@ -512,7 +512,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
 template<VDEdge::Types Type, bool CrossBBOnly>
 void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
                                          VSUnit *A, VSchedGraph &G,
-                                         DepLatInfoTy &LatInfo) {
+                                         const DepLatInfoTy &LatInfo) {
   assert(MI && "Unexpected entry root!");
   // DIRTY HACK: Positive offset is not supported now.
   MIOffset = std::min(MIOffset, 0);
@@ -1113,7 +1113,7 @@ bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   buildDataPathGraph(G, NewSUs);
   addDepsForBBEntry(G, CurEntry);
 
-  // The BB is pipelined sucessfully.
+  // The BB is pipelined successfully.
   return true;
 }
 
