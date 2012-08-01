@@ -686,6 +686,9 @@ public:
     return DLInfo.getDepLatInfo(DstMI);
   }
 
+  void buildLatenciesToCopy(const MachineInstr *MI, DepLatInfoTy &Info) {
+    DLInfo.buildLatenciesToCopy(MI, Info);
+  }
 
   float getChainingLatency(const MachineInstr *SrcInstr,
                            const MachineInstr *DstInstr) const {

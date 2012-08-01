@@ -164,7 +164,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildControlPathGraph(VSchedGraph &G, MachineBasicBlock *MBB,
                              std::vector<VSUnit*> &NewSUs);
 
-
   void buildDataPathGraph(VSchedGraph &G, ArrayRef<VSUnit*> NewSUs);
 
   void buildPipeLineDepEdges(VSchedGraph &G);
@@ -631,9 +630,12 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   unsigned NumValDep = 0;
   MachineBasicBlock *ParentBB = A->getParentBB();
 
+  // Simply add dependencies between data-path operations so that the schedule
+  // preserve the dependencies, the latencies between data-path operations are
+  // not capture here.
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);
-    float IntraSULatency = A->getLatencyAt(I);
+    int IntraSULatency = A->getLatencyAt(I);
     // Prevent the data-path dependency from scheduling to the same slot with
     // the MI with the Control SU.
     if (IntraSULatency < 0 && isCtrl)
@@ -648,23 +650,14 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isControl()))
         continue;
 
-      // Dirty Hack: Get the detail latency.
-      float DetailLatency = G.getChainingLatency(DepSrc, MI);
-      DetailLatency += VInstrInfo::getOperandLatency(MI, i);
-      // Compute the latency from DepSrc to the repinst of the SU.
-
-      DetailLatency -= std::min(0.0f, IntraSULatency);
-      // All control operations are read at emit, wait until the datapath
-      // operations finish if destination is control operation.
-      int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
-      Latency = Dep->getLatencyFrom(DepSrc, Latency);
-
-      // If we got a back-edge, that should be a phinode.
-      assert(Dep->getIdx()<=A->getIdx()&&"Unexpected back-edge in data-path!");
-
       // Prevent the data-path SU from being scheduled to the same slot with
       // A.
-      if (isCtrl && Dep->isDatapath() && Latency == 0) Latency = 1;
+      int Latency = isCtrl ? 1 : 0;
+      Latency -= IntraSULatency;
+      Latency = Dep->getLatencyFrom(DepSrc, Latency);
+
+      // There is non back-edge in data-path dependency graph.
+      assert(Dep->getIdx()<=A->getIdx()&&"Unexpected back-edge in data-path!");
 
       A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
 
@@ -676,9 +669,36 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
     }
   }
 
+  if (isCtrl) return;
+
+  assert(A->num_instrs() == 1 && "Unexpected multiple MI in data-path operation!");
+  MachineInstr *MI = A->getRepresentativePtr();
+  unsigned StepsToFinish = G.getStepsToFinish(MI);
+  if (StepsToFinish) {
+    DepLatInfoTy DepLats;
+    // Add constraints to ensure the scheduler allocate enough time for the
+    // multi-cycles chains.
+    G.buildLatenciesToCopy(A->getRepresentativePtr(), DepLats);
+    for (src_it I = DepLats.begin(), E = DepLats.end(); I != E; ++I) {
+      VSUnit *SrcSU = G.lookupSUnit(I->first);
+      assert(SrcSU && SrcSU->isControl() && "Bad source scheduling unit!");
+
+      unsigned LatencyToCopy = ceil(DetialLatencyInfo::getLatency(*I));
+      // Calculate the latency from the SrcSU to the current MI by first
+      // calculate the latency from the dependencies to the copy operation
+      // that copy the result of MI, then subtract the steps between MI start
+      // and the result of MI copied from the latency, so that we get the
+      // latency from the dependencies to MI start.
+      int Latency = int(LatencyToCopy) - int(StepsToFinish);
+      assert(Latency >= 0 && "Bad latency!");
+      A->addDep<false>(SrcSU, VDEdge::CreateValDep(Latency));
+      ++NumValDep;
+    }
+  }
+
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
-  if (NumValDep == 0 && !A->isScheduled())
+  if (NumValDep == 0)
     A->addDep<false>(G.lookupSUnit(ParentBB), VDEdge::CreateCtrlDep(0));
 }
 
