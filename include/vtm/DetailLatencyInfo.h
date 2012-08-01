@@ -101,7 +101,6 @@ public:
   MachineRegisterInfo *MRI;
 
 private:
-  const bool WaitAllOps;
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
@@ -128,7 +127,7 @@ private:
 
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
-    bool IgnorePHISrc);
+                                       bool IgnorePHISrc);
 
 public:
   DetialLatencyInfo();
@@ -184,7 +183,10 @@ public:
   float getChainingLatency(const MachineInstr *SrcInstr,
                            const MachineInstr *DstInstr) const;
 
-  static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
+  static unsigned getStepsFromEntry(const MachineInstr *DstInstr) {
+    // Any Instruction can schedule to the same slot with the BBEntry.
+    return 0;
+  }
 
   template<bool IsValDep>
   unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,

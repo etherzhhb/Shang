@@ -707,7 +707,7 @@ public:
                                      const MachineInstr *DstInstr) const;
 
   unsigned getStepsFromEntry(const MachineInstr *DstInstr) const {
-    return DLInfo.getStepsFromEntry(DstInstr);
+    return DetialLatencyInfo::getStepsFromEntry(DstInstr);
   }
 
   // Verify the schedule graph, should be call after the graph is built.
