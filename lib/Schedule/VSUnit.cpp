@@ -285,8 +285,14 @@ bool VSchedGraph::scheduleLoop() {
   return true;
 }
 
-void VSchedGraph::viewGraph() {
-  ViewGraph(this, this->getEntryBB()->getName());
+void VSchedGraph::viewCPGraph() {
+  VSchedGraphWrapper<true> G(this);
+  ViewGraph(G, "Control-path-Dependencies-Graph");
+}
+
+void VSchedGraph::viewDPGraph() {
+  VSchedGraphWrapper<false> G(this);
+  ViewGraph(G, "Data-path-Dependencies-Graph");
 }
 
 void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {

@@ -898,7 +898,8 @@ public:
 
   void print(raw_ostream &OS) const;
   void dump() const;
-  void viewGraph();
+  void viewCPGraph();
+  void viewDPGraph();
 
   /// @name Scheduling
   //{

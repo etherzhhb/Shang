@@ -257,7 +257,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   schedule(G);
 
-  DEBUG(G.viewGraph());
+  DEBUG(G.viewCPGraph());
+  DEBUG(G.viewDPGraph());
   unsigned TotalCycles = G.emitSchedule();
   FInfo->setTotalSlots(TotalCycles);
 
@@ -652,7 +653,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
 
       // Prevent the data-path SU from being scheduled to the same slot with
       // A.
-      int Latency = isCtrl ? 1 : 0;
+      int Latency = isCtrl ? std::max(G.getStepsToFinish(DepSrc), 1u) : 0;
+
       Latency -= IntraSULatency;
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
 
