@@ -668,7 +668,7 @@ public:
       EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
-    assert(DPSUs.empty() && "Schedule is not emitted?");
+    std::for_each(DPSUs.begin(), DPSUs.end(), deleter<VSUnit>);
     std::for_each(CPSUs.begin(), CPSUs.end(), deleter<VSUnit>);
   }
 
@@ -899,7 +899,7 @@ public:
 
   /// @name Scheduling
   //{
-  void scheduleLoop();
+  bool scheduleLoop();
   // Schedule datapath operations as late as possible after control operations
   // scheduled, this can reduce register usage.
   void scheduleControlPath();

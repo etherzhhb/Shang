@@ -191,7 +191,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void buildGlobalSchedulingGraph(VSchedGraph &G, MachineBasicBlock *Entry,
                                   MachineBasicBlock *VExit);
-  void pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
+  bool pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
                          MachineBasicBlock *VExit);
   void schedule(VSchedGraph &G);
 
@@ -1093,7 +1093,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G,
     addValDep(G, *I);
 }
 
-void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
+bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
                                           MachineBasicBlock *VExit) {
   VSchedGraph LocalG(G.DLInfo, true, 1);
   std::vector<VSUnit*> NewSUs;
@@ -1102,7 +1102,9 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
   // Todo: Simply set the terminator SU as the exit root?
   LocalG.createExitRoot(VExit);
   LocalG.verify();
-  LocalG.scheduleLoop();
+  // Do not merge the local graph into the global graph if we fail to pipeline
+  // the block.
+  if (!LocalG.scheduleLoop()) return false;
 
   typedef VSchedGraph::iterator it;
   for (it I = G.mergeSUsInSubGraph(LocalG), E = cp_end(&G); I != E; ++I)
@@ -1110,6 +1112,9 @@ void VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
 
   buildDataPathGraph(G, NewSUs);
   addDepsForBBEntry(G, CurEntry);
+
+  // The BB is pipelined sucessfully.
+  return true;
 }
 
 void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
@@ -1122,11 +1127,11 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
   for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
 
-    if (couldBePipelined(MBB)) {
-      // Perform software pipelining with local scheduling algorithm.
-      pipelineBBLocally(G, MBB, VExit);
+    // Perform software pipelining with local scheduling algorithm.
+    // FIXME: Reuse the local scheduling graph which is built for software
+    // pipelining.
+    if (couldBePipelined(MBB) && pipelineBBLocally(G, MBB, VExit))
       continue;
-    }
 
     VSUnit *CurEntry = G.createVSUnit(MBB);
     addDepsForBBEntry(G, CurEntry);

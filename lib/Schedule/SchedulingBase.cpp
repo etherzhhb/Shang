@@ -229,20 +229,6 @@ unsigned SchedulingBase::computeResMII() {
   return MaxResII;
 }
 
-bool SchedulingBase::computeMII() {
-  unsigned RecMII = computeRecMII();
-  if (RecMII == 0) {
-    MII = this->getCriticalPathLength();
-    return false;
-  }
-
-  unsigned ResMII = computeResMII();
-  MII = std::max(RecMII, ResMII);
-  // Also adjust the critical path length.
-  setCriticalPathLength(std::max(MII, getCriticalPathLength()));
-  return true;
-}
-
 SchedulingBase::InstSetTy::const_iterator
 SchedulingBase::findConflictedInst(const InstSetTy &Set, const MachineInstr *MI) {
   typedef InstSetTy::const_iterator it;

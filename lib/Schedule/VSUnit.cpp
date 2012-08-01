@@ -227,21 +227,30 @@ void VSchedGraph::resetDPSchedule() {
   }
 }
 
-void VSchedGraph::scheduleLoop() {
+bool VSchedGraph::scheduleLoop() {
   MachineBasicBlock *MBB = getEntryBB();
   MachineFunction *F = MBB->getParent();
   DEBUG(dbgs() << "Try to pipeline MBB#" << MBB->getNumber()
                << " MF#" << F->getFunctionNumber() << '\n');
   IterativeModuloScheduling Scheduler(*this);
+
+  unsigned RecMII = Scheduler.computeRecMII();
+  // Do not pipeline the BB if we cannot compute the RecMII.
+  if (!RecMII) return false;
+
+  unsigned ResMII = Scheduler.computeResMII();
+  Scheduler.setCriticalPathLength(ResMII);
+
   // Ensure us can schedule the critical path.
   while (!Scheduler.scheduleCriticalPath())
     Scheduler.lengthenCriticalPath();
-
-  // computeMII may return a very big II if we cannot compute the RecII.
-  Scheduler.computeMII();
   DEBUG(dbgs() << "Pipelining BB# " << MBB->getNumber()
                << " in function " << MBB->getParent()->getFunction()->getName()
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
+
+  Scheduler.setMII(std::max(RecMII, ResMII));
+  Scheduler.setCriticalPathLength(std::max(Scheduler.getCriticalPathLength(),
+                                           Scheduler.getMII()));
 
   DEBUG(dbgs() << "MII: " << Scheduler.getMII() << "...");
   while (!Scheduler.scheduleCriticalPath()) {
@@ -273,6 +282,7 @@ void VSchedGraph::scheduleLoop() {
   bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
   assert(succ && "Cannot remember II!");
   (void) succ;
+  return true;
 }
 
 void VSchedGraph::viewGraph() {
