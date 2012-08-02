@@ -204,6 +204,7 @@ public:
   }
 
   unsigned buildTimeFrameAndResetSchedule(bool reset);
+  void resetTimeFrame();
   void buildTimeFrame();
   void printTimeFrame(raw_ostream &OS) const;
   void dumpTimeFrame() const;

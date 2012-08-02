@@ -28,14 +28,18 @@
 using namespace llvm;
 //===----------------------------------------------------------------------===//
 template<bool IsCtrlPath>
+void Scheduler<IsCtrlPath>::resetTimeFrame() {
+  // Reset the time frames
+  for (TFMapTy::iterator I = SUnitToTF.begin(), E = SUnitToTF.end();I != E;++I)
+    I->second = std::make_pair(0, VSUnit::MaxSlot);
+}
+
+template<bool IsCtrlPath>
 void Scheduler<IsCtrlPath>::buildTimeFrame() {
   VSUnit *EntryRoot = G.getEntryRoot();
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
 
-  // Reset the time frames
-  for (TFMapTy::iterator I = SUnitToTF.begin(), E = SUnitToTF.end();I != E;++I)
-    I->second = std::make_pair(0, VSUnit::MaxSlot);
-
+  resetTimeFrame();
   // Build the time frames
   buildASAPStep();
   buildALAPStep();
