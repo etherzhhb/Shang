@@ -652,9 +652,10 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isControl()))
         continue;
 
-      // Prevent the data-path SU from being scheduled to the same slot with
-      // A.
-      int Latency = isCtrl ? std::max(G.getStepsToFinish(DepSrc), 1u) : 0;
+      // Prevent the data-path SU from being scheduled to the same slot with A.
+      // FIXME: Also provide the lower bound of the latency between data-path
+      // operations.
+      int Latency = isCtrl ? std::max(Dep->getLatency(), 1u) : 0;
 
       Latency -= IntraSULatency;
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
@@ -687,7 +688,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
 
       if (U->isControl()) continue;
 
-      A->addDep<false>(U, VDEdge::CreateValDep(U->getLatency()));
+      if (unsigned Latency = U->getLatency())
+        A->addDep<false>(U, VDEdge::CreateValDep(Latency));
     }
 
     return;
