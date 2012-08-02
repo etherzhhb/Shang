@@ -1088,14 +1088,14 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 
   instr_it BI = MBB->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
-    MachineInstr *MI = BI;
+    MachineInstr *MI = BI++;
 
     updateWaitSets(MI, G);
 
-    if (VSUnit *U = buildSUnit(MI, G))
+    if (VSUnit *U = buildSUnit(MI, G)) {
       NewSUs.push_back(U);
-
-    ++BI;
+      if (U->isControl()) addChainDepForSU<false>(U, G);
+    }
   }
 
   for (instr_it I = BI; !I->isTerminator(); ++I) {
@@ -1106,12 +1106,8 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
     VSUnit *PHIMove = buildSUnit(I, G);
     NewSUs.push_back(PHIMove);
     addIncomingDepForPHI(PHIMove, G);
+    addChainDepForSU<false>(PHIMove, G);
   }
-
-  // Make sure every VSUnit have a dependence edge except EntryRoot.
-  typedef std::vector<VSUnit*>::iterator it;
-  for (it I = NewSUs.begin(), E = NewSUs.end(); I != E; ++I)
-    if ((*I)->isControl()) addChainDepForSU<false>(*I, G);
 
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(G, BI, NewSUs);
