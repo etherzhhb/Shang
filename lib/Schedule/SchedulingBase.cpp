@@ -128,14 +128,16 @@ template<bool IsCtrlPath>
 unsigned Scheduler<IsCtrlPath>::computeRecMII(unsigned MinRecMII) {
   unsigned CriticalPathLength = getCriticalPathLength();
   unsigned MaxRecMII = CriticalPathLength;
-  MinRecMII = std::max(1u, MinRecMII);
   unsigned RecMII = 0;
+
+  MinRecMII = std::max(1u, MinRecMII);
+  G.resetSchedule<IsCtrlPath>();
+
   // Find the RecMII by binary search algorithm.
   while (MinRecMII <= MaxRecMII) {
     unsigned MidRecMII = MinRecMII + (MaxRecMII - MinRecMII) / 2;
 
     setMII(MidRecMII);
-    G.resetSchedule<IsCtrlPath>();
     resetTimeFrame();
 
     if (!buildASAPStep()) {
