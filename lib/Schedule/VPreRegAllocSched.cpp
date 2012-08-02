@@ -678,7 +678,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
     // Inserting the dependencies will change the dependencies tree, hence we
     // need to store the whole dependencies tree to somewhere else first.
     // In addition, we also need to skip A itself by skipping the first node in
-    // depth-first order..
+    // depth-first order.
     std::vector<VSUnit*> DepChildren(llvm::next(dep_tree_iterator::begin(A)),
                                      dep_tree_iterator::end(A));
     typedef std::vector<VSUnit*>::iterator iterator;
@@ -697,22 +697,16 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
   MachineInstr *MI = A->getRepresentativePtr();
   unsigned StepsToFinish = G.getStepsToFinish(MI);
   if (StepsToFinish) {
-    DepLatInfoTy DepLats;
-    // Add constraints to ensure the scheduler allocate enough time for the
-    // multi-cycles chains.
-    G.buildLatenciesToCopy(A->getRepresentativePtr(), DepLats);
-    for (src_it I = DepLats.begin(), E = DepLats.end(); I != E; ++I) {
+    const DepLatInfoTy *DepLats = G.getDepLatInfo(MI);
+    for (src_it I = DepLats->begin(), E = DepLats->end(); I != E; ++I) {
       VSUnit *SrcSU = G.lookupSUnit(I->first);
       assert(SrcSU && SrcSU->isControl() && "Bad source scheduling unit!");
+      // Get the minimal latency from the control-path dependencies to current
+      // MI, when bit-level chaining is enabled, they are in fact the latencies
+      // from the control-path dependencies to the first started bit of current
+      // MI.
+      int Latency = floor(DetialLatencyInfo::getMinLatency(*I));
 
-      unsigned LatencyToCopy = ceil(DetialLatencyInfo::getLatency(*I));
-      // Calculate the latency from the SrcSU to the current MI by first
-      // calculate the latency from the dependencies to the copy operation
-      // that copy the result of MI, then subtract the steps between MI start
-      // and the result of MI copied from the latency, so that we get the
-      // latency from the dependencies to MI start.
-      int Latency = int(LatencyToCopy) - int(StepsToFinish);
-      assert(Latency >= 0 && "Bad latency!");
       A->addDep<false>(SrcSU, VDEdge::CreateValDep(Latency));
 
       if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
