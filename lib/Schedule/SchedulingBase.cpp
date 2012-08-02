@@ -102,7 +102,10 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
   }
 
   VSUnit *Exit = G.getExitRoot();
-  CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
+  unsigned ExitASAP = IsCtrlPath ? getASAPStep(Exit) : Exit->getSlot();
+  CriticalPathEnd = std::max(CriticalPathEnd, ExitASAP);
+  assert((IsCtrlPath || ExitASAP == CriticalPathEnd)
+         && "Bad time frame in data-path dependencies graph!");
 }
 
 template<bool IsCtrlPath>
