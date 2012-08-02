@@ -74,37 +74,37 @@ bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
 }
 
 void VSchedGraph::verifySU(const VSUnit *SU) const {
-  typedef VSUnit::const_dep_iterator dep_it;
+  //typedef VSUnit::const_dep_iterator dep_it;
 
-  bool IsBBEntry = SU->getRepresentativePtr().isMBB();
-  MachineBasicBlock *ParentMBB = SU->getParentBB();
-  bool AnyDepFromTheSameParent = IsBBEntry;
+  //bool IsBBEntry = SU->getRepresentativePtr().isMBB();
+  //MachineBasicBlock *ParentMBB = SU->getParentBB();
+  //bool AnyDepFromTheSameParent = IsBBEntry;
 
-  for (dep_it DI = cp_begin(SU), DE = cp_end(SU); DI != DE; ++DI) {
-    const VSUnit *Dep = *DI;
-    assert((DI.getEdgeType() == VDEdge::MemDep
-            || SU->getIdx() > Dep->getIdx())
-           && "Bad value dependent edge!");
-    assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
-                           && DI.getLatency() == 0))
-           && "Bad inter BB dependent edge.");
-    AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
-  }
+  //for (dep_it DI = cp_begin(SU), DE = cp_end(SU); DI != DE; ++DI) {
+  //  const VSUnit *Dep = *DI;
+  //  assert((DI.getEdgeType() == VDEdge::MemDep
+  //          || SU->getIdx() > Dep->getIdx())
+  //         && "Bad value dependent edge!");
+  //  assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
+  //                         && DI.getLatency() == 0))
+  //         && "Bad inter BB dependent edge.");
+  //  AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
+  //}
 
-  assert((SU->isScheduled() || !cuse_empty(SU) || SU == getExitRoot())
-          && "Unexpected deteched SU!");
-  assert((SU->isScheduled() || SU->hasFixedTiming() || AnyDepFromTheSameParent)
-         && "Find SU not constrained by the BB entry!");
+  //assert((SU->isScheduled() || !cuse_empty(SU) || SU == getExitRoot())
+  //        && "Unexpected deteched SU!");
+  //assert((SU->isScheduled() || SU->hasFixedTiming() || AnyDepFromTheSameParent)
+  //       && "Find SU not constrained by the BB entry!");
 }
 
 void VSchedGraph::verify() const {
-  if (!cp_empty(getEntryRoot()) || !dp_empty(getEntryRoot()))
-    llvm_unreachable("Entry root should not have any dependence!");
-  if (!cuse_empty(getExitRoot()) || !duse_empty(getExitRoot()) )
-    llvm_unreachable("Exit root should not have any use!");
+  //if (!cp_empty(getEntryRoot()) || !dp_empty(getEntryRoot()))
+  //  llvm_unreachable("Entry root should not have any dependence!");
+  //if (!cuse_empty(getExitRoot()) || !duse_empty(getExitRoot()) )
+  //  llvm_unreachable("Exit root should not have any use!");
 
-  for (const_iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
-    verifySU(*I);
+  //for (const_iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
+  //  verifySU(*I);
 
   //for (const_iterator I = dp_begin(), E = dp_end(); I != E; ++I)
   //  verifySU(*I);
@@ -432,6 +432,8 @@ void VSchedGraph::scheduleControlPath() {
 void VSchedGraph::scheduleDatapath() {
   SDCScheduler<false> Scheduler(*this);
 
+  Scheduler.buildTimeFrame();
+
   if (Scheduler.createLPAndVariables()) {
     // Add soft constraints to break the chain.
     //addSoftConstraintsToBreakChains(Scheduler);
@@ -467,21 +469,71 @@ void VSUnit::dump() const {
 void VDEdge::print(raw_ostream &OS) const {}
 
 void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
-  VDEdge &CurEdge = Edges.front();
-
-  if (CurEdge == NewEdge) return;
-
   assert(NewEdge.getEdgeType() != VDEdge::FixedTiming
-        && CurEdge.getEdgeType() != VDEdge::FixedTiming
-        && "Cannot override fixed timing dependencies!");
-  // If the new dependency constraint tighter?
-  assert((NewEdge.getDistance() == 0 || CurEdge.getDistance() == 0
-          || CurEdge.getDistance() == NewEdge.getDistance())
-         && "Unexpected multiple loop carried dependencies!");
-  if (NewEdge.getDistance() <= CurEdge.getDistance()
-      && NewEdge.getLatency() > CurEdge.getLatency()) {
-    CurEdge = NewEdge;
+         && "Fixed timing constraint cannot be added!");
+  unsigned InsertBefore = 0, Size = Edges.size();
+  bool NeedToInsert = true;
+
+  while (InsertBefore < Size) {
+    VDEdge &CurEdge = Edges[InsertBefore];
+    // Keep the edges in ascending order.
+    if (CurEdge.getDistance() > NewEdge.getDistance())
+      break;
+
+    if (CurEdge.getDistance() == NewEdge.getDistance()) {
+      // Update the edge with the tighter constraint.
+      if (CurEdge.getLatency() < NewEdge.getLatency()) {
+        NeedToInsert = false;
+        CurEdge = NewEdge;
+        break;
+      }
+
+      return;
+    }
+
+    // Now we have NewEdge.getDistance() > CurEdge.getDistance(), NewEdge is
+    // masked by CurEdge if NewEdge has a smaller latency than CurEdge.
+    if (NewEdge.getLatency() <= CurEdge.getLatency())
+      return;
+    
+    ++InsertBefore;
   }
+
+  // Insert the new edge right before the edge with bigger iterative distance.
+  if (NeedToInsert) Edges.insert(Edges.begin() + InsertBefore, NewEdge);
+
+  for (unsigned i = Edges.size() - 1, e = InsertBefore; i > e; --i) {
+    VDEdge &CurEdge = Edges[i];
+    // Now we have NewEdge.getDistance() < CurEdge.getDistance(), CurEdge is
+    // masked by NewEdge if CurEdge has a smaller latency.
+    if (CurEdge.getLatency() <= NewEdge.getLatency())
+      // CurEdge is masked by NewEdge
+      Edges.erase(Edges.begin() + i);
+  }
+}
+
+VDEdge &VSUnit::EdgeBundle::getEdge(unsigned II /* = 0 */) {
+  assert(Edges.size() && "Unexpected empty edge bundle!");
+  VDEdge *CurEdge = &Edges.front();
+  int Latency = CurEdge->getLatency(II);
+
+  // Zero II means we should ignore the loop-carried dependencies.
+  if (II == 0 && CurEdge->getDistance() == 0)
+    return *CurEdge;
+
+  for (unsigned i = 1, e = Edges.size(); i != e; ++i) {
+    VDEdge &Edge = Edges[i];
+    if (II == 0 && Edge.getDistance() == 0) return Edge;
+
+    // Find the edge with biggest latency.
+    int NewLatency = Edge.getLatency();
+    if (NewLatency > Latency) {
+      Latency = NewLatency;
+      CurEdge = &Edge;
+    }
+  }
+
+  return *CurEdge;
 }
 
 VSUnit::VSUnit(unsigned short Idx, uint16_t FUNum)

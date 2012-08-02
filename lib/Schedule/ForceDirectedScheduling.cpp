@@ -245,7 +245,7 @@ void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
   for (dep_it DI = cp_begin(U), DE = cp_end(U); DI != DE; ++DI) {
     if (DI.getEdgeType() != VDEdge::FixedTiming) continue;
 
-    if (DI.getLatency() % II) continue;
+    if (DI.getLatency(II) % II) continue;
     // Now the source of the dependency is scheduled to a slot which alias with
     // the last slot of the BB.
 

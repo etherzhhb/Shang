@@ -137,15 +137,11 @@ class VSUnit {
     explicit EdgeBundle(VDEdge E, bool IsCrossBB)
       : Edges(1, E), IsCrossBB(IsCrossBB) {}
 
-    operator const VDEdge &() const {
-      return Edges.front();
-    }
-
-    operator VDEdge &() {
-      return Edges.front();
-    }
-
     void addEdge(VDEdge NewEdge);
+    VDEdge &getEdge(unsigned II = 0);
+    const VDEdge &getEdge(unsigned II = 0) const {
+      return const_cast<EdgeBundle*>(this)->getEdge(II);
+    }
   };
 
 public:
@@ -154,6 +150,12 @@ public:
     typedef VSUnitDepIterator<IteratorType, IsConst> Self;
     typedef typename conditional<IsConst, const VSUnit, VSUnit>::type NodeType;
     typedef typename conditional<IsConst, const VDEdge, VDEdge>::type EdgeType;
+    typedef typename conditional<IsConst, const EdgeBundle, EdgeBundle>::type
+            EdgeBundleType;
+
+    EdgeBundleType &getEdgeBundle() const {
+      return IteratorType::operator->()->second;
+    }
   public:
     VSUnitDepIterator(IteratorType i) : IteratorType(i) {}
 
@@ -162,8 +164,9 @@ public:
     }
 
     NodeType *operator->() const { return operator*(); }
-
-    EdgeType &getEdge() const { return IteratorType::operator->()->second; }
+    EdgeType &getEdge(unsigned II) const {
+      return getEdgeBundle().getEdge(II);
+    }
 
     Self& operator++() {                // Preincrement
       IteratorType::operator++();
@@ -175,18 +178,20 @@ public:
     }
 
     // Forwarding the function from the Edge.
-    VDEdge::Types getEdgeType() const { return getEdge().getEdgeType(); }
-    inline int getLatency(unsigned II = 0) const {
-      return getEdge().getLatency(II);
+    VDEdge::Types getEdgeType(unsigned II = 0) const {
+      return getEdge(II).getEdgeType();
     }
-    bool isLoopCarried() const { return getEdge().isLoopCarried(); }
+    inline int getLatency(unsigned II = 0) const {
+      return getEdge(II).getLatency(II);
+    }
+    bool isLoopCarried(unsigned II = 0) const {
+      return getEdge(II).isLoopCarried();
+    }
     bool isCrossBB() const {
       return IteratorType::operator->()->second.IsCrossBB;
     }
-    bool hasSoftConstraint() const {
-      return IteratorType::operator->()->second.HasSoftConstraints;
-    }
-    int getDistance() const { return getEdge().getDistance(); }
+
+    int getDistance(unsigned II = 0) const { return getEdge(II).getDistance(); }
   };
 
 private:
@@ -304,7 +309,7 @@ public:
   }
 
   template<bool IsCtrlPath>
-  VDEdge &getEdgeFrom(const VSUnit *A) {
+  VDEdge &getEdgeFrom(const VSUnit *A, unsigned II = 0) {
     assert(isDepOn<IsCtrlPath>(A) && "Current atom not depend on A!");
     return getDepIt<IsCtrlPath>(A).getEdge();
   }
@@ -316,9 +321,9 @@ public:
   }
 
   template<bool IsCtrlPath>
-  const VDEdge &getEdgeFrom(const VSUnit *A) const {
+  const VDEdge &getEdgeFrom(const VSUnit *A, unsigned II = 0) const {
     assert(isDepOn<IsCtrlPath>(A) && "Current atom not depend on A!");
-    return getDepIt<IsCtrlPath>(A).getEdge();
+    return getDepIt<IsCtrlPath>(A).getEdge(II);
   }
 
   //}
