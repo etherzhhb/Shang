@@ -61,7 +61,7 @@ struct DOTGraphTraits<VSchedGraphWrapper<IsCtrlPath> >
     const VSUnit *Use = *EI;
     VDEdge UseEdge = Use->getEdgeFrom<IsCtrlPath>(Node);
 
-    return utostr(UseEdge.getLatency()) + ',' + utostr(UseEdge.getDistance());
+    return utostr(UseEdge.getLatency()) + ',' + itostr(UseEdge.getDistance());
   }
 
   std::string getNodeLabel(typename GT::NodeType *Node, const GraphType &) {
