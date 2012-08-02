@@ -234,10 +234,6 @@ bool VSchedGraph::scheduleLoop() {
                << " MF#" << F->getFunctionNumber() << '\n');
   IterativeModuloScheduling Scheduler(*this);
 
-  unsigned RecMII = Scheduler.computeRecMII();
-  // Do not pipeline the BB if we cannot compute the RecMII.
-  if (!RecMII) return false;
-
   unsigned ResMII = Scheduler.computeResMII();
   Scheduler.setCriticalPathLength(ResMII);
 
@@ -248,7 +244,11 @@ bool VSchedGraph::scheduleLoop() {
                << " in function " << MBB->getParent()->getFunction()->getName()
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
-  Scheduler.setMII(std::max(RecMII, ResMII));
+  unsigned MII = Scheduler.computeRecMII(ResMII);
+  // If RecMII == CriticalPathLength, the block is not pipelined at all.
+  if (MII == Scheduler.getCriticalPathLength()) return false;
+
+  Scheduler.setMII(MII);
   Scheduler.setCriticalPathLength(std::max(Scheduler.getCriticalPathLength(),
                                            Scheduler.getMII()));
 

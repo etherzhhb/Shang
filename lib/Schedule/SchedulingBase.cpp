@@ -41,7 +41,8 @@ void Scheduler<IsCtrlPath>::buildTimeFrame() {
 
   resetTimeFrame();
   // Build the time frames
-  buildASAPStep();
+  bool HasNegativeCycle = buildASAPStep();
+  assert(!HasNegativeCycle && "Unexpected negative cycle!");
   buildALAPStep();
 
   DEBUG(dumpTimeFrame());
@@ -69,8 +70,10 @@ unsigned Scheduler<IsCtrlPath>::calculateASAP(const VSUnit * A) {
 }
 
 template<bool IsCtrlPath>
-void Scheduler<IsCtrlPath>::buildASAPStep() {
+bool Scheduler<IsCtrlPath>::buildASAPStep() {
   bool NeedToReCalc = true;
+  unsigned NumCalcTimes = 0;
+  const unsigned GraphSize = G.size<IsCtrlPath>();
 
   // Build the time frame iteratively.
   while(NeedToReCalc) {
@@ -95,6 +98,8 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
       if (ASAPStep == NewStep) continue;
       ASAPStep = NewStep;
 
+      if (NeedToReCalc) continue;
+
       // We need to re-calculate the ASAP steps if the sink of the back-edges,
       // need to be update.
       for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI) {
@@ -103,6 +108,12 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
                         && calculateASAP(Use) != getASAPStep(Use);
       }
     }
+
+    if (NeedToReCalc) {
+      ++NumCalcTimes;
+      // Only iterating |V|-1 times, otherwise there is negative cycle.
+      if (NumCalcTimes >= GraphSize) return true;
+    }
   }
 
   VSUnit *Exit = G.getExitRoot();
@@ -110,6 +121,35 @@ void Scheduler<IsCtrlPath>::buildASAPStep() {
   CriticalPathEnd = std::max(CriticalPathEnd, ExitASAP);
   assert((IsCtrlPath || ExitASAP == CriticalPathEnd)
          && "Bad time frame in data-path dependencies graph!");
+  return false;
+}
+
+template<bool IsCtrlPath>
+unsigned Scheduler<IsCtrlPath>::computeRecMII(unsigned MinRecMII) {
+  unsigned CriticalPathLength = getCriticalPathLength();
+  unsigned MaxRecMII = CriticalPathLength;
+  MinRecMII = std::max(1u, MinRecMII);
+  unsigned RecMII = 0;
+  // Find the RecMII by binary search algorithm.
+  while (MinRecMII <= MaxRecMII) {
+    unsigned MidRecMII = MinRecMII + (MaxRecMII - MinRecMII) / 2;
+
+    setMII(MidRecMII);
+    G.resetSchedule<IsCtrlPath>();
+    resetTimeFrame();
+
+    if (!buildASAPStep()) {
+      RecMII = MidRecMII;
+      // There is no negative cycles, try to further reduce the MII.
+      MaxRecMII = MidRecMII - 1;
+    } else
+      // Else we need to relax the MII.
+      MinRecMII = MidRecMII + 1;
+  }
+
+  assert(RecMII && "Negative cycle found even pipeline is disabled!");
+
+  return RecMII;
 }
 
 template<bool IsCtrlPath>
