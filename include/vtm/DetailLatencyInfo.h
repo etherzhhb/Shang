@@ -95,6 +95,10 @@ public:
     return std::max(v.second.first, v.second.second);
   }
 
+  static float getMinLatency(DepLatInfoTy::value_type v) {
+    return std::min(v.second.first, v.second.second);
+  }
+
   const static float DeltaLatency;
 
   MachineRegisterInfo *MRI;
