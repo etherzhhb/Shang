@@ -50,7 +50,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-  G.resetCPSchedule(getMII());
+  G.resetCPSchedule();
   buildTimeFrame();
   VSUnit *LoopOp = G.getLoopOp();
   assert(LoopOp && "Cannot find LoopOp in IMS scheduler!");

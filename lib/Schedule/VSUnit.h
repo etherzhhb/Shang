@@ -835,12 +835,12 @@ public:
   inline size_t size() const { return IsCtrlPath ? CPSUs.size() : DPSUs.size(); }
 
   unsigned getNextSUIdx() const { return NextSUIdx; }
-  void resetCPSchedule(unsigned MII);
+  void resetCPSchedule();
   void resetDPSchedule();
 
   template<bool IsCtrlPath>
-  void resetSchedule(unsigned MII) {
-    if (IsCtrlPath) resetCPSchedule(MII);
+  void resetSchedule() {
+    if (IsCtrlPath) resetCPSchedule();
     else            resetDPSchedule();
   }
 

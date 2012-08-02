@@ -211,7 +211,7 @@ void VSchedGraph::topologicalSortCPSUs() {
   assert(Idx == num_cps(this) && "Bad topological sort!");
 }
 
-void VSchedGraph::resetCPSchedule(unsigned MII) {
+void VSchedGraph::resetCPSchedule() {
   for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();

@@ -201,7 +201,7 @@ void Scheduler<IsCtrlPath>::dumpTimeFrame() const {
 
 template<bool IsCtrlPath>
 unsigned Scheduler<IsCtrlPath>::buildTimeFrameAndResetSchedule(bool reset) {
-  if (reset) G.resetSchedule<IsCtrlPath>(getMII());
+  if (reset) G.resetSchedule<IsCtrlPath>();
 
   buildTimeFrame();
 
