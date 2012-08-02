@@ -400,7 +400,7 @@ void VSchedGraph::addSoftConstraintsToBreakChains(SDCSchedulingBase &S) {
                                  + VInstrInfo::isWriteUntilFinish(SrcOpC);
 
       float LengthOfChain =
-        DetialLatencyInfo::getLatency(*I) + DLInfo.getMaxLatency(MI);
+        DetialLatencyInfo::getMaxLatency(*I) + DLInfo.getMaxLatency(MI);
 
       // The chain do not extend the live-interval of the underlying FU of the
       // dependence.

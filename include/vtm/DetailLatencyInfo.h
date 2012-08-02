@@ -91,7 +91,7 @@ public:
   // The latency of MSB and LSB from a particular operation to the current
   // operation.
   typedef std::map<InstPtrTy, std::pair<float, float> > DepLatInfoTy;
-  static float getLatency(DepLatInfoTy::value_type v) {
+  static float getMaxLatency(DepLatInfoTy::value_type v) {
     return std::max(v.second.first, v.second.second);
   }
 

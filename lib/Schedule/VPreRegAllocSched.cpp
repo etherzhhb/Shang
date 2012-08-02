@@ -525,7 +525,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
     InstPtrTy Src = I->first;
     // Get the latency from SrcMI to MI.
-    float DetailLatency = DetialLatencyInfo::getLatency(*I);
+    float DetailLatency = DetialLatencyInfo::getMaxLatency(*I);
     int Latency = int(ceil(DetailLatency));
 
     // LatencyInfo use a special marker to mark the current MI have some latency
