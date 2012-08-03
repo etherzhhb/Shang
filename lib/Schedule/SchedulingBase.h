@@ -250,7 +250,13 @@ class IterativeModuloScheduling : public Scheduler<true> {
 public:
   IterativeModuloScheduling(VSchedGraph &S) : Scheduler<true>(S) {}
 
-  bool scheduleState();
+  enum ScheduleResult {
+    Success,
+    MIITooSmall,
+    Unknown
+  };
+
+  ScheduleResult scheduleLoop();
 };
 
 struct ASAPScheduler : public Scheduler<true> {

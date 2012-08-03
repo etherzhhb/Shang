@@ -245,12 +245,12 @@ bool VSchedGraph::scheduleLoop() {
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
   unsigned MII = Scheduler.computeRecMII(ResMII);
-  // If RecMII == CriticalPathLength, the block is not pipelined at all.
-  if (MII == Scheduler.getCriticalPathLength()) return false;
 
   Scheduler.setMII(MII);
-  Scheduler.setCriticalPathLength(std::max(Scheduler.getCriticalPathLength(),
-                                           Scheduler.getMII()));
+  unsigned OriginalCriticalPathLength = std::max(Scheduler.getCriticalPathLength(),
+                                                 Scheduler.getMII());
+  // Relax the critical path constraint, so that we can focus on finding MII.
+  Scheduler.setCriticalPathLength(8 * OriginalCriticalPathLength);
 
   DEBUG(dbgs() << "MII: " << Scheduler.getMII() << "...");
   while (!Scheduler.scheduleCriticalPath()) {
@@ -264,25 +264,46 @@ bool VSchedGraph::scheduleLoop() {
   assert(Scheduler.getMII() <= Scheduler.getCriticalPathLength()
          && "MII bigger then Critical path length!");
 
-  while (!Scheduler.scheduleState()) {
-    // Make sure MII smaller than the critical path length.
-    if (Scheduler.getMII() < Scheduler.getCriticalPathLength())
+  for (;;) {
+    switch (Scheduler.scheduleLoop()) {
+    case IterativeModuloScheduling::Success:{
+      // Fail to pipeline the BB if the II is not small enough.
+      if (7 * Scheduler.getMII() >= 8 * Scheduler->getTotalSlot(MBB))
+        return false;
+
+      DEBUG(dbgs() << "SchedII: " << Scheduler.getMII()
+        << " Latency: " << getTotalSlot(MBB) << '\n');
+      assert(getLoopOp()->getSlot() - EntrySlot == Scheduler.getMII()
+        && "LoopOp was not scheduled to the right slot!");
+      assert(getLoopOp()->getSlot() <= getEndSlot(MBB)
+        && "Expect MII is not bigger then critical path length!");
+
+      bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
+      assert(succ && "Cannot remember II!");
+      (void) succ;
+      return true;
+    }
+    case IterativeModuloScheduling::MIITooSmall:{
       Scheduler.increaseMII();
-    else
-      Scheduler.lengthenCriticalPath();
+      // Make sure MII smaller than the critical path length.
+      if (Scheduler.getMII() <= Scheduler.getCriticalPathLength())
+        continue;
+      break;
+    }
+    case IterativeModuloScheduling::Unknown:{
+      if (Scheduler.getMII() < Scheduler.getCriticalPathLength()) {
+        Scheduler.increaseMII();
+        continue;
+      }
+      break;
+    }
+    }
+
+    Scheduler.lengthenCriticalPath();
   }
 
-  DEBUG(dbgs() << "SchedII: " << Scheduler.getMII()
-               << " Latency: " << getTotalSlot(MBB) << '\n');
-  assert(getLoopOp()->getSlot() - EntrySlot == Scheduler.getMII()
-         && "LoopOp was not scheduled to the right slot!");
-  assert(getLoopOp()->getSlot() <= getEndSlot(MBB)
-         && "Expect MII is not bigger then critical path length!");
-
-  bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
-  assert(succ && "Cannot remember II!");
-  (void) succ;
-  return true;
+  llvm_unreachable("Control-flow will never reach here!");
+  return false;
 }
 
 void VSchedGraph::viewCPGraph() {

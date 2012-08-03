@@ -49,14 +49,17 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   return LHS->getIdx() > RHS->getIdx();
 }
 
-bool IterativeModuloScheduling::scheduleState() {
+typedef IterativeModuloScheduling::ScheduleResult ScheduleResult;
+ScheduleResult IterativeModuloScheduling::scheduleLoop(){
   G.resetCPSchedule();
   buildTimeFrame();
   VSUnit *LoopOp = G.getLoopOp();
   assert(LoopOp && "Cannot find LoopOp in IMS scheduler!");
   // Schedule the LoopOp to the end of the first stage.
   unsigned LoopOpSlot = G.EntrySlot + getMII();
-  if (getASAPStep(LoopOp) > LoopOpSlot) return false;
+  if (getASAPStep(LoopOp) > LoopOpSlot)
+    return IterativeModuloScheduling::MIITooSmall;
+
   LoopOp->scheduledTo(LoopOpSlot);
 
   // Reset exclude slots and resource table.
@@ -86,9 +89,10 @@ bool IterativeModuloScheduling::scheduleState() {
     }
 
     // We had run out of slots
-    if (EarliestUntry == 0) {
-      return false;
-    }
+    if (EarliestUntry == 0)
+      return ExcludeSlots[A].size() == getMII() ?
+             IterativeModuloScheduling::MIITooSmall :
+             IterativeModuloScheduling::Unknown;
 
     // If a cannot be schedule but have some untry slot.
     if(!A->isScheduled()) {
@@ -116,7 +120,7 @@ bool IterativeModuloScheduling::scheduleState() {
   verifyFUUsage(cp_begin(&G), cp_end(&G));
 #endif
 
-  return true;
+  return IterativeModuloScheduling::Success;
 }
 
 bool IterativeModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
