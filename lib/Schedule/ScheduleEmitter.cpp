@@ -1083,6 +1083,9 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
     UseMO.ChangeToRegister(ResultReg, false);
   }
 
+  if (VInstrInfo::getPreboundFUId(MI).isTrivial() && !ResultReg)
+    return;
+
   // If emit the VOpReadFU, even there is no instruction using the result wire,
   // because we need to wait the MI by the VOpReadFU.
   assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
