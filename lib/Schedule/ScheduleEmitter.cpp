@@ -542,10 +542,9 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 
       // Simply place the dangling node at the end.
       if (IsDangling){
+        assert(VInstrInfo::isDatapath(MI->getOpcode())
+               && "Unexpected dangling control-path operation!");
         ++DanglingDatapath;
-        unsigned RegNo = MI->getOperand(0).getReg();
-        unsigned Opcode = MI->getOpcode();
-        MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opcode));
         VInstrInfo::setInstrSlotNum(MI, 0);
         MI->removeFromParent();
         MBB.push_back(MI);
@@ -1109,14 +1108,23 @@ void VSchedGraph::insertReadFUAndDisableFU() {
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_slot);
 
-  for (iterator I = CPSUs.begin(), E = CPSUs.end(); I != E; ++I)
-    if (MachineInstr *MI = (*I)->getRepresentativePtr()) {
-      // Ignore data-path operations at the moment.
+  for (iterator I = CPSUs.begin(), E = CPSUs.end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (MachineInstr *MI = U->getRepresentativePtr()) {
+      // Disable the functional unit if necessary.
       if (VInstrInfo::isControl(MI->getOpcode()))
-        insertDisableFU(*I);
+        insertDisableFU(U);
+      else if (U->isDangling()) {
+        // TEMPORARY HACK: No need to copy the result of dangling operations.
+        unsigned Reg = MI->getOperand(0).getReg();
+        unsigned Opcode = MI->getOpcode();
+        DLInfo.MRI->setRegClass(Reg, VRegisterInfo::getRepRegisterClass(Opcode));
+        continue;
+      }
 
-      insertReadFU(MI, *I);
+      insertReadFU(MI, U);
     }
+  }
 }
 
 static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
