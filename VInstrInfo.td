@@ -162,7 +162,7 @@ let isReMaterializable = 1,
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   // Pseudo copy to model write until finish or pipeline state.
-  def VOpPipelineStage : DPTvaInst<(outs DR:$dst), (ins DR:$src),
+  def VOpPipelineStage : DPTvaInst<(outs DR:$dst), (ins DR:$src, i8imm:$fuid),
                                    "$dst=$src", []>;
 
   def VOpMoveArg  : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [],

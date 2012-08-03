@@ -1008,7 +1008,7 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
     MachineInstr *PipeStage =
       BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
         .addOperand(VInstrInfo::CreateReg(OldR, ResultWidth, true))
-        .addOperand(VInstrInfo::CreateReg(R, ResultWidth))
+        .addOperand(VInstrInfo::CreateReg(R, ResultWidth)).addImm(Id.getData())
         .addOperand(*VInstrInfo::getPredOperand(MI))
         .addOperand(*VInstrInfo::getTraceOperand(MI));
     assert(U->isControl() && "Only control operation write until finish!");
