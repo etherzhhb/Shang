@@ -1196,7 +1196,7 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
     //Scheduler.buildASAPObject(1.0);
     //Scheduler.buildOptSlackObject(0.0);
     for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I) {
-      MachineBasicBlock *MBB = *I;
+      const MachineBasicBlock *MBB = *I;
       double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
       // Min (BBEnd - BBStart) * BBFreq;

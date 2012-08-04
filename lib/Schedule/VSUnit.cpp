@@ -190,7 +190,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   IIMap.insert(SubGraph.IIMap.begin(), SubGraph.IIMap.end());
 
   //4. Merge the terminator map.
-  Terminators.insert(SubGraph.Terminators.begin(), SubGraph.Terminators.end());
+  BBInfoMap.insert(SubGraph.BBInfoMap.begin(), SubGraph.BBInfoMap.end());
 
   assert(NextSUIdx == Terminator->getIdx() + 1u && "Index mis-matched!");
   // Return the iterator point to the first SU of the subgraph, and

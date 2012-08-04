@@ -618,9 +618,12 @@ private:
 
   typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
-  typedef std::map<MachineBasicBlock*, VSUnit*> TerminatorMapTy;
-  TerminatorMapTy Terminators;
+  typedef std::map<MachineBasicBlock*, VSUnit*> BBInfoMapTy;
+  BBInfoMapTy BBInfo;
   typedef std::map<MachineBasicBlock*, unsigned> IIMapTy;
+  typedef std::map<const MachineBasicBlock*, VSUnit*> BBInfoMapTy;
+  BBInfoMapTy BBInfoMap;
+  typedef std::map<const MachineBasicBlock*, unsigned> IIMapTy;
   IIMapTy IIMap;
   // If the MI is a branch instruction that branching back to the entry of its
   // parent BB, remember it.
@@ -725,8 +728,8 @@ public:
 
   void topologicalSortCPSUs();
 
-  VSUnit *createTerminator(MachineBasicBlock *MBB) {
-    VSUnit *&SU = Terminators[MBB];
+  VSUnit *createTerminator(const MachineBasicBlock *MBB) {
+    VSUnit *&SU = BBInfoMap[MBB];
     assert(SU == 0 && "Terminator already exist!");
     SU = new VSUnit(NextSUIdx++, 0);
 
@@ -736,40 +739,39 @@ public:
   // Use mapped_iterator which is a simple iterator adapter that causes a
   // function to be dereferenced whenever operator* is invoked on the iterator.
   typedef
-  std::pointer_to_unary_function<std::pair<MachineBasicBlock*, VSUnit*>,
-                                 MachineBasicBlock*>
+  std::pointer_to_unary_function<std::pair<const MachineBasicBlock*, VSUnit*>,
+                                 const MachineBasicBlock*>
   bb_getter;
 
-  typedef mapped_iterator<TerminatorMapTy::const_iterator, bb_getter>
-  bb_iterator;
+  typedef mapped_iterator<BBInfoMapTy::const_iterator, bb_getter> bb_iterator;
 
   bb_iterator bb_begin() const {
-    return map_iterator(Terminators.begin(),
-                        bb_getter(pair_first<MachineBasicBlock*, VSUnit*>));
+    return map_iterator(BBInfoMap.begin(),
+                        bb_getter(pair_first<const MachineBasicBlock*, VSUnit*>));
   }
 
   bb_iterator bb_end() const {
-    return map_iterator(Terminators.end(),
-                        bb_getter(pair_first<MachineBasicBlock*, VSUnit*>));
+    return map_iterator(BBInfoMap.end(),
+                        bb_getter(pair_first<const MachineBasicBlock*, VSUnit*>));
   }
 
-  VSUnit *lookUpTerminator(MachineBasicBlock *MBB) const {
-    TerminatorMapTy::const_iterator at = Terminators.find(MBB);
-    return at == Terminators.end() ? 0 : at->second;
+  VSUnit *lookUpTerminator(const MachineBasicBlock *MBB) const {
+    BBInfoMapTy::const_iterator at = BBInfoMap.find(MBB);
+    return at == BBInfoMap.end() ? 0 : at->second;
   }
 
-  unsigned num_bbs() const { return Terminators.size(); }
+  unsigned num_bbs() const { return BBInfoMap.size(); }
 
   VSUnit *createVSUnit(InstPtrTy Ptr, unsigned fuid = 0);
-  VSUnit *createExitRoot(MachineBasicBlock *MBB) {
+  VSUnit *createExitRoot(const MachineBasicBlock *MBB) {
     assert (Exit == 0 && "Exit already created!");
     Exit = new VSUnit(NextSUIdx++, 0);
     Exit->addPtr(MBB, 0);
 
     CPSUs.push_back(Exit);
 
-    typedef TerminatorMapTy::iterator it;
-    for (it I = Terminators.begin(), E = Terminators.end(); I != E; ++I)
+    typedef BBInfoMapTy::iterator it;
+    for (it I = BBInfoMap.begin(), E = BBInfoMap.end(); I != E; ++I)
       if (cuse_empty(I->second))
         Exit->addDep<true>(I->second, VDEdge::CreateCtrlDep(0));
 
@@ -844,32 +846,32 @@ public:
     else            resetDPSchedule();
   }
 
-  unsigned getStartSlot(MachineBasicBlock *MBB) const {
+  unsigned getStartSlot(const MachineBasicBlock *MBB) const {
     VSUnit *EntrySU = lookupSUnit(MBB);
     assert(EntrySU && "Cannot find entry!");
     return EntrySU->getSlot();
   }
 
-  unsigned getEndSlot(MachineBasicBlock *MBB) const {
+  unsigned getEndSlot(const MachineBasicBlock *MBB) const {
     VSUnit *Terminator = lookUpTerminator(MBB);
     assert(Terminator && "Cannot find terminator!");
     return Terminator->getSlot();
   }
 
-  unsigned getTotalSlot(MachineBasicBlock *MBB) const {
+  unsigned getTotalSlot(const MachineBasicBlock *MBB) const {
     return getEndSlot(MBB) - getStartSlot(MBB);
   }
 
   // II for Modulo schedule
-  bool isPipelined(MachineBasicBlock *MBB) const {
+  bool isPipelined(const MachineBasicBlock *MBB) const {
     return getII(MBB) < getTotalSlot(MBB);
   }
 
-  unsigned getLoopOpSlot(MachineBasicBlock *MBB) const {
+  unsigned getLoopOpSlot(const MachineBasicBlock *MBB) const {
     return getStartSlot(MBB) + getII(MBB);
   }
 
-  unsigned getII(MachineBasicBlock *MBB) const {
+  unsigned getII(const MachineBasicBlock *MBB) const {
     IIMapTy::const_iterator at = IIMap.find(MBB);
     return at == IIMap.end() ? getTotalSlot(MBB) : at->second;
   }
