@@ -618,11 +618,14 @@ private:
 
   typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
-  typedef std::map<MachineBasicBlock*, VSUnit*> BBInfoMapTy;
-  BBInfoMapTy BBInfo;
-  typedef std::map<MachineBasicBlock*, unsigned> IIMapTy;
-  typedef std::map<const MachineBasicBlock*, VSUnit*> BBInfoMapTy;
+  struct BBInfo {
+    VSUnit *Entry, *Exit;
+    unsigned StartSlotFromEntry, ExitSlotFromEntry;
+  };
+
+  typedef std::map<const MachineBasicBlock*, BBInfo> BBInfoMapTy;
   BBInfoMapTy BBInfoMap;
+
   typedef std::map<const MachineBasicBlock*, unsigned> IIMapTy;
   IIMapTy IIMap;
   // If the MI is a branch instruction that branching back to the entry of its
@@ -729,9 +732,15 @@ public:
   void topologicalSortCPSUs();
 
   VSUnit *createTerminator(const MachineBasicBlock *MBB) {
-    VSUnit *&SU = BBInfoMap[MBB];
+    BBInfo &Info = BBInfoMap[MBB];
+    VSUnit *&SU = Info.Exit;
     assert(SU == 0 && "Terminator already exist!");
     SU = new VSUnit(NextSUIdx++, 0);
+
+    // Initialize the rest of the BBInfo.
+    Info.Entry = lookupSUnit(MBB);
+    assert(Info.Entry && "Create terminator before creating entry!");
+    Info.ExitSlotFromEntry = Info.StartSlotFromEntry = 0;
 
     CPSUs.push_back(SU);
     return SU;
@@ -739,7 +748,7 @@ public:
   // Use mapped_iterator which is a simple iterator adapter that causes a
   // function to be dereferenced whenever operator* is invoked on the iterator.
   typedef
-  std::pointer_to_unary_function<std::pair<const MachineBasicBlock*, VSUnit*>,
+  std::pointer_to_unary_function<std::pair<const MachineBasicBlock*, BBInfo>,
                                  const MachineBasicBlock*>
   bb_getter;
 
@@ -747,17 +756,17 @@ public:
 
   bb_iterator bb_begin() const {
     return map_iterator(BBInfoMap.begin(),
-                        bb_getter(pair_first<const MachineBasicBlock*, VSUnit*>));
+                        bb_getter(pair_first<const MachineBasicBlock*, BBInfo>));
   }
 
   bb_iterator bb_end() const {
     return map_iterator(BBInfoMap.end(),
-                        bb_getter(pair_first<const MachineBasicBlock*, VSUnit*>));
+                        bb_getter(pair_first<const MachineBasicBlock*, BBInfo>));
   }
 
   VSUnit *lookUpTerminator(const MachineBasicBlock *MBB) const {
     BBInfoMapTy::const_iterator at = BBInfoMap.find(MBB);
-    return at == BBInfoMap.end() ? 0 : at->second;
+    return at == BBInfoMap.end() ? 0 : at->second.Exit;
   }
 
   unsigned num_bbs() const { return BBInfoMap.size(); }
@@ -772,8 +781,8 @@ public:
 
     typedef BBInfoMapTy::iterator it;
     for (it I = BBInfoMap.begin(), E = BBInfoMap.end(); I != E; ++I)
-      if (cuse_empty(I->second))
-        Exit->addDep<true>(I->second, VDEdge::CreateCtrlDep(0));
+      if (cuse_empty(I->second.Exit))
+        Exit->addDep<true>(I->second.Exit, VDEdge::CreateCtrlDep(0));
 
     return Exit;
   }
