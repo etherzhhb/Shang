@@ -788,9 +788,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   return MO;
 }
 
-typedef std::vector<unsigned> B2SMapTy;
-static unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry,
-                                           const B2SMapTy &ExitSlots) {
+unsigned VSchedGraph::calculateMinSlotsFromEntry(VSUnit *BBEntry) {
   unsigned SlotsFromEntry = BBEntry->getSlot();
 
   typedef VSUnit::dep_iterator dep_it;
@@ -801,7 +799,7 @@ static unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry,
     //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
 
     MachineBasicBlock *PredBB = PredTerminator->getParentBB();
-    unsigned PredDistance = ExitSlots[PredBB->getNumber()];
+    unsigned PredDistance = getBBInfo(PredBB).ExitSlotFromEntry;
     // Consider the latency of the control dependency edge.
     assert(PredDistance && "Not visiting the BBs in topological order?");
     SlotsFromEntry = std::min<unsigned>(SlotsFromEntry, PredDistance);
@@ -810,9 +808,9 @@ static unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry,
   return SlotsFromEntry;
 }
 
-static int calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
-                                   const B2SMapTy &Map,
-                                   unsigned MinSlotsForEntry) {
+int VSchedGraph::calulateMinInterBBSlack(BBInfo &Info) {
+  VSUnit *BBEntry = Info.Entry;
+
   unsigned EntrySlot = BBEntry->getSlot();
   MachineBasicBlock *MBB = BBEntry->getParentBB();
   typedef VSUnit::use_iterator use_it;
@@ -830,8 +828,9 @@ static int calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
 
       MachineBasicBlock *SrcBB = DI->getParentBB();
       assert(SrcBB != MBB && "Not cross BB depenency!");
-      VSUnit *SrcTerminator = G.lookUpTerminator(SrcBB);
-      unsigned SrcExitSlot = Map[SrcBB->getNumber()];
+      BBInfo &SrcInfo = getBBInfo(SrcBB);
+      VSUnit *SrcTerminator = SrcInfo.Exit;
+      unsigned SrcExitSlot = SrcInfo.ExitSlotFromEntry;
       assert(SrcExitSlot && "Unexpected cross BB back-edge!");
       // Calculate the latency distributed between the SrcBB and the SnkBB.
       assert(USlot >= EntrySlot && SrcTerminator->getSlot() >= DI->getSlot()
@@ -839,7 +838,7 @@ static int calulateMinInterBBSlack(VSUnit *BBEntry, VSchedGraph &G,
       int InterBBLatency = DI.getLatency() - (USlot - EntrySlot)
                             - (SrcTerminator->getSlot() - DI->getSlot());
       // Calculate the minimal latency between the SrcBB and SnkBB.
-      int ActualInterBBlatency = MinSlotsForEntry - SrcExitSlot;
+      int ActualInterBBlatency = Info.StartSlotFromEntry - SrcExitSlot;
       DEBUG(dbgs().indent(4) << "Found InterBBLatency and ActualInterBBlatency"
                               << InterBBLatency << ' '
                               << ActualInterBBlatency << '\n');
@@ -914,8 +913,6 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
 
 bool VSchedGraph::insertDelayBlocks() {
   bool AnyLatencyFixed = false;
-
-  B2SMapTy ExitSlots(num_bbs(), 0);
   std::set<VSUnit*> Visited;
 
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
@@ -934,14 +931,15 @@ bool VSchedGraph::insertDelayBlocks() {
 
       // All dependencies visited, now visit the current BBEntry.
       assert(U->isBBEntry() && "Unexpected non-entry node!");
-      int CurDistance = calculateMinSlotsFromEntry(U, ExitSlots);
+      MachineBasicBlock *MBB = U->getParentBB();
+      BBInfo &Info = getBBInfo(MBB);
+      Info.StartSlotFromEntry = calculateMinSlotsFromEntry(U);
 
-      int MinInterBBSlack
-        = calulateMinInterBBSlack(U, *this, ExitSlots, CurDistance);
+      Info.MiniInterBBSlack = calulateMinInterBBSlack(Info);
 
-      DEBUG(dbgs() << "Minimal Slack: " << MinInterBBSlack << '\n');
+      DEBUG(dbgs() << "Minimal Slack: " << Info.MiniInterBBSlack << '\n');
 
-      if (MinInterBBSlack < 0) {
+      if (Info.MiniInterBBSlack < 0) {
         typedef VSUnit::dep_iterator dep_it;
         for (dep_it I = cp_begin(U), E = cp_end(U); I != E; ++I) {
           VSUnit *PredTerminator = *I;
@@ -950,19 +948,19 @@ bool VSchedGraph::insertDelayBlocks() {
           //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
 
           MachineBasicBlock *PredBB = PredTerminator->getParentBB();
-          int PredDistance = ExitSlots[PredBB->getNumber()];
-          int ExtraLatency = CurDistance - PredDistance - MinInterBBSlack;
+          BBInfo &PredInfo = getBBInfo(PredBB);
+          int PredDistance = PredInfo.ExitSlotFromEntry;
+          int ExtraLatency = Info.StartSlotFromEntry - PredDistance 
+                             - Info.MiniInterBBSlack;
           if (ExtraLatency <= 0) continue;
 
-          insertDelayBlock(PredBB, U->getParentBB(), ExtraLatency);
+          insertDelayBlock(PredBB, MBB, ExtraLatency);
         }
       }
 
-      MachineBasicBlock *MBB = U->getParentBB();
-      unsigned ExitSlot = CurDistance + getTotalSlot(MBB) - MinInterBBSlack;
-      assert(ExitSlot && "Bad schedule!");
-      ExitSlots[MBB->getNumber()] = ExitSlot;
-
+      Info.ExitSlotFromEntry = Info.StartSlotFromEntry + Info.getTotalSlot()
+                               - Info.MiniInterBBSlack;
+      assert(Info.ExitSlotFromEntry && "Bad schedule!");
       continue;
     }
 

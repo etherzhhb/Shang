@@ -621,10 +621,21 @@ private:
   struct BBInfo {
     VSUnit *Entry, *Exit;
     unsigned StartSlotFromEntry, ExitSlotFromEntry;
+    int MiniInterBBSlack;
+
+    unsigned getTotalSlot() const {
+      return Exit->getSlot() - Entry->getSlot();
+    }
   };
 
   typedef std::map<const MachineBasicBlock*, BBInfo> BBInfoMapTy;
   BBInfoMapTy BBInfoMap;
+
+  BBInfo &getBBInfo(const MachineBasicBlock *MBB) {
+    BBInfoMapTy::iterator at = BBInfoMap.find(MBB);
+    assert(at != BBInfoMap.end() && "BBInfo not found!");
+    return at->second;
+  }
 
   typedef std::map<const MachineBasicBlock*, unsigned> IIMapTy;
   IIMapTy IIMap;
@@ -648,6 +659,8 @@ private:
   // blocks to introduce necessary delay.
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
+  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry);
+  int calulateMinInterBBSlack(BBInfo &Info);
   bool insertDelayBlocks();
 
   // Insert the copy operations which copy the result of the operations to
@@ -736,13 +749,13 @@ public:
     VSUnit *&SU = Info.Exit;
     assert(SU == 0 && "Terminator already exist!");
     SU = new VSUnit(NextSUIdx++, 0);
+    CPSUs.push_back(SU);
 
     // Initialize the rest of the BBInfo.
     Info.Entry = lookupSUnit(MBB);
     assert(Info.Entry && "Create terminator before creating entry!");
     Info.ExitSlotFromEntry = Info.StartSlotFromEntry = 0;
-
-    CPSUs.push_back(SU);
+    Info.MiniInterBBSlack = 0;
     return SU;
   }
   // Use mapped_iterator which is a simple iterator adapter that causes a
