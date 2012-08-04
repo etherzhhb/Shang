@@ -664,8 +664,9 @@ private:
   // blocks to introduce necessary delay.
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
+  void insertDelayBlock(BBInfo &Info);
   unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry);
-  int calulateMinInterBBSlack(BBInfo &Info);
+  int calculateMinInterBBSlack(BBInfo &Info);
   bool insertDelayBlocks();
 
   // Insert the copy operations which copy the result of the operations to

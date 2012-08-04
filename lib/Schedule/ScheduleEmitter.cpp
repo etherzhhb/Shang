@@ -808,7 +808,7 @@ unsigned VSchedGraph::calculateMinSlotsFromEntry(VSUnit *BBEntry) {
   return SlotsFromEntry;
 }
 
-int VSchedGraph::calulateMinInterBBSlack(BBInfo &Info) {
+int VSchedGraph::calculateMinInterBBSlack(BBInfo &Info) {
   VSUnit *BBEntry = Info.Entry;
 
   unsigned EntrySlot = BBEntry->getSlot();
@@ -911,6 +911,27 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
   // TODO: Fix the dependencies edges.
 }
 
+void VSchedGraph::insertDelayBlock(BBInfo &Info) {
+  MachineBasicBlock *MBB = Info.Entry->getParentBB();
+
+  typedef VSUnit::dep_iterator dep_it;
+  for (dep_it I = cp_begin(Info.Entry), E = cp_end(Info.Entry); I != E; ++I) {
+    VSUnit *PredTerminator = *I;
+    //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
+    //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
+    //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
+
+    MachineBasicBlock *PredBB = PredTerminator->getParentBB();
+    BBInfo &PredInfo = getBBInfo(PredBB);
+    int PredDistance = PredInfo.ExitSlotFromEntry;
+    int ExtraLatency = Info.StartSlotFromEntry - PredDistance
+                       - Info.MiniInterBBSlack;
+    if (ExtraLatency <= 0) continue;
+
+    insertDelayBlock(PredBB, MBB, ExtraLatency);
+  }
+}
+
 bool VSchedGraph::insertDelayBlocks() {
   bool AnyLatencyFixed = false;
   std::set<VSUnit*> Visited;
@@ -935,28 +956,11 @@ bool VSchedGraph::insertDelayBlocks() {
       BBInfo &Info = getBBInfo(MBB);
       Info.StartSlotFromEntry = calculateMinSlotsFromEntry(U);
 
-      Info.MiniInterBBSlack = calulateMinInterBBSlack(Info);
+      Info.MiniInterBBSlack = calculateMinInterBBSlack(Info);
 
       DEBUG(dbgs() << "Minimal Slack: " << Info.MiniInterBBSlack << '\n');
 
-      if (Info.MiniInterBBSlack < 0) {
-        typedef VSUnit::dep_iterator dep_it;
-        for (dep_it I = cp_begin(U), E = cp_end(U); I != E; ++I) {
-          VSUnit *PredTerminator = *I;
-          //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
-          //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
-          //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
-
-          MachineBasicBlock *PredBB = PredTerminator->getParentBB();
-          BBInfo &PredInfo = getBBInfo(PredBB);
-          int PredDistance = PredInfo.ExitSlotFromEntry;
-          int ExtraLatency = Info.StartSlotFromEntry - PredDistance 
-                             - Info.MiniInterBBSlack;
-          if (ExtraLatency <= 0) continue;
-
-          insertDelayBlock(PredBB, MBB, ExtraLatency);
-        }
-      }
+      if (Info.MiniInterBBSlack < 0) insertDelayBlock(Info);
 
       Info.ExitSlotFromEntry = Info.StartSlotFromEntry + Info.getTotalSlot()
                                - Info.MiniInterBBSlack;
