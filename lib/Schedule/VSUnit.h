@@ -660,14 +660,16 @@ private:
 
   // Insert the delay block between BBs, because the scheduler assume that
   // EndSlot(SrcBB) == StartSlot(SnkBB) for all Edges (SrcBB, Snk) in CFG,
-  // however the equation may not hold, hence we need to insert extra delay
-  // blocks to introduce necessary delay.
+  // however the equation may not hold, hence we need to:
+  // 1. Calculate the inter-bb-slacks, and
+  // 2. Insert extra delay blocks to eliminate the negative slacks.
+  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry);
+  int calculateMinInterBBSlack(BBInfo &Info);
+  void insertDelayBlocks();
+
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
   void insertDelayBlock(BBInfo &Info);
-  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry);
-  int calculateMinInterBBSlack(BBInfo &Info);
-  bool insertDelayBlocks();
 
   // Insert the copy operations which copy the result of the operations to
   // registers, so that we can break the chain.
@@ -924,6 +926,7 @@ public:
   // scheduled, this can reduce register usage.
   void scheduleControlPath();
   void scheduleDatapath();
+  void updateInterBBSlack();
   unsigned emitSchedule();
   //}
 
