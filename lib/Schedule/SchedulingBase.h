@@ -189,7 +189,7 @@ protected:
   }
 
   unsigned calculateASAP(const VSUnit *A);
-  // Apply the Bellman Ford algorithm at most |V|-1 times, return true if
+  // Apply the Bellman-Ford like algorithm at most |V|-1 times, return true if
   // negative cycle found.
   bool buildASAPStep();
   unsigned calculateALAP(const VSUnit *A);
@@ -218,8 +218,8 @@ public:
   }
 
   // Find the minimal II which can eliminate the negative cycles. Where we
-  // detect negative cycles by applying Bellman Ford algorithm at most |V|-1
-  // times to see if the ASAP steps convergence.
+  // detect negative cycles by applying Bellman-Ford like algorithm at most
+  // |V|-1 times to see if the ASAP steps convergence.
   unsigned computeRecMII(unsigned MinRecMII);
 
   void viewGraph() {
