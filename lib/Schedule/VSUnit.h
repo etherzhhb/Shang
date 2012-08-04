@@ -836,6 +836,7 @@ public:
     return getEntryRoot()->getParentBB();
   }
   VSUnit *getExitRoot() const { return Exit; }
+  MachineBasicBlock *getExitBB() const { return getExitRoot()->getParentBB(); }
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.

@@ -494,47 +494,21 @@ unsigned VSchedGraph::calculateMinSlotsFromEntry(VSUnit *BBEntry) {
 }
 
 void VSchedGraph::updateInterBBSlack() {
-  std::set<VSUnit*> Visited;
-
-  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
-  VSUnit *ExitRoot = getExitRoot();
-  WorkStack.push_back(std::make_pair(ExitRoot, cp_begin(ExitRoot)));
-
+  typedef MachineFunction::iterator iterator;
   // Visit the blocks in topological order, and ignore the pseudo exit node.
-  for (;;) {
-    VSUnit *U = WorkStack.back().first;
-    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
+  for (iterator I = getEntryBB(), E = getExitBB(); I != E; ++I) {
+    MachineBasicBlock *MBB = I;
+    BBInfo &Info = getBBInfo(MBB);
+    Info.StartSlotFromEntry = calculateMinSlotsFromEntry(lookupSUnit(MBB));
 
-    if (ChildIt == cp_end(U)) {
-      WorkStack.pop_back();
-      // No need to visit the exit root.
-      if (WorkStack.empty()) break;
+    Info.MiniInterBBSlack = calculateMinInterBBSlack(Info);
 
-      // All dependencies visited, now visit the current BBEntry.
-      assert(U->isBBEntry() && "Unexpected non-entry node!");
-      MachineBasicBlock *MBB = U->getParentBB();
-      BBInfo &Info = getBBInfo(MBB);
-      Info.StartSlotFromEntry = calculateMinSlotsFromEntry(U);
+    DEBUG(dbgs() << "Minimal Slack: " << Info.MiniInterBBSlack << '\n');
 
-      Info.MiniInterBBSlack = calculateMinInterBBSlack(Info);
-
-      DEBUG(dbgs() << "Minimal Slack: " << Info.MiniInterBBSlack << '\n');
-
-      Info.ExitSlotFromEntry = Info.StartSlotFromEntry + Info.getTotalSlot()
-                               - Info.MiniInterBBSlack;
-      assert(Info.ExitSlotFromEntry && "Bad schedule!");
-      continue;
-    }
-
-    VSUnit *ChildNode = *ChildIt;
-    ++WorkStack.back().second;
-
-    assert(ChildNode->isTerminator() && "Unexpected non-terminator node!");
-    if (!Visited.insert(ChildNode).second) continue;
-
-    // Jump to the entry of the parent block of the terminator.
-    ChildNode = lookupSUnit(ChildNode->getParentBB());
-    WorkStack.push_back(std::make_pair(ChildNode, cp_begin(ChildNode)));
+    Info.ExitSlotFromEntry = Info.StartSlotFromEntry + Info.getTotalSlot()
+                              - Info.MiniInterBBSlack;
+    assert(Info.ExitSlotFromEntry && "Bad schedule!");
+    continue;
   }
 }
 

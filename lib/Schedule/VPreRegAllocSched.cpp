@@ -248,6 +248,17 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
 
+  // Place the BBs in topological order this can benefit some of the later
+  // algorithms.
+  typedef po_iterator<MachineBasicBlock*> po_it;
+  for (po_it I = po_begin(&MF.front()), E = po_end(&MF.front()); I != E; ++I) {
+    MachineBasicBlock *MBB = *I;
+    MF.splice(MF.begin(), MBB);
+  }
+
+  // Reset the MBB numbering.
+  MF.RenumberBlocks();
+
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   MF.push_back(VirtualExit);
@@ -1154,13 +1165,11 @@ bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
 
 void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
                                                    MachineBasicBlock *Entry,
-                                                   MachineBasicBlock *VExit) {  
-  ReversePostOrderTraversal<MachineBasicBlock*> Ord(Entry);
-  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+                                                   MachineBasicBlock *VExit) {
   std::vector<VSUnit*> NewSUs;
 
-  for (rpo_it I = Ord.begin(), E = Ord.end(); I != E; ++I) {
-    MachineBasicBlock *MBB = *I;
+  for (MachineFunction::iterator I = Entry, E = VExit; I != E; ++I) {
+    MachineBasicBlock *MBB = I;
 
     // Perform software pipelining with local scheduling algorithm.
     // FIXME: Reuse the local scheduling graph which is built for software
