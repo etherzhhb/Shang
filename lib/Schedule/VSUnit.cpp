@@ -186,10 +186,7 @@ VSchedGraph::mergeSUsInSubGraph(VSchedGraph &SubGraph) {
   SubGraph.CPSUs.push_back(getExitRoot());
   SubGraph.DPSUs.clear();
 
-  // 3. Merge the II Map.
-  IIMap.insert(SubGraph.IIMap.begin(), SubGraph.IIMap.end());
-
-  //4. Merge the terminator map.
+  // 3. Merge the terminator map.
   BBInfoMap.insert(SubGraph.BBInfoMap.begin(), SubGraph.BBInfoMap.end());
 
   assert(NextSUIdx == Terminator->getIdx() + 1u && "Index mis-matched!");
@@ -278,9 +275,9 @@ bool VSchedGraph::scheduleLoop() {
       assert(getLoopOp()->getSlot() <= getEndSlot(MBB)
         && "Expect MII is not bigger then critical path length!");
 
-      bool succ = IIMap.insert(std::make_pair(MBB, Scheduler.getMII())).second;
-      assert(succ && "Cannot remember II!");
-      (void) succ;
+      BBInfo &Info = getBBInfo(MBB);
+      assert(Info.II == 0 && "MBB already pipelined?");
+      Info.II = Scheduler.getMII();
       return true;
     }
     case IterativeModuloScheduling::MIITooSmall:{

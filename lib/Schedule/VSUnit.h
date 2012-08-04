@@ -620,6 +620,7 @@ private:
   SUnitMapType InstToSUnits;
   struct BBInfo {
     VSUnit *Entry, *Exit;
+    unsigned II;
     unsigned StartSlotFromEntry, ExitSlotFromEntry;
     int MiniInterBBSlack;
 
@@ -631,14 +632,18 @@ private:
   typedef std::map<const MachineBasicBlock*, BBInfo> BBInfoMapTy;
   BBInfoMapTy BBInfoMap;
 
-  BBInfo &getBBInfo(const MachineBasicBlock *MBB) {
+  inline const BBInfo &getBBInfo(const MachineBasicBlock *MBB) const {
+    BBInfoMapTy::const_iterator at = BBInfoMap.find(MBB);
+    assert(at != BBInfoMap.end() && "BBInfo not found!");
+    return at->second;
+  }
+
+  inline BBInfo &getBBInfo(const MachineBasicBlock *MBB) {
     BBInfoMapTy::iterator at = BBInfoMap.find(MBB);
     assert(at != BBInfoMap.end() && "BBInfo not found!");
     return at->second;
   }
 
-  typedef std::map<const MachineBasicBlock*, unsigned> IIMapTy;
-  IIMapTy IIMap;
   // If the MI is a branch instruction that branching back to the entry of its
   // parent BB, remember it.
   bool rememberLoopOp(MachineInstr *MI);
@@ -754,7 +759,7 @@ public:
     // Initialize the rest of the BBInfo.
     Info.Entry = lookupSUnit(MBB);
     assert(Info.Entry && "Create terminator before creating entry!");
-    Info.ExitSlotFromEntry = Info.StartSlotFromEntry = 0;
+    Info.ExitSlotFromEntry = Info.StartSlotFromEntry = Info.II = 0;
     Info.MiniInterBBSlack = 0;
     return SU;
   }
@@ -868,34 +873,30 @@ public:
     else            resetDPSchedule();
   }
 
-  unsigned getStartSlot(const MachineBasicBlock *MBB) const {
-    VSUnit *EntrySU = lookupSUnit(MBB);
-    assert(EntrySU && "Cannot find entry!");
-    return EntrySU->getSlot();
+  inline unsigned getStartSlot(const MachineBasicBlock *MBB) const {
+    return getBBInfo(MBB).Entry->getSlot();
   }
 
-  unsigned getEndSlot(const MachineBasicBlock *MBB) const {
-    VSUnit *Terminator = lookUpTerminator(MBB);
-    assert(Terminator && "Cannot find terminator!");
-    return Terminator->getSlot();
+  inline unsigned getEndSlot(const MachineBasicBlock *MBB) const {
+    return getBBInfo(MBB).Exit->getSlot();
   }
 
-  unsigned getTotalSlot(const MachineBasicBlock *MBB) const {
-    return getEndSlot(MBB) - getStartSlot(MBB);
+  inline unsigned getTotalSlot(const MachineBasicBlock *MBB) const {
+    return getBBInfo(MBB).getTotalSlot();
   }
 
   // II for Modulo schedule
-  bool isPipelined(const MachineBasicBlock *MBB) const {
+  inline bool isPipelined(const MachineBasicBlock *MBB) const {
     return getII(MBB) < getTotalSlot(MBB);
   }
 
-  unsigned getLoopOpSlot(const MachineBasicBlock *MBB) const {
+  inline unsigned getLoopOpSlot(const MachineBasicBlock *MBB) const {
     return getStartSlot(MBB) + getII(MBB);
   }
 
-  unsigned getII(const MachineBasicBlock *MBB) const {
-    IIMapTy::const_iterator at = IIMap.find(MBB);
-    return at == IIMap.end() ? getTotalSlot(MBB) : at->second;
+  inline unsigned getII(const MachineBasicBlock *MBB) const {
+    const BBInfo &Info = getBBInfo(MBB);
+    return Info.II ? Info.II : Info.getTotalSlot();
   }
 
   bool enablePipeLine() const {
