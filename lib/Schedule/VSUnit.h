@@ -629,19 +629,27 @@ private:
     }
   };
 
-  typedef std::map<const MachineBasicBlock*, BBInfo> BBInfoMapTy;
+  typedef std::vector<BBInfo> BBInfoMapTy;
   BBInfoMapTy BBInfoMap;
 
   inline const BBInfo &getBBInfo(const MachineBasicBlock *MBB) const {
-    BBInfoMapTy::const_iterator at = BBInfoMap.find(MBB);
-    assert(at != BBInfoMap.end() && "BBInfo not found!");
-    return at->second;
+    if (enablePipeLine()) {
+      assert(MBB == BBInfoMap.back().Exit->getParentBB()
+             && "Bad MBB in local scheduling graph!");
+      return BBInfoMap.back();
+    }
+
+    return BBInfoMap[MBB->getNumber()];
   }
 
   inline BBInfo &getBBInfo(const MachineBasicBlock *MBB) {
-    BBInfoMapTy::iterator at = BBInfoMap.find(MBB);
-    assert(at != BBInfoMap.end() && "BBInfo not found!");
-    return at->second;
+    if (enablePipeLine()) {
+      assert(MBB == BBInfoMap.back().Exit->getParentBB()
+        && "Bad MBB in local scheduling graph!");
+      return BBInfoMap.back();
+    }
+
+    return BBInfoMap[MBB->getNumber()];
   }
 
   // If the MI is a branch instruction that branching back to the entry of its
@@ -753,41 +761,38 @@ public:
   void topologicalSortCPSUs();
 
   VSUnit *createTerminator(const MachineBasicBlock *MBB) {
-    BBInfo &Info = BBInfoMap[MBB];
-    VSUnit *&SU = Info.Exit;
-    assert(SU == 0 && "Terminator already exist!");
-    SU = new VSUnit(NextSUIdx++, 0);
-    CPSUs.push_back(SU);
-
+    BBInfo Info;
+    Info.Exit = new VSUnit(NextSUIdx++, 0);
+    CPSUs.push_back(Info.Exit);
     // Initialize the rest of the BBInfo.
     Info.Entry = lookupSUnit(MBB);
     assert(Info.Entry && "Create terminator before creating entry!");
     Info.ExitSlotFromEntry = Info.StartSlotFromEntry = Info.II = 0;
     Info.MiniInterBBSlack = 0;
-    return SU;
-  }
-  // Use mapped_iterator which is a simple iterator adapter that causes a
-  // function to be dereferenced whenever operator* is invoked on the iterator.
-  typedef
-  std::pointer_to_unary_function<std::pair<const MachineBasicBlock*, BBInfo>,
-                                 const MachineBasicBlock*>
-  bb_getter;
 
-  typedef mapped_iterator<BBInfoMapTy::const_iterator, bb_getter> bb_iterator;
-
-  bb_iterator bb_begin() const {
-    return map_iterator(BBInfoMap.begin(),
-                        bb_getter(pair_first<const MachineBasicBlock*, BBInfo>));
-  }
-
-  bb_iterator bb_end() const {
-    return map_iterator(BBInfoMap.end(),
-                        bb_getter(pair_first<const MachineBasicBlock*, BBInfo>));
+    // Add the current BBInfo to BBInfoMap.
+    BBInfoMap.push_back(Info);
+    assert((int(BBInfoMap.size()) == MBB->getNumber() + 1
+            || getEntryBB()->getNumber() == MBB->getNumber())
+           && "BBInfoMap's index not synchronized!");
+    return Info.Exit;
   }
 
   VSUnit *lookUpTerminator(const MachineBasicBlock *MBB) const {
-    BBInfoMapTy::const_iterator at = BBInfoMap.find(MBB);
-    return at == BBInfoMap.end() ? 0 : at->second.Exit;
+    unsigned Index = MBB->getNumber();
+    if (Index >= BBInfoMap.size()) {
+      // The scheduling graph may be a local graph which only contains 1 MBB.
+      if (enablePipeLine()) {
+        VSUnit *Terminator = BBInfoMap.back().Exit;
+        assert(MBB == Terminator->getParentBB()
+               && "Bad MBB in local scheduling graph!");
+        return Terminator;
+      }
+
+      return 0;
+    }
+
+    return BBInfoMap[Index].Exit;
   }
 
   unsigned num_bbs() const { return BBInfoMap.size(); }
@@ -802,8 +807,8 @@ public:
 
     typedef BBInfoMapTy::iterator it;
     for (it I = BBInfoMap.begin(), E = BBInfoMap.end(); I != E; ++I)
-      if (cuse_empty(I->second.Exit))
-        Exit->addDep<true>(I->second.Exit, VDEdge::CreateCtrlDep(0));
+      if (cuse_empty(I->Exit))
+        Exit->addDep<true>(I->Exit, VDEdge::CreateCtrlDep(0));
 
     return Exit;
   }

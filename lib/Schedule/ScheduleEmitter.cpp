@@ -870,11 +870,11 @@ void VSchedGraph::insertDelayBlock(BBInfo &Info) {
 }
 
 void VSchedGraph::insertDelayBlocks() {
-  typedef BBInfoMapTy::iterator iterator;
-  for (iterator I = BBInfoMap.begin(), E = BBInfoMap.end(); I != E; ++I) {
-    BBInfo &Info = I->second;
-    if (Info.MiniInterBBSlack < 0) insertDelayBlock(Info);
-  }
+  // Because we will push new BBInfo to BBInfoMap during inserting delay blocks,
+  // we should use the index to iterate over the exiting BBInfos, and the newly
+  // pushed BBInfos will not be visited.
+  for (unsigned i = 0, e = BBInfoMap.size(); i != e; ++i)
+    if (BBInfoMap[i].MiniInterBBSlack < 0) insertDelayBlock(BBInfoMap[i]);
 }
 
 void VSchedGraph::insertDisableFU(VSUnit *U) {

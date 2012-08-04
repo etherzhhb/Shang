@@ -271,11 +271,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   DEBUG(G.viewCPGraph());
   DEBUG(G.viewDPGraph());
+  // Erase the virtual exit block.
+  VirtualExit->eraseFromParent();
+  MF.RenumberBlocks(&MF.back());
+
   unsigned TotalCycles = G.emitSchedule();
   FInfo->setTotalSlots(TotalCycles);
 
-  // Erase the virtual exit block.
-  VirtualExit->eraseFromParent();
 
   cleanUpSchedule();
 
@@ -787,6 +789,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G) {
   assert(LoopOp && "Not in loop?");
   MachineBasicBlock *CurBB = G.getEntryBB();
   VSUnit *CurTerminator = G.lookUpTerminator(CurBB);
+  assert(CurTerminator && "Cannot get terminator!");
   assert(LoopOp != CurTerminator && "Pipeline not enable!");
 
   for (iterator I = cp_begin(&G) + 1, E = cp_end(&G);
@@ -1192,8 +1195,9 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 void VPreRegAllocSched::schedule(VSchedGraph &G) {
   MachineBlockFrequencyInfo &MBFI = getAnalysis<MachineBlockFrequencyInfo>();
   double FreqSum = 0.0;
-  for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I)
-    FreqSum += MBFI.getBlockFreq(*I).getFrequency();
+  typedef MachineFunction::iterator iterator;
+  for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
+    FreqSum += MBFI.getBlockFreq(I).getFrequency();
 
   SDCScheduler<true> Scheduler(G);
 
@@ -1204,8 +1208,8 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   if (Scheduler.createLPAndVariables()) {
     //Scheduler.buildASAPObject(1.0);
     //Scheduler.buildOptSlackObject(0.0);
-    for (VSchedGraph::bb_iterator I = G.bb_begin(), E = G.bb_end(); I != E; ++I) {
-      const MachineBasicBlock *MBB = *I;
+    for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I) {
+      const MachineBasicBlock *MBB = I;
       double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
       // Min (BBEnd - BBStart) * BBFreq;
