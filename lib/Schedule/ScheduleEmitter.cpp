@@ -956,6 +956,9 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   assert(!VRegisterInfo::IsWire(ResultWire, &MRI) && "Result is already a wire!");
   unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
   MRI.setRegClass(ResultWire, RC);
+  // We cannot insert copy for dangling SUs.
+  assert(!U->isDangling() && "Unexpected dangling SU!");
+
   unsigned ResultReg = 0;
 
   MachineBasicBlock *MBB = MI->getParent();
