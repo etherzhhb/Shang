@@ -669,6 +669,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
         // Op1 use A' <----------- Use the wrong value.
         // Fortunately, this bug is hidden by the PHIElimination and
         // AdjustLIForBundles pass.
+        // This bug can be fixed by emitting the PHIs lazily.
         WireNum = createPHI(WireNum, BitWidth, SchedSlot.getSlot(), true);
 
       WireDef WDef = createWireDef(WireNum, MO, Pred, SchedSlot, CopySlot);
@@ -722,6 +723,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     if (VRegisterInfo::IsWire(MO.getReg(), &MRI)) continue;
 
     if (WD->shouldBeCopied() && !isCopyLike) {
+      llvm_unreachable("VOpReadFU should had been already inserted!");
       unsigned Slot = CopySlot.getSlot();
       // Export the register.
       MachineInstrBuilder Builder = BuildMI(MBB, IP, DebugLoc(),
