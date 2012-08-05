@@ -935,7 +935,14 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
 
 void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   unsigned StepsToCopy = getStepsToFinish(MI);
-  if (StepsToCopy == 0) return;
+  if (StepsToCopy == 0) {
+    if (U->isControl())
+      return;
+    else
+      // We need to copy the result of data-path operations at least 1 slots
+      // later.
+      StepsToCopy += 1;
+  }
 
   unsigned Slot = U->getSlot() + Offset;
   unsigned ResultWire = MI->getOperand(0).getReg();
