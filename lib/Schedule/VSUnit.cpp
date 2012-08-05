@@ -546,18 +546,6 @@ void VSchedGraph::scheduleDatapath() {
     assert(succ && "Cannot schedule the data-path!");
     (void) succ;
   }
-
-  // Break the multi-cycles chains to expose more FU sharing opportunities.
-  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
-    clearDanglingFlagForTree(*I);
-
-  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
-    VSUnit *U = *I;
-
-    if (U->isDangling()) U->scheduledTo(getEndSlot(U->getParentBB()));
-
-    fixChainedDatapathRC(U);
-  }
 }
 
 //===----------------------------------------------------------------------===//

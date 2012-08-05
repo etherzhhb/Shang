@@ -1038,6 +1038,22 @@ unsigned VSchedGraph::emitSchedule() {
   // Insert the delay blocks to fix the inter-bb-latencies.
   insertDelayBlocks();
 
+  // Break the multi-cycles chains to expose more FU sharing opportunities.
+  for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
+    clearDanglingFlagForTree(*I);
+
+  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
+    VSUnit *U = *I;
+
+    if (U->isDangling()) {
+      MachineBasicBlock *ParentBB = U->getParentBB();
+      if (U->getSlot() < getEndSlot(ParentBB)) U->setIsDangling(false);
+      else  U->scheduledTo(getEndSlot(U->getParentBB()));
+    }
+
+    fixChainedDatapathRC(U);
+  }
+
   // Merge the data-path SU vector to the control-path SU vector.
   CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
   DPSUs.clear();
