@@ -848,7 +848,7 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
   // TODO: Fix the dependencies edges.
 }
 
-void VSchedGraph::insertDelayBlock(BBInfo &Info) {
+void VSchedGraph::insertDelayBlock(const BBInfo &Info) {
   MachineBasicBlock *MBB = Info.Entry->getParentBB();
 
   typedef VSUnit::dep_iterator dep_it;
@@ -859,13 +859,9 @@ void VSchedGraph::insertDelayBlock(BBInfo &Info) {
     //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
 
     MachineBasicBlock *PredBB = PredTerminator->getParentBB();
-    BBInfo &PredInfo = getBBInfo(PredBB);
-    int PredDistance = PredInfo.ExitSlotFromEntry;
-    int ExtraLatency = Info.StartSlotFromEntry - PredDistance
-                       - Info.MiniInterBBSlack;
-    if (ExtraLatency <= 0) continue;
-
-    insertDelayBlock(PredBB, MBB, ExtraLatency);
+    const BBInfo &PredInfo = getBBInfo(PredBB);
+    if (int ExtraLatency = Info.getExtraLatencyFrom(PredInfo))
+      insertDelayBlock(PredBB, MBB, ExtraLatency);
   }
 }
 

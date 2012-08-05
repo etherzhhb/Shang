@@ -627,6 +627,14 @@ private:
     unsigned getTotalSlot() const {
       return Exit->getSlot() - Entry->getSlot();
     }
+
+    int getExtraLatencyFrom(const BBInfo &Pred) const {
+      int ExtraLatency =
+        int(StartSlotFromEntry) - int(Pred.ExitSlotFromEntry) - MiniInterBBSlack;
+      // We may get a negative extra latency which means there is no extra
+      // latency.
+      return std::max(0, ExtraLatency);
+    }
   };
 
   typedef std::vector<BBInfo> BBInfoMapTy;
@@ -677,7 +685,7 @@ private:
 
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
-  void insertDelayBlock(BBInfo &Info);
+  void insertDelayBlock(const BBInfo &Info);
 
   // Insert the copy operations which copy the result of the operations to
   // registers, so that we can break the chain.
