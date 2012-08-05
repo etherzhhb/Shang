@@ -39,6 +39,61 @@ void SDCSchedulingBase::LPObjFn::setLPObj(lprec *lp) const {
   DEBUG(write_lp(lp, "log.lp"));
 }
 
+namespace {
+struct ConstraintHelper {
+  int SrcSlot, DstSlot;
+  unsigned SrcIdx, DstIdx;
+
+  ConstraintHelper()
+    : SrcSlot(0), DstSlot(0), SrcIdx(0), DstIdx(0) {}
+
+  void resetSrc(const VSUnit *Src, const SDCSchedulingBase *S) {
+    SrcSlot = Src->getSlot();
+    SrcIdx = SrcSlot == 0 ? S->getSUIdx(Src) : 0;
+  }
+
+  void resetDst(const VSUnit *Dst, const SDCSchedulingBase *S) {
+    DstSlot = Dst->getSlot();
+    DstIdx = DstSlot == 0 ? S->getSUIdx(Dst) : 0;
+  }
+
+  void addConstraintToLP(VDEdge Edge, lprec *lp) {
+    SmallVector<int, 2> Col;
+    SmallVector<REAL, 2> Coeff;
+
+    int RHS = Edge.getLatency() - DstSlot + SrcSlot;
+
+    // Both SU is scheduled.
+    if (SrcSlot && DstSlot) {
+      assert(0 >= RHS && "Bad schedule!");
+      return;
+    }
+
+    // Build the constraint.
+    if (SrcSlot == 0) {
+      assert(SrcIdx && "Bad SrcIdx!");
+      Col.push_back(SrcIdx);
+      Coeff.push_back(-1.0);
+    }
+
+    if (DstSlot == 0) {
+      assert(DstIdx && "Bad DstIdx!");
+      Col.push_back(DstIdx);
+      Coeff.push_back(1.0);
+    }
+
+    int EqTy = (Edge.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
+
+    // Adjust the inter-bb latency.
+    RHS -= 0;
+
+    if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
+      report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
+                         " at VSUnit " + utostr_32(DstIdx));
+  }
+};
+}
+
 unsigned SDCSchedulingBase::createStepVariable(const VSUnit* U, unsigned Col) {
   // Set up the step variable for the VSUnit.
   bool inserted = SUIdx.insert(std::make_pair(U, Col)).second;
@@ -84,6 +139,7 @@ void SDCSchedulingBase::addSoftConstraints(lprec *lp) {
   SmallVector<REAL, 3> Coeff;
 
   // Build the constraint Dst - Src <= Latency - Slack
+  // FIXME: Use ConstraintHelper.
   for (iterator I = SoftCstrs.begin(), E = SoftCstrs.end(); I != E; ++I) {
     SoftConstraint &C = *I;
 
@@ -243,61 +299,6 @@ bool SDCSchedulingBase::solveLP(lprec *lp) {
   }
 
   return true;
-}
-
-namespace {
-struct ConstraintHelper {
-  int SrcSlot, DstSlot;
-  unsigned SrcIdx, DstIdx;
-
-  ConstraintHelper()
-    : SrcSlot(0), DstSlot(0), SrcIdx(0), DstIdx(0) {}
-
-  void resetSrc(const VSUnit *Src, const SDCSchedulingBase *S) {
-    SrcSlot = Src->getSlot();
-    SrcIdx = SrcSlot == 0 ? S->getSUIdx(Src) : 0;
-  }
-
-  void resetDst(const VSUnit *Dst, const SDCSchedulingBase *S) {
-    DstSlot = Dst->getSlot();
-    DstIdx = DstSlot == 0 ? S->getSUIdx(Dst) : 0;
-  }
-
-  void addConstraintToLP(VDEdge Edge, lprec *lp) {
-    SmallVector<int, 2> Col;
-    SmallVector<REAL, 2> Coeff;
-
-    int RHS = Edge.getLatency() - DstSlot + SrcSlot;
-
-    // Both SU is scheduled.
-    if (SrcSlot && DstSlot) {
-      assert(0 >= RHS && "Bad schedule!");
-      return;
-    }
-
-    // Build the constraint.
-    if (SrcSlot == 0) {
-      assert(SrcIdx && "Bad SrcIdx!");
-      Col.push_back(SrcIdx);
-      Coeff.push_back(-1.0);
-    }
-
-    if (DstSlot == 0) {
-      assert(DstIdx && "Bad DstIdx!");
-      Col.push_back(DstIdx);
-      Coeff.push_back(1.0);
-    }
-
-    int EqTy = (Edge.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
-
-    // Adjust the inter-bb latency.
-    RHS -= 0;
-
-    if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
-      report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
-                         " at VSUnit " + utostr_32(DstIdx));
-  }
-};
 }
 
 template<bool IsCtrlPath>
