@@ -968,8 +968,10 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
     assert(UseSU && "Cannot find Use SU!");
     int UseSlot = int(UseSU->getSlot()) + UseSU->getLatencyFor(&UseMI);
     bool IsUseDatapath = VInstrInfo::isDatapath(UseMI.getOpcode());
+    int Slack = UseSlot - Slot - getInterBBSlack(U, UseSU);
+    assert(Slack >= 0 && "Unexpected negative slack!");
 
-    if (UseSlot - Slot <= StepsToCopy + (IsUseDatapath ? -1 : 0))
+    if (Slack <= int(StepsToCopy) + (IsUseDatapath ? -1 : 0))
       continue;
 
     if (ResultReg == 0) ResultReg = MRI.createVirtualRegister(&VTM::DRRegClass);
