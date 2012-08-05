@@ -296,24 +296,6 @@ public:
   }
 };
 
-// Helper class to build the object function for lp.
-struct LPObjFn : public std::map<unsigned, double> {
-  LPObjFn &operator*=(double val) {
-    for (iterator I = begin(), E = end(); I != E; ++I)
-      I->second *= val;
-
-    return *this;
-  }
-
-  LPObjFn &operator+=(const LPObjFn &Other) {
-    for (const_iterator I = Other.begin(), E = Other.end(); I != E; ++I)
-      (*this)[I->first] += I->second;
-
-    return *this;
-  }
-
-  void setLPObj(lprec *lp) const;
-};
 
 class SDCSchedulingBase {
   struct SoftConstraint {
@@ -343,6 +325,26 @@ public:
 
 protected:
   lprec *lp;
+
+  // Helper class to build the object function for lp.
+  struct LPObjFn : public std::map<unsigned, double> {
+    LPObjFn &operator*=(double val) {
+      for (iterator I = begin(), E = end(); I != E; ++I)
+        I->second *= val;
+
+      return *this;
+    }
+
+    LPObjFn &operator+=(const LPObjFn &Other) {
+      for (const_iterator I = Other.begin(), E = Other.end(); I != E; ++I)
+        (*this)[I->first] += I->second;
+
+      return *this;
+    }
+
+    void setLPObj(lprec *lp) const;
+  };
+
   LPObjFn ObjFn;
   // The table of the index of the VSUnits and the column number in LP.
   typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;

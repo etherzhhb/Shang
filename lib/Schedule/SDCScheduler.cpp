@@ -24,7 +24,7 @@
 
 using namespace llvm;
 
-void LPObjFn::setLPObj(lprec *lp) const {
+void SDCSchedulingBase::LPObjFn::setLPObj(lprec *lp) const {
   std::vector<int> Indices;
   std::vector<REAL> Coefficients;
 
@@ -286,6 +286,9 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp, const VSUnit 
     }
 
     int EqTy = (DI.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
+
+    // Adjust the inter-bb latency.
+    RHS -= 0;
 
     if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
       report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
