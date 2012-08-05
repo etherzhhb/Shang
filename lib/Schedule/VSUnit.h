@@ -164,7 +164,7 @@ public:
     }
 
     NodeType *operator->() const { return operator*(); }
-    EdgeType &getEdge(unsigned II) const {
+    EdgeType &getEdge(unsigned II = 0) const {
       return getEdgeBundle().getEdge(II);
     }
 

@@ -245,57 +245,93 @@ bool SDCSchedulingBase::solveLP(lprec *lp) {
   return true;
 }
 
-template<bool IsCtrlPath>
-void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp, const VSUnit *U) {
-  unsigned DstIdx = 0;
-  int DstSlot = U->getSlot();
-  if (DstSlot == 0) DstIdx = getSUIdx(U);
-  SmallVector<int, 2> Col;
-  SmallVector<REAL, 2> Coeff;
+namespace {
+struct ConstraintHelper {
+  int SrcSlot, DstSlot;
+  unsigned SrcIdx, DstIdx;
 
-  // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
-  for (const_dep_it DI = dep_begin(U), DE = dep_end(U); DI != DE; ++DI) {
-    assert(!DI.isLoopCarried()
-           && "Loop carried dependencies cannot handled by SDC scheduler!");
+  ConstraintHelper()
+    : SrcSlot(0), DstSlot(0), SrcIdx(0), DstIdx(0) {}
 
-    const VSUnit *Dep = *DI;
-    unsigned SrcIdx = 0;
-    int SrcSlot = Dep->getSlot();
-    if (SrcSlot == 0) SrcIdx = getSUIdx(Dep);
+  void resetSrc(const VSUnit *Src, const SDCSchedulingBase *S) {
+    SrcSlot = Src->getSlot();
+    SrcIdx = SrcSlot == 0 ? S->getSUIdx(Src) : 0;
+  }
 
-    int RHS = DI.getLatency() - DstSlot + SrcSlot;
+  void resetDst(const VSUnit *Dst, const SDCSchedulingBase *S) {
+    DstSlot = Dst->getSlot();
+    DstIdx = DstSlot == 0 ? S->getSUIdx(Dst) : 0;
+  }
+
+  void addConstraintToLP(VDEdge Edge, lprec *lp) {
+    SmallVector<int, 2> Col;
+    SmallVector<REAL, 2> Coeff;
+
+    int RHS = Edge.getLatency() - DstSlot + SrcSlot;
 
     // Both SU is scheduled.
     if (SrcSlot && DstSlot) {
       assert(0 >= RHS && "Bad schedule!");
-      continue;
+      return;
     }
-
-    Col.clear();
-    Coeff.clear();
 
     // Build the constraint.
     if (SrcSlot == 0) {
+      assert(SrcIdx && "Bad SrcIdx!");
       Col.push_back(SrcIdx);
       Coeff.push_back(-1.0);
     }
 
     if (DstSlot == 0) {
+      assert(DstIdx && "Bad DstIdx!");
       Col.push_back(DstIdx);
       Coeff.push_back(1.0);
     }
 
-    int EqTy = (DI.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
+    int EqTy = (Edge.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
 
     // Adjust the inter-bb latency.
     RHS -= 0;
 
     if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
       report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
-                         " at VSUnit " + utostr_32(U->getIdx()) );
+                         " at VSUnit " + utostr_32(DstIdx));
   }
+};
 }
 
+template<bool IsCtrlPath>
+inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
+  for(VSchedGraph::const_iterator I = begin(), E = end(); I != E; ++I) {
+    const VSUnit *U = *I;
+    ConstraintHelper H;
+    H.resetDst(U, this);
+
+    // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Latency.
+    for (const_dep_it DI = dep_begin(U), DE = dep_end(U); DI != DE; ++DI) {
+      assert(!DI.isLoopCarried()
+        && "Loop carried dependencies cannot handled by SDC scheduler!");
+      const VSUnit *Src = *DI;
+
+      H.resetSrc(Src, this);
+      H.addConstraintToLP(DI.getEdge(), lp);
+    }
+
+    if (IsCtrlPath) continue;
+
+    // The data-path scheduling units are also constrained by the control path
+    // scheduling units.
+    H.resetSrc(U, this);
+
+    for (const_use_it UI = use_begin(U), UE = use_end(U); UI != UE; ++UI) {
+      const VSUnit *Use = *UI;
+      if (!Use->isControl()) continue;
+
+      H.resetDst(Use, this);
+      H.addConstraintToLP(Use->getEdgeFrom<IsCtrlPath>(U), lp);
+    }
+  }
+}
 
 template<bool IsCtrlPath>
 bool SDCScheduler<IsCtrlPath>::schedule() {

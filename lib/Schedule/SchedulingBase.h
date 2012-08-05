@@ -323,6 +323,12 @@ public:
     ObjFn[getSUIdx(U)] += Value;
   }
 
+  unsigned getSUIdx(const VSUnit* U) const {
+    SUIdxIt at = SUIdx.find(U);
+    assert(at != SUIdx.end() && "Idx not existed!");
+    return at->second;
+  }
+
 protected:
   lprec *lp;
 
@@ -353,12 +359,6 @@ protected:
 
   SDCSchedulingBase() : lp(0) {}
 
-  unsigned getSUIdx(const VSUnit* U) const {
-    SUIdxIt at = SUIdx.find(U);
-    assert(at != SUIdx.end() && "Idx not existed!");
-    return at->second;
-  }
-
   typedef std::vector<SoftConstraint> SoftCstrVecTy;
   SoftCstrVecTy SoftCstrs;
 
@@ -378,12 +378,15 @@ template<bool IsCtrlPath>
 class SDCScheduler : public SDCSchedulingBase, public Scheduler<IsCtrlPath> {
   // The schedule should satisfy the dependences.
   inline void addDependencyConstraints(lprec *lp);
-  void addDependencyConstraints(lprec *lp, const VSUnit *U);
 
   using Scheduler<IsCtrlPath>::G;
   typedef typename Scheduler<IsCtrlPath>::const_dep_it const_dep_it;
   using Scheduler<IsCtrlPath>::dep_begin;
   using Scheduler<IsCtrlPath>::dep_end;
+  typedef typename Scheduler<IsCtrlPath>::const_use_it const_use_it;
+  using Scheduler<IsCtrlPath>::use_begin;
+  using Scheduler<IsCtrlPath>::use_end;
+
   using Scheduler<IsCtrlPath>::begin;
   using Scheduler<IsCtrlPath>::end;
   using SDCSchedulingBase::createLPAndVariables;
@@ -403,22 +406,6 @@ public:
 
   bool schedule();
 };
-
-template<>
-inline void SDCScheduler<true>::addDependencyConstraints(lprec *lp) {
-  for(VSchedGraph::const_iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
-    addDependencyConstraints(lp, *I);
-}
-
-template<>
-inline void SDCScheduler<false>::addDependencyConstraints(lprec *lp) {
-  for(VSchedGraph::const_iterator I = dp_begin(&G), E = dp_end(&G); I != E; ++I)
-    addDependencyConstraints(lp, *I);
-  // The data-path scheduling units are also constrained by the control path
-  // scheduling units.
-  for(VSchedGraph::const_iterator I = cp_begin(&G), E = cp_end(&G); I != E; ++I)
-    addDependencyConstraints(lp, *I);
-}
 
 EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<false>);
 EXTERN_TEMPLATE_INSTANTIATION(class SDCScheduler<true>);
