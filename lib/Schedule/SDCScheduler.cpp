@@ -39,6 +39,60 @@ void SDCSchedulingBase::LPObjFn::setLPObj(lprec *lp) const {
   DEBUG(write_lp(lp, "log.lp"));
 }
 
+void SDCSchedulingBase::
+BBDistanceCalculator::accumulateDistanceFromPred(const MachineBasicBlock *MBB,
+                                                 const VSchedGraph &G) {
+  typedef DistanceVectorTy::iterator iterator;
+
+  typedef MachineBasicBlock::const_pred_iterator pred_it;
+  DistanceVectorTy &DistToCurBB = Matrix[MBB->getNumber()];
+  DistToCurBB.clear();
+
+  for (pred_it PI = MBB->pred_begin(), PE = MBB->pred_end(); PI != PE; ++PI) {
+    const MachineBasicBlock *PredBB = *PI;
+    // Ignore the back-edges.
+    if (PredBB->getNumber() >= MBB->getNumber()) continue;
+    
+    DistanceMatrixTy::iterator at = Matrix.find(PredBB->getNumber());
+    assert(at != Matrix.end() && "Not visiting blocks in topological order?");
+    DistanceVectorTy &DistToPredBB = at->second;
+
+    unsigned ExtralLatency = G.getExtraLatency(PredBB, MBB);
+    // Add the distance from the exit slot of PredBB to the entry of the MBB.
+    DistToCurBB[PredBB->getNumber()] = ExtralLatency;
+
+    unsigned LatencyFromPredEntry = G.getTotalSlot(PredBB) + ExtralLatency;
+
+    for (iterator I = DistToPredBB.begin(), E = DistToPredBB.end(); I != E; ++I) {
+      unsigned DistFromPred = I->second + LatencyFromPredEntry;
+
+      // Update the distance.
+      unsigned &ExistedDist = DistToCurBB[I->first];
+      if (ExistedDist == 0 || ExistedDist > DistFromPred)
+        ExistedDist = DistFromPred;
+    }
+  }
+}
+
+void SDCSchedulingBase::
+BBDistanceCalculator::initialMatrix(const VSchedGraph &G) {
+  typedef MachineFunction::iterator iterator;
+  // Visit the blocks in topological order, and ignore the pseudo exit node.
+  for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
+    accumulateDistanceFromPred(I, G);
+}
+
+unsigned SDCSchedulingBase::getInterBBSlack(const VSUnit *Src, const VSUnit *Snk,
+                                            const VSchedGraph &G) const {
+  MachineBasicBlock *SrcBB = Src->getParentBB(), *SnkBB = Snk->getParentBB();
+  if (SrcBB == SnkBB) return 0;
+
+  int Slack = G.getStartSlot(SnkBB) - G.getEndSlot(SrcBB)
+            - BBDC.lookupDist(SrcBB, SnkBB);
+  assert(Slack >= 0 && "Unexpected negative slack!");
+  return Slack;
+}
+
 namespace {
 struct ConstraintHelper {
   int SrcSlot, DstSlot;
@@ -57,11 +111,11 @@ struct ConstraintHelper {
     DstIdx = DstSlot == 0 ? S->getSUIdx(Dst) : 0;
   }
 
-  void addConstraintToLP(VDEdge Edge, lprec *lp) {
+  void addConstraintToLP(VDEdge Edge, lprec *lp, int ExtraLatency) {
     SmallVector<int, 2> Col;
     SmallVector<REAL, 2> Coeff;
 
-    int RHS = Edge.getLatency() - DstSlot + SrcSlot;
+    int RHS = Edge.getLatency() - DstSlot + SrcSlot + ExtraLatency;
 
     // Both SU is scheduled.
     if (SrcSlot && DstSlot) {
@@ -315,7 +369,13 @@ inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       const VSUnit *Src = *DI;
 
       H.resetSrc(Src, this);
-      H.addConstraintToLP(DI.getEdge(), lp);
+
+      // We may need to consider the inter-bb slack to avoid scheduling U to
+      // invalid slot.
+      int InterBBSlack = 0;
+      if (!IsCtrlPath) InterBBSlack = getInterBBSlack(Src, U, G);
+      
+      H.addConstraintToLP(DI.getEdge(), lp, InterBBSlack);
     }
 
     if (IsCtrlPath) continue;
@@ -329,7 +389,13 @@ inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       if (!Use->isControl()) continue;
 
       H.resetDst(Use, this);
-      H.addConstraintToLP(Use->getEdgeFrom<IsCtrlPath>(U), lp);
+
+      // We may need to consider the inter-bb slack to avoid scheduling U to
+      // invalid slot.
+      int InterBBSlack = 0;
+      if (!IsCtrlPath) InterBBSlack = getInterBBSlack(U, Use, G);
+
+      H.addConstraintToLP(Use->getEdgeFrom<IsCtrlPath>(U), lp, InterBBSlack);
     }
   }
 }
@@ -339,6 +405,9 @@ bool SDCScheduler<IsCtrlPath>::schedule() {
   ObjFn.setLPObj(lp);
 
   set_add_rowmode(lp, TRUE);
+
+  // Scheduling data-path need the information about BB distance.
+  if (!IsCtrlPath) BBDC.initialMatrix(G);
 
   // Build the constraints.
   addDependencyConstraints(lp);

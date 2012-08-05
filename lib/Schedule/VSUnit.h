@@ -902,6 +902,11 @@ public:
     return getBBInfo(MBB).getTotalSlot();
   }
 
+  inline unsigned getExtraLatency(const MachineBasicBlock *Src,
+                                  const MachineBasicBlock *Dst) const {
+    return getBBInfo(Dst).getExtraLatencyFrom(getBBInfo(Src));
+  }
+
   // II for Modulo schedule
   inline bool isPipelined(const MachineBasicBlock *MBB) const {
     return getII(MBB) < getTotalSlot(MBB);

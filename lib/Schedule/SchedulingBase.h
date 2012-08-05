@@ -352,6 +352,37 @@ protected:
   };
 
   LPObjFn ObjFn;
+
+  // Helper class to calculate the shortest path from the exit slot of the
+  // source BB to the entry slot of the sink BB.
+  struct BBDistanceCalculator {
+    // Remember the distance from source MBB, the MBB is indexed by its number.
+    typedef std::map<unsigned, unsigned> DistanceVectorTy;
+    // Remember the distance for all MBB, the MBB is indexed by its number.
+    typedef std::map<unsigned, DistanceVectorTy> DistanceMatrixTy;
+    DistanceMatrixTy Matrix;
+
+    unsigned lookupDist(const MachineBasicBlock *Src,
+                        const MachineBasicBlock *Snk) const {
+      DistanceMatrixTy::const_iterator vec_at = Matrix.find(Snk->getNumber());
+      assert(vec_at != Matrix.end() && "Bad SnkBB!");
+      DistanceVectorTy::const_iterator dist_at
+        = vec_at->second.find(Src->getNumber());
+      assert(dist_at != vec_at->second.end() && "Bad SrcBB!");
+      return dist_at->second;
+    }
+
+    // Build the shortest path matrix.
+    // FIXME: We can build the shortest path on demand.
+    void initialMatrix(const VSchedGraph &G);
+    void accumulateDistanceFromPred(const MachineBasicBlock *MBB,
+                                    const VSchedGraph &G);
+  };
+
+  BBDistanceCalculator BBDC;
+  unsigned getInterBBSlack(const VSUnit *Src, const VSUnit *Snk,
+                           const VSchedGraph &G) const;
+
   // The table of the index of the VSUnits and the column number in LP.
   typedef std::map<const VSUnit*, unsigned> SUI2IdxMapTy;
   typedef SUI2IdxMapTy::const_iterator SUIdxIt;
