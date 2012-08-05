@@ -509,8 +509,62 @@ void VSchedGraph::updateInterBBSlack() {
     Info.ExitSlotFromEntry = Info.StartSlotFromEntry + Info.getTotalSlot()
                               - Info.MiniInterBBSlack;
     assert(Info.ExitSlotFromEntry && "Bad schedule!");
-    continue;
+
+    // Initialize the BB distance matrix according to the inter bb slack.
+    BBDC.accumulateDistanceFromPred(MBB, *this);
   }
+}
+
+void VSchedGraph::
+BBDistanceMatrix::accumulateDistanceFromPred(const MachineBasicBlock *MBB,
+                                             const VSchedGraph &G) {
+  typedef DistanceVectorTy::iterator iterator;
+
+  typedef MachineBasicBlock::const_pred_iterator pred_it;
+  DistanceVectorTy &DistToCurBB = Matrix[MBB->getNumber()];
+  DistToCurBB.clear();
+
+  for (pred_it PI = MBB->pred_begin(), PE = MBB->pred_end(); PI != PE; ++PI) {
+    const MachineBasicBlock *PredBB = *PI;
+    // Ignore the back-edges.
+    if (PredBB->getNumber() >= MBB->getNumber()) continue;
+    
+    DistanceMatrixTy::iterator at = Matrix.find(PredBB->getNumber());
+    assert(at != Matrix.end() && "Not visiting blocks in topological order?");
+    DistanceVectorTy &DistToPredBB = at->second;
+
+    unsigned ExtralLatency = G.getExtraLatency(PredBB, MBB);
+    // Add the distance from the exit slot of PredBB to the entry of the MBB.
+    DistToCurBB[PredBB->getNumber()] = ExtralLatency;
+
+    unsigned LatencyFromPredEntry = G.getTotalSlot(PredBB) + ExtralLatency;
+
+    for (iterator I = DistToPredBB.begin(), E = DistToPredBB.end(); I != E; ++I) {
+      unsigned DistFromPred = I->second + LatencyFromPredEntry;
+
+      // Update the distance.
+      unsigned &ExistedDist = DistToCurBB[I->first];
+      if (ExistedDist == 0 || ExistedDist > DistFromPred)
+        ExistedDist = DistFromPred;
+    }
+  }
+}
+
+void VSchedGraph::BBDistanceMatrix::initialMatrix(const VSchedGraph &G) {
+  typedef MachineFunction::iterator iterator;
+  // Visit the blocks in topological order, and ignore the pseudo exit node.
+  for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
+    accumulateDistanceFromPred(I, G);
+}
+
+unsigned VSchedGraph::getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const {
+  MachineBasicBlock *SrcBB = Src->getParentBB(), *SnkBB = Snk->getParentBB();
+  if (SrcBB == SnkBB) return 0;
+
+  int Slack = getStartSlot(SnkBB) - getEndSlot(SrcBB)
+              - BBDC.lookupDist(SrcBB, SnkBB);
+  assert(Slack >= 0 && "Unexpected negative slack!");
+  return Slack;
 }
 
 void VSchedGraph::scheduleControlPath() {

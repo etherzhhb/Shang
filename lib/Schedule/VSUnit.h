@@ -660,6 +660,34 @@ private:
     return BBInfoMap[MBB->getNumber()];
   }
 
+  // Helper class to calculate the shortest path from the exit slot of the
+  // source BB to the entry slot of the sink BB.
+  struct BBDistanceMatrix {
+    // Remember the distance from source MBB, the MBB is indexed by its number.
+    typedef std::map<unsigned, unsigned> DistanceVectorTy;
+    // Remember the distance for all MBB, the MBB is indexed by its number.
+    typedef std::map<unsigned, DistanceVectorTy> DistanceMatrixTy;
+    DistanceMatrixTy Matrix;
+
+    unsigned lookupDist(const MachineBasicBlock *Src,
+      const MachineBasicBlock *Snk) const {
+        DistanceMatrixTy::const_iterator vec_at = Matrix.find(Snk->getNumber());
+        assert(vec_at != Matrix.end() && "Bad SnkBB!");
+        DistanceVectorTy::const_iterator dist_at
+          = vec_at->second.find(Src->getNumber());
+        assert(dist_at != vec_at->second.end() && "Bad SrcBB!");
+        return dist_at->second;
+    }
+
+    // Build the shortest path matrix.
+    // FIXME: We can build the shortest path on demand.
+    void initialMatrix(const VSchedGraph &G);
+    void accumulateDistanceFromPred(const MachineBasicBlock *MBB,
+                                    const VSchedGraph &G);
+  };
+
+  BBDistanceMatrix BBDC;
+
   // If the MI is a branch instruction that branching back to the entry of its
   // parent BB, remember it.
   bool rememberLoopOp(MachineInstr *MI);
@@ -692,7 +720,11 @@ private:
   void insertReadFUAndDisableFU();
   void insertDisableFU(VSUnit *U);
   void insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset = 0);
-
+  // This function should visit the instructions in topological order, i.e. all
+  // the dependencies of MI should had been visited before MI.
+  // If we need to copy the result of MI to register return true, otherwise,
+  // return false.
+  bool fixRegClassForDatapath(MachineInstr *MI);
 public:
   const unsigned EntrySlot;
 
@@ -906,6 +938,8 @@ public:
                                   const MachineBasicBlock *Dst) const {
     return getBBInfo(Dst).getExtraLatencyFrom(getBBInfo(Src));
   }
+
+  unsigned getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const;
 
   // II for Modulo schedule
   inline bool isPipelined(const MachineBasicBlock *MBB) const {
