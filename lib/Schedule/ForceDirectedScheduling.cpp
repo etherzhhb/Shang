@@ -294,7 +294,8 @@ void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
     // FU conflict.
     VSUnit *BBEntry = S->lookupSUnit(ParentBB);
     assert(BBEntry && "EntrySU not found!");
-    FirstSU->addDep<true>(BBEntry, VDEdge::CreateCtrlDep(1));    
+    VDEdge Edge = VDEdge::CreateDep<VDEdge::LinearOrder>(1);
+    FirstSU->addDep<true>(BBEntry, Edge);
   }
 }
 
@@ -309,7 +310,9 @@ VSUnit *BasicLinearOrderGenerator::addLinOrdEdge(SUVecTy &SUs) {
     // Build a dependence edge from EalierSU to LaterSU.
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
-    LaterSU->addDep<true>(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
+    unsigned Latency = EalierSU->getLatency();
+    VDEdge Edge = VDEdge::CreateDep<VDEdge::LinearOrder>(Latency);
+    LaterSU->addDep<true>(EalierSU, Edge);
 
     LaterSU = EalierSU;
   }
@@ -330,8 +333,11 @@ VSUnit *BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
     // Build a dependence edge from EalierSU to LaterSU.
     // TODO: Add an new kind of edge: Constraint Edge, and there should be
     // hard constraint and soft constraint.
-    if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id)
-      LaterSU->addDep<true>(EalierSU, VDEdge::CreateCtrlDep(EalierSU->getLatency()));
+    if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id) {
+      unsigned Latency = EalierSU->getLatency();
+      VDEdge Edge = VDEdge::CreateDep<VDEdge::LinearOrder>(Latency);
+      LaterSU->addDep<true>(EalierSU, Edge);
+    }
 
     LaterSU = EalierSU;
     if (Id == EalierSU->getFUId()) FirstSU = EalierSU;    

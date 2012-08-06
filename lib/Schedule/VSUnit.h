@@ -57,7 +57,8 @@ public:
     MemDep = 1,
     CtrlDep = 2,
     FixedTiming = 3,
-    ChainSupporting = 4
+    ChainSupporting = 4,
+    LinearOrder = 5
   };
 private:
   uint8_t EdgeType : 3;

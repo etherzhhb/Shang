@@ -47,8 +47,9 @@ struct DOTGraphTraits<VSchedGraphWrapper<IsCtrlPath> >
 
     switch (UseEdge.getEdgeType()) {
     case VDEdge::ValDep:          return "";
-    case VDEdge::ChainSupporting:
+    case VDEdge::ChainSupporting: return "color=blue";
     case VDEdge::MemDep:          return "color=blue,style=dashed";
+    case VDEdge::LinearOrder:     return "color=green";
     case VDEdge::CtrlDep:         return "color=green,style=dashed";
     case VDEdge::FixedTiming:     return "color=red";
     }
