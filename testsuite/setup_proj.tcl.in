@@ -22,7 +22,7 @@ set_global_assignment -name DEVICE EP2C70F896C6
 
 set_global_assignment -name TOP_LEVEL_ENTITY @MAIN_RTL_ENTITY@
 set_global_assignment -name SOURCE_FILE @MAIN_RTL_SRC@
-set_global_assignment -name SDC_FILE @MAIN_SDC_SRC@
+set_global_assignment -name SDC_FILE @MAIN_SDC_SRC_ALTERA@
 
 set_global_assignment -name VERILOG_MACRO "quartus_synthesis"
 #############################################################################

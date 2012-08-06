@@ -20,12 +20,11 @@ set(LLVM_AS ${LLVM_TOOLS_BINARY_DIR}/llvm-as)
 set(LLVM_LINK ${LLVM_TOOLS_BINARY_DIR}/llvm-link)
 
 
-set(SYNTHESIS_DUT OFF CACHE BOOL "Use Altera flow to synthesis the design in testsuite")
+set(SYNTHESIS_DUT ON CACHE BOOL "Use Altera flow to synthesis the design in testsuite")
 if (${SYNTHESIS_DUT} STREQUAL "ON")
 FIND_PATH(QUARTUS_BIN_DIR quartus_sh)
 endif(${SYNTHESIS_DUT} STREQUAL "ON")
 
-set(SYNTHESIS_DUT_XILINX OFF CACHE BOOL "Use Xilinx flow to synthesis the design in testsuite")
 set(XILINX_BIN_DIR ${XILINX_ROOT_DIR})
 
 set(FMAX "100.0" CACHE STRING "The maximum frequency of the synthesized designs")
@@ -134,7 +133,7 @@ add_custom_target(test_verilogbackend
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
             
-macro(add_general_test test_file config_file setup_prj_file postfix)
+macro(add_general_test test_file config_file altera_setup_prj_file xilinx_setup_prj_file postfix)
   set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
   set(DUT_NAME "${TEST_NAME}_DUT")
@@ -149,7 +148,8 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
 
   set(MAIN_RTL_ENTITY     "${DUT_NAME}_RTL")
   set(MAIN_RTL_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.v")
-  set(MAIN_SDC_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
+  set(MAIN_SDC_SRC_ALTERA "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
+  set(MAIN_UCF_SRC_XILINX "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.ucf")
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_XILINX_BIT     "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.bit")
 
@@ -199,7 +199,7 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_lli DEPENDS ${TEST_BINARY_ROOT}/Expected.output)
   add_dependencies(expect_output ${TEST}_lli)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_SW_LL}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC_ALTERA} ${MAIN_UCF_SRC_XILINX} ${MAIN_SW_LL}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND echo "Bad Result!" > "${TEST_BINARY_ROOT}/Test.output"
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config.lua  ${EXTRA_HLS_OPTION} -verify-machineinstrs" || ${CatchFail}
@@ -209,42 +209,38 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   )  
   add_custom_target(${TEST}_hls DEPENDS ${MAIN_RTL_SRC})
   add_dependencies(hls ${TEST}_hls)
-
+  
 if(SYNTHESIS_DUT AND TARGET benchmark_report)
   configure_file (
-    ${setup_prj_file}
+    ${altera_setup_prj_file}
     "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl"
     )
-
   add_custom_command(OUTPUT ${MAIN_RTL_STA}
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl" > /dev/null
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl" ${MAIN_SDC_SRC} ${CycleCounter}
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl" ${MAIN_SDC_SRC_ALTERA} ${CycleCounter}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
-
   add_custom_target(${TEST}_synthesis DEPENDS ${MAIN_RTL_STA})
   add_dependencies(${TEST}_synthesis ${TEST}_hls)
 endif(SYNTHESIS_DUT AND TARGET benchmark_report)
 
-if(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
+if(SYNTHESIS_DUT AND TARGET benchmark_report_xilinx)
   configure_file (
-    ${setup_prj_file}
+    ${xilinx_setup_prj_file}
     "${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl"
     )
-
   add_custom_command(OUTPUT ${MAIN_XILINX_BIT}
     COMMAND ${XILINX_BIN_DIR}/ISE/bin/lin/xtclsh ${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl rebuild_project
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl" ${MAIN_SDC_SRC} ${CycleCounter}
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl" ${MAIN_UCF_SRC_XILINX} ${CycleCounter}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Using Xilinx ISE to synthesising RTL module and interface for ${SYN_FUNC}"
   )
-
   add_custom_target(${TEST}_synthesis_xilinx DEPENDS ${MAIN_XILINX_BIT})
   add_dependencies(${TEST}_synthesis_xilinx ${TEST}_hls)
-endif(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
+endif(SYNTHESIS_DUT AND TARGET benchmark_report_xilinx)
 
   add_custom_command(OUTPUT ${MAIN_X86_SRC}
     COMMAND ${LLC}
@@ -316,7 +312,7 @@ endif(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
 
 endmacro(add_general_test)
 
-macro(add_general_main_test test_file config_file setup_prj_file postfix)
+macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_setup_prj_file postfix)
   set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
   set(DUT_NAME "${TEST_NAME}_main_DUT")
@@ -331,7 +327,8 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
 
   set(MAIN_RTL_ENTITY     "${DUT_NAME}_RTL")
   set(MAIN_RTL_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.v")
-  set(MAIN_SDC_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
+  set(MAIN_SDC_SRC_ALTERA "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
+  set(MAIN_UCF_SRC_XILINX "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.ucf")
   set(MAIN_INT_TOP        "${TEST_BINARY_ROOT}/INTF_${MAIN_RTL_ENTITY}.v")
   set(MAIN_INT_BRAM       "${TEST_BINARY_ROOT}/BRAM.sv")
   set(MAIN_INT_BRAM_XILINX       "${TEST_BINARY_ROOT}/BRAM_Xilinx.v")
@@ -370,11 +367,11 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Compiling ${TEST_SRC} to ${MAIN_ORIG_BC}"
   )
-
   add_custom_target(${TEST}_main_ir DEPENDS ${MAIN_ORIG_BC})
   add_dependencies(main_ir ${TEST}_main_ir)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC_ALTERA} ${MAIN_UCF_SRC_XILINX} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} 
+                    ${MAIN_INT_BRAM_XILINX} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -386,68 +383,56 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
 
 if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   configure_file (
-    ${setup_prj_file}
-    "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
-    )
+  ${altera_setup_prj_file}
+  "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
+  )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
-    COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
-    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
-    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
-    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
-    WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-    COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
+  COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
+  COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
+  #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
+  #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
+  DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC_ALTERA} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
+  WORKING_DIRECTORY ${TEST_BINARY_ROOT}
+  COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
   add_custom_target(${TEST}_synthesis_main DEPENDS ${MAIN_RTL_STA})
   add_dependencies(${TEST}_synthesis_main ${TEST}_main_hls)
 
 endif(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
 
-if(SYNTHESIS_DUT_XILINX AND TARGET benchmark_synthesis_main_xilinx)
+if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main_xilinx)
   configure_file (
-    ${setup_prj_file}
-    "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl"
-    )
+  ${xilinx_setup_prj_file}
+  "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl"
+  )
 
   add_custom_command(OUTPUT ${MAIN_XILINX_BIT}
-    COMMAND ${XILINX_BIN_DIR}/ISE/bin/lin/xtclsh ${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl rebuild_project
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_ICDELAY_TCL}
-    WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-    COMMENT "Using Xilinx to synthesis main RTL module and interface for ${SYN_FUNC}"
+  COMMAND ${XILINX_BIN_DIR}/ISE/bin/lin/xtclsh ${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl rebuild_project
+  DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl" ${MAIN_UCF_SRC_XILINX} ${MAIN_INT_TOP} ${MAIN_INT_BRAM_XILINX} ${MAIN_INT_BRAMINIT}
+  WORKING_DIRECTORY ${TEST_BINARY_ROOT}
+  COMMENT "Using Xilinx to synthesis main RTL module and interface for ${SYN_FUNC}"
   )
   add_custom_target(${TEST}_synthesis_main_xilinx DEPENDS ${MAIN_XILINX_BIT})
   add_dependencies(${TEST}_synthesis_main_xilinx ${TEST}_main_hls)
 
-endif(SYNTHESIS_DUT_XILINX AND TARGET benchmark_synthesis_main_xilinx)
+endif(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main_xilinx)
 endmacro(add_general_main_test)
 
 macro(add_test_cases file_name)
-  if(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
-	  add_general_test(${file_name}
-					           "${VTS_SOURCE_ROOT}/test_config.lua.in"
-                     "${VTS_SOURCE_ROOT}/setup_proj_xilinx.tcl.in"
-					           "cpp")
-  else(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
-    add_general_test(${file_name}
-					           "${VTS_SOURCE_ROOT}/test_config.lua.in"
-                     "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
-					           "cpp")
-  endif(SYNTHESIS_DUT_XILINX AND TARGET benchmark_report_xilinx)
+	add_general_test(${file_name}
+          "${VTS_SOURCE_ROOT}/test_config.lua.in"
+          "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
+          "${VTS_SOURCE_ROOT}/setup_proj_xilinx.tcl.in"
+          "cpp")
 endmacro(add_test_cases)
 
 macro(add_test_main_cases file_name)
-  if(SYNTHESIS_DUT_XILINX AND TARGET benchmark_synthesis_main_xilinx)
-    add_general_main_test(${file_name}
-					                "${VTS_SOURCE_ROOT}/test_config_main.lua.in"
-                          "${VTS_SOURCE_ROOT}/setup_proj_symain_xilinx.tcl.in"
-					                "cpp")
-  else(SYNTHESIS_DUT_XILINX AND TARGET benchmark_synthesis_main_xilinx)
-    add_general_main_test(${file_name}
-					                "${VTS_SOURCE_ROOT}/test_config_main.lua.in"
-                          "${VTS_SOURCE_ROOT}/setup_proj_symain.tcl.in"
-					                "cpp")
-  endif(SYNTHESIS_DUT_XILINX AND TARGET benchmark_synthesis_main_xilinx)
+  add_general_main_test(${file_name}
+          "${VTS_SOURCE_ROOT}/test_config_main.lua.in"
+          "${VTS_SOURCE_ROOT}/setup_proj_symain.tcl.in"
+          "${VTS_SOURCE_ROOT}/setup_proj_symain_xilinx.tcl.in"
+          "cpp")
 endmacro(add_test_main_cases)
 
 enable_testing()

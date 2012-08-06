@@ -1,6 +1,7 @@
 InputFile = [[@MAIN_ORIG_BC@]]
 RTLOutput = [[@MAIN_RTL_SRC@]]
-MainSDCOutput = [[@MAIN_SDC_SRC@]]
+MainSDCOutputA = [[@MAIN_SDC_SRC_ALTERA@]]
+MainSDCOutputX = [[@MAIN_UCF_SRC_XILINX@]]
 SoftwareIROutput = [[@MAIN_SW_LL@]]
 IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
