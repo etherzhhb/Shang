@@ -1020,16 +1020,15 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
 }
 
 static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
-  if (LHS->getSlot() != RHS->getSlot())
-    return LHS->getSlot() < RHS->getSlot();
+  if (LHS->getSlot() != RHS->getSlot()) return LHS->getSlot() < RHS->getSlot();
+
+  // In the same slot, control-path operations are ahead of data-path operations.
+  if (LHS->isControl() != RHS->isControl()) return LHS->isControl();
 
   return LHS->getIdx() < RHS->getIdx();
 }
 
 void VSchedGraph::insertReadFUAndDisableFU() {
-  // Sort the SUs by parent BB and its schedule.
-  std::sort(CPSUs.begin(), CPSUs.end(), top_sort_slot);
-
   for (iterator I = CPSUs.begin(), E = CPSUs.end(); I != E; ++I) {
     VSUnit *U = *I;
     if (MachineInstr *MI = U->getRepresentativePtr()) {
@@ -1083,11 +1082,12 @@ unsigned VSchedGraph::emitSchedule() {
   // Merge the data-path SU vector to the control-path SU vector.
   CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
   DPSUs.clear();
-  // Break the chains.
-  insertReadFUAndDisableFU();
 
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);
+
+  // Break the chains.
+  insertReadFUAndDisableFU();
 
   unsigned MBBStartSlot = EntrySlot;
   iterator to_emit_begin = CPSUs.begin();
