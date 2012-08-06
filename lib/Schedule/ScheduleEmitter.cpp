@@ -935,6 +935,34 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
   }
 }
 
+static unsigned buildReadFU(VSchedGraph &G, MachineInstr *MI, VSUnit *U,
+                            unsigned Offset, bool NoResult = false) {
+  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
+  unsigned ResultWire = MI->getOperand(0).getReg();
+  unsigned ResultReg
+    = NoResult ? 0 : G.DLInfo.MRI->createVirtualRegister(&VTM::DRRegClass);
+
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc dl = MI->getDebugLoc();
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  MachineBasicBlock::instr_iterator IP = MI;
+  ++IP;
+
+  assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
+         && "Unexpected predicated MI!");
+
+  MachineInstr *ReadFU
+    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
+      .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
+      .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
+      .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
+      .addOperand(*VInstrInfo::getTraceOperand(MI));
+  G.mapMI2SU(ReadFU, U, Offset, true);
+  G.addDummyLatencyEntry(ReadFU);
+
+  return ResultReg;
+}
+
 void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   unsigned StepsToCopy = getStepsToFinish(MI);
   if (StepsToCopy == 0) {
@@ -956,18 +984,11 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   if (MRI.getRegClass(ResultWire) == RC) return;
 
   assert(!VRegisterInfo::IsWire(ResultWire, &MRI) && "Result is already a wire!");
-  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
   MRI.setRegClass(ResultWire, RC);
   // We cannot insert copy for dangling SUs.
   assert(!U->isDangling() && "Unexpected dangling SU!");
 
   unsigned ResultReg = 0;
-
-  MachineBasicBlock *MBB = MI->getParent();
-  DebugLoc dl = MI->getDebugLoc();
-  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
-  MachineBasicBlock::instr_iterator IP = MI;
-  ++IP;
 
   typedef MachineRegisterInfo::use_iterator reg_use_iterator;
   for (reg_use_iterator I = MRI.use_begin(ResultWire);
@@ -986,25 +1007,16 @@ void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
     if (Slack <= int(StepsToCopy) + (IsUseDatapath ? -1 : 0))
       continue;
 
-    if (ResultReg == 0) ResultReg = MRI.createVirtualRegister(&VTM::DRRegClass);
+    if (ResultReg == 0)
+      ResultReg = buildReadFU(*this, MI, U, StepsToCopy + Offset);
+
     UseMO.ChangeToRegister(ResultReg, false);
   }
 
-  if (VInstrInfo::getPreboundFUId(MI).isTrivial() && !ResultReg)
-    return;
-
   // If emit the VOpReadFU, even there is no instruction using the result wire,
   // because we need to wait the MI by the VOpReadFU.
-  assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
-         && "Unexpected predicated MI!");
-  MachineInstr *ReadFU
-    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
-        .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
-        .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
-        .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
-        .addOperand(*VInstrInfo::getTraceOperand(MI));
-  mapMI2SU(ReadFU, U, StepsToCopy, true);
-  addDummyLatencyEntry(ReadFU);
+  if (!VInstrInfo::getPreboundFUId(MI).isTrivial() && ResultReg == 0)
+    buildReadFU(*this, MI, U, StepsToCopy + Offset, true);
 }
 
 static inline bool top_sort_slot(const VSUnit* LHS, const VSUnit* RHS) {
