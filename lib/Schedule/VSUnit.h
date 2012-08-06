@@ -53,17 +53,19 @@ class MachineOperand;
 class VDEdge {
 public:
   enum Types {
-    ValDep,
-    MemDep,
-    CtrlDep,
-    FixedTiming
+    ValDep = 0,
+    MemDep = 1,
+    CtrlDep = 2,
+    FixedTiming = 3,
+    ChainSupporting = 4
   };
 private:
-  uint8_t  EdgeType : 3;
+  uint8_t EdgeType : 3;
   // Iterate distance.
   int16_t Distance : 13;
   // The latancy of this edge.
-  int16_t  Latancy;
+  int16_t Latancy;
+  int32_t Data;
 
   friend class VSUnit;
 protected:

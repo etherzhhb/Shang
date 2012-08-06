@@ -123,7 +123,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Add the dependence from the incoming value of PHI to PHI.
   void addIncomingDepForPHI(VSUnit *PN, VSchedGraph &G);
 
-  void addValDep(VSchedGraph &G, VSUnit *A);
+  void addDatapathDep(VSchedGraph &G, VSUnit *A);
 
   VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &G, MachineInstr *&Dep) {
     // Only care about the register dependences.
@@ -636,7 +636,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHIMove, VSchedGraph &G){
   PHIMove->addDep<true>(PHISU, VDEdge::CreateMemDep(0, -1));
 }
 
-void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
+void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
   // Ignore the basic block entry.
   if (A->getRepresentativePtr().isMBB()) return;
 
@@ -661,8 +661,9 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       MachineInstr *DepSrc = 0;
       const MachineOperand &MO = MI->getOperand(i);
       VSUnit *Dep = getDefSU(MO, G, DepSrc);
-      // Avoid self-edge
-      if (Dep == 0 || Dep->getIdx() == A->getIdx() || (isCtrl && Dep->isControl()))
+      // Avoid self-edge, and edge from control-path operation, which will be
+      // taken care by later code.
+      if (Dep == 0 || Dep->getIdx() == A->getIdx() || Dep->isControl())
         continue;
 
       // Prevent the data-path SU from being scheduled to the same slot with A.
@@ -722,7 +723,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &G, VSUnit *A) {
       // MI.
       int Latency = floor(DetialLatencyInfo::getMinLatency(*I));
 
-      A->addDep<false>(SrcSU, VDEdge::CreateValDep(Latency));
+      A->addDep<false>(SrcSU, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
 
       if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
     }
@@ -1139,7 +1140,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G,
                                            ArrayRef<VSUnit*> NewSUs) {
   typedef ArrayRef<VSUnit*>::iterator iterator;
   for (iterator I = NewSUs.begin(), E = NewSUs.end(); I != E; ++I)
-    addValDep(G, *I);
+    addDatapathDep(G, *I);
 }
 
 bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
