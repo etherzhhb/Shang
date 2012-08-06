@@ -672,11 +672,15 @@ private:
     DistanceMatrixTy Matrix;
 
     unsigned lookupDist(const MachineBasicBlock *Src,
-      const MachineBasicBlock *Snk) const {
-        DistanceMatrixTy::const_iterator vec_at = Matrix.find(Snk->getNumber());
+                        const MachineBasicBlock *Snk) const {
+      return lookupDist(Src->getNumber(), Snk->getNumber());
+    }
+
+    unsigned lookupDist(unsigned SrcBBNum, unsigned SnkBBNum) const {
+        DistanceMatrixTy::const_iterator vec_at = Matrix.find(SnkBBNum);
         assert(vec_at != Matrix.end() && "Bad SnkBB!");
         DistanceVectorTy::const_iterator dist_at
-          = vec_at->second.find(Src->getNumber());
+          = vec_at->second.find(SrcBBNum);
         assert(dist_at != vec_at->second.end() && "Bad SrcBB!");
         return dist_at->second;
     }
@@ -884,6 +888,7 @@ public:
   }
   VSUnit *getExitRoot() const { return Exit; }
   MachineBasicBlock *getExitBB() const { return getExitRoot()->getParentBB(); }
+  unsigned getMaxSlot() const { return getExitRoot()->getSlot() + 1; }
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
@@ -941,7 +946,12 @@ public:
     return getBBInfo(Dst).getExtraLatencyFrom(getBBInfo(Src));
   }
 
-  unsigned getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const;
+  unsigned getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const {
+    return getInterBBSlack(Src->getParentBB()->getNumber(),
+                           Snk->getParentBB()->getNumber());
+  }
+
+  unsigned getInterBBSlack(unsigned SrcBBNum, unsigned SnkBBNum) const;
 
   // II for Modulo schedule
   inline bool isPipelined(const MachineBasicBlock *MBB) const {

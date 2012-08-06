@@ -557,12 +557,12 @@ void VSchedGraph::BBDistanceMatrix::initialMatrix(const VSchedGraph &G) {
     accumulateDistanceFromPred(I, G);
 }
 
-unsigned VSchedGraph::getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const {
-  MachineBasicBlock *SrcBB = Src->getParentBB(), *SnkBB = Snk->getParentBB();
-  if (SrcBB == SnkBB) return 0;
+unsigned VSchedGraph::getInterBBSlack(unsigned SrcBBNum, unsigned SnkBBNum) const {
+  if (SrcBBNum == SnkBBNum) return 0;
 
-  int Slack = getStartSlot(SnkBB) - getEndSlot(SrcBB)
-              - BBDC.lookupDist(SrcBB, SnkBB);
+  int Slack = BBInfoMap[SnkBBNum].Entry->getSlot()
+              - BBInfoMap[SrcBBNum].Exit->getSlot()
+              - BBDC.lookupDist(SrcBBNum, SnkBBNum);
   assert(Slack >= 0 && "Unexpected negative slack!");
   return Slack;
 }
@@ -631,6 +631,8 @@ void VSUnit::EdgeBundle::addEdge(VDEdge NewEdge) {
         break;
       }
 
+      //assert(NewEdge.getEdgeType() != VDEdge::ChainSupporting
+      //       && "Supporting edge lost!");
       return;
     }
 
