@@ -875,8 +875,38 @@ void VSchedGraph::insertDelayBlocks() {
     if (BBInfoMap[i].MiniInterBBSlack < 0) insertDelayBlock(BBInfoMap[i]);
 }
 
-void VSchedGraph::insertDisableFU(VSUnit *U) {
+static unsigned buildReadFU(VSchedGraph &G, MachineInstr *MI, VSUnit *U,
+                            unsigned Offset, bool NoResult = false) {
+  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
+  unsigned ResultWire = MI->getOperand(0).getReg();
+  unsigned ResultReg
+    = NoResult ? 0 : G.DLInfo.MRI->createVirtualRegister(&VTM::DRRegClass);
+
+  MachineBasicBlock *MBB = MI->getParent();
+  DebugLoc dl = MI->getDebugLoc();
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  MachineBasicBlock::instr_iterator IP = MI;
+  ++IP;
+
+  assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
+         && "Unexpected predicated MI!");
+
+  MachineInstr *ReadFU
+    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
+      .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
+      .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
+      .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
+      .addOperand(*VInstrInfo::getTraceOperand(MI));
+  G.mapMI2SU(ReadFU, U, Offset, true);
+  G.addDummyLatencyEntry(ReadFU);
+
+  return ResultReg;
+}
+
+MachineInstr *VSchedGraph::insertDisableFU(VSUnit *U) {
   MachineInstr *MI = U->getRepresentativePtr();
+  // The machine instruction that define the output value.
+  MachineInstr *RetMI = MI;
   assert(MI && "Unexpected BBEntry SU!");
   MachineRegisterInfo &MRI = *DLInfo.MRI;
   const TargetRegisterClass *RC
@@ -915,8 +945,9 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
     // emit right after the RepLI finish, instead of 1 cycle after the RepLI
     // finish. FIXME: Set the right latency.
     addDummyLatencyEntry(PipeStage, 2.0f);
+    // The result is not provided by PipeStage.
     // Copy the result of the pipe stage to register if it has any user.
-    if (!MRI.use_empty(OldR)) insertReadFU(PipeStage, U, U->getLatency() - 1);
+    RetMI = MRI.use_empty(OldR) ? 0 : PipeStage;
   }
 
   if (Id.isBound()) {
@@ -933,34 +964,15 @@ void VSchedGraph::insertDisableFU(VSUnit *U) {
     mapMI2SU(DisableMI, U, 1);
     addDummyLatencyEntry(DisableMI);
   }
-}
 
-static unsigned buildReadFU(VSchedGraph &G, MachineInstr *MI, VSUnit *U,
-                            unsigned Offset, bool NoResult = false) {
-  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
-  unsigned ResultWire = MI->getOperand(0).getReg();
-  unsigned ResultReg
-    = NoResult ? 0 : G.DLInfo.MRI->createVirtualRegister(&VTM::DRRegClass);
+  // The result of InternalCall is hold by the ReadReturn operation.
+  if (Id.getFUType() == VFUs::CalleeFN) {
+    buildReadFU(*this, MI, U, U->getLatency(), true);
+    MRI.setRegClass(MI->getOperand(0).getReg(), RC);
+    RetMI = U->getPtrAt(1);
+  }
 
-  MachineBasicBlock *MBB = MI->getParent();
-  DebugLoc dl = MI->getDebugLoc();
-  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
-  MachineBasicBlock::instr_iterator IP = MI;
-  ++IP;
-
-  assert(VInstrInfo::isAlwaysTruePred(*VInstrInfo::getPredOperand(MI))
-         && "Unexpected predicated MI!");
-
-  MachineInstr *ReadFU
-    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
-      .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
-      .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
-      .addImm(Id.getData()).addOperand(*VInstrInfo::getPredOperand(MI))
-      .addOperand(*VInstrInfo::getTraceOperand(MI));
-  G.mapMI2SU(ReadFU, U, Offset, true);
-  G.addDummyLatencyEntry(ReadFU);
-
-  return ResultReg;
+  return RetMI;
 }
 
 void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
@@ -1030,7 +1042,7 @@ void VSchedGraph::insertReadFUAndDisableFU() {
     if (MachineInstr *MI = U->getRepresentativePtr()) {
       // Disable the functional unit if necessary.
       if (VInstrInfo::isControl(MI->getOpcode()))
-        insertDisableFU(U);
+        MI = insertDisableFU(U);
       else if (U->isDangling()) {
         // TEMPORARY HACK: No need to copy the result of dangling operations.
         unsigned Reg = MI->getOperand(0).getReg();
@@ -1039,7 +1051,7 @@ void VSchedGraph::insertReadFUAndDisableFU() {
         continue;
       }
 
-      insertReadFU(MI, U);
+      if (MI) insertReadFU(MI, U, U->getLatencyFor(MI));
     }
   }
 }
