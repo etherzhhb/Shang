@@ -107,8 +107,7 @@ function linebyGVBit(k,v,table_name,table_num,LineTotal,strinit,addr)
       end
       --In order to debug we comment the first line with some markble words
       if i==NumInLine then
-        strinit = strinit ..'   // -8- \`define gv'
-        --Insert each array's beginning addr to a table
+      --Insert each array's beginning addr to a table
         table.insert(table_name, k)
         table.insert(table_num, addr)
       end
@@ -130,8 +129,6 @@ function linebyGVBit(k,v,table_name,table_num,LineTotal,strinit,addr)
         if NumElems > NumInLine then
           for j=1,((NumInLine-count)*Size) do	mem_data='0'..mem_data end
           strinit = strinit..'\n'..mem_data
-          --In order to debug we comment the first line with some markble words
-          strinit = strinit ..'   // -8- the end of '
           table.insert(LineTotal, addr)
           count = 0
           mem_data = ''
@@ -145,8 +142,6 @@ function linebyGVBit(k,v,table_name,table_num,LineTotal,strinit,addr)
           else
             strinit = strinit..'\n'..mem_data
           end
-          --In order to debug we comment the first line with some markble words
-          strinit = strinit ..'   // -8_- \`define gv'
           --Insert each array's beginning addr to a table
           table.insert(table_name, k)
           table.insert(table_num, addr)
@@ -176,8 +171,6 @@ function linebyGVBit64(k,v,table_name,table_num,LineTotal,strinit,addr)
       strinit = strinit..'\n'..WriteData
     end
     if i==1 then
-      --In order to debug we comment the first line with some markble words
-      strinit = strinit ..'    //-64- \`define gv'
       --Insert each array's beginning addr to a table
       table.insert(table_name, k)
       table.insert(table_num, addr)

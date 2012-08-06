@@ -59,7 +59,7 @@ $(RTLModuleName) $(RTLModuleName)_inst(
     .mem0be(mem0be),
     .mem0rdy(mem0rdy)
 );
-	 
+
 Main2Bram i1(
 	.addr2R(addr2R),
 	.clk(clk),
@@ -80,21 +80,21 @@ Main2Bram i1(
 	.LED7(LED7)
 );
 
-BRAM i2( 
+BRAM i2(
 	.waddr(addr2R),
 	.raddr(addr2R),
 	.be(byteenable),
-	.wdata(data2R), 
-	.we(wren), 
+	.wdata(data2R),
+	.we(wren),
 	.clk(clk),
 	.q(q_i)
 );
 
 endmodule
 
-//-_-------------------------Interface module for Bram-----------------------------_-// 
-//-_-------------------------Interface module for Bram-----------------------------_-// 
-//-_-------------------------Interface module for Bram-----------------------------_-// 
+//-_-------------------------Interface module for Bram-----------------------------_-//
+//-_-------------------------Interface module for Bram-----------------------------_-//
+//-_-------------------------Interface module for Bram-----------------------------_-//
 module Main2Bram(
   //_---------Signal from IP----------------------//
 	input 									clk,
@@ -108,8 +108,8 @@ module Main2Bram(
 	input       [31:0]			return_value,
   //--------Signal from Bram----------------------//
 	input				[63:0]    	q_i,
-	//_-------Linking LED to show the correct-------// 
-	output reg	[7:0]				LED7,	
+	//_-------Linking LED to show the correct-------//
+	output reg	[7:0]				LED7,
   //--------Signal to IP--------------------------//
 	output            			mem0rdy,
 	output    	[63:0]    	mem0in,
@@ -122,10 +122,10 @@ module Main2Bram(
 //-=======================================================================================
 //Some declarn
 //-=======================================================================================
-//The process of Reading 
+//The process of Reading
 //-=======================================================================================
 parameter 				S0 = 1'b0,
-									S_wait = 1'b1;			 
+									S_wait = 1'b1;
 //-=======================================================================================
 reg       				state;
 reg [31:0] 				addr2R_read;
@@ -135,8 +135,8 @@ reg               rden;
 //-=======================================================================================
 //-Active signal start the read process
 //-=======================================================================================
-wire  	 					readactive = mem0en && (mem0cmd==0)? 1:0;
-wire		[7:0]			mem0be_wire = mem0be << mem0addr[2:0];
+wire  	 					readactive = mem0en&&(mem0cmd==0)? 1:0;
+wire		[7:0]			mem0be_wire = readactive?	(mem0be << mem0addr[2:0]):8'b1111_1111;
 wire    [63:0]    q;
 //-=======================================================================================
 assign          q[7:0] = (rden&&byen2R[0])? q_i[7:0]:0;
@@ -146,17 +146,17 @@ assign          q[31:24] = (rden&&byen2R[3])? q_i[31:24]:0;
 assign          q[39:32] = (rden&&byen2R[4])? q_i[39:32]:0;
 assign          q[47:40] = (rden&&byen2R[5])? q_i[47:40]:0;
 assign          q[55:48] = (rden&&byen2R[6])? q_i[55:48]:0;
-assign          q[63:56] = (rden&&byen2R[7])? q_i[63:56]:0;            
+assign          q[63:56] = (rden&&byen2R[7])? q_i[63:56]:0;
 //-=======================================================================================
-assign          mem0in = q >> {addr2R_read[2:0],3'b0};
- 
-always@(posedge clk, negedge rstN)begin
+assign          mem0in = readrdy? (q >> {addr2R_read[2:0],3'b0}):0;
+
+always@(posedge clk,negedge rstN)begin
 	if(!rstN)begin
 		state <= S0;
 		addr2R_read <= 0;
 		readrdy <= 0;
 		readbyte_en <= 8'b1111_1111;
-		rden <= 0;
+    rden <= 0;
 	end else begin
 		case(state)
 			S0 :begin//Get the read or write data when mem0en turns to high
@@ -164,32 +164,31 @@ always@(posedge clk, negedge rstN)begin
 					addr2R_read <= mem0addr;
 					state <= S_wait;
 					readbyte_en <= mem0be_wire;
-					rden <= 1;
+          rden <= 1;
 				end else begin
 					addr2R_read <= 0;
 					state <= S0;
 					readbyte_en <= 8'b1111_1111;
 					readrdy <= 0;
-					rden <= 0;
+          rden <= 0;
 				end
 			end
 			S_wait :begin
-
-				state <= S0;//Write process is less a cycle to Read process
-				readrdy <= 1;
+			  state <= S0;//Write process is less a cycle to Read process
+			  readrdy <= 1;
 			end
-			default : state <= S0;			
+			default : state <= S0;
 		endcase
 	end
 end
 
 //-=======================================================================================
-//The process of Writing 
+//The process of Writing
 //
-//-Active the wren signal 
+//-Active the wren signal
 //-=======================================================================================
 wire 						writeactive = (mem0en&&mem0cmd)? 1:0;
-wire            writerdy = writeactive ? 1 : 0;
+wire            writerdy = writeactive? 1:0;
 wire	 [7:0]		writebyte_en = writeactive? (mem0be<<mem0addr[2:0]):8'b1111_1111;
 assign     		  data2R = writeactive? (mem0out<<{mem0addr[2:0],3'b0}):0;
 assign          wren = writeactive? 1:0;
@@ -209,7 +208,7 @@ always@(posedge clk,negedge rstN)begin
 				LED7 <= 8'b11111111;
 			end else begin
 				LED7 <= 8'b00000000;
-			end	
+			end
 		end else begin
 			LED7 <= LED7;
 		end
@@ -246,11 +245,11 @@ module BRAM
 		BYTES = 8,
 		WIDTH = BYTES * BYTE_WIDTH
 )
-( 
+(
 	input [ADDR_WIDTH-1:0] waddr,
 	input [ADDR_WIDTH-1:0] raddr,
 	input [BYTES-1:0] be,
-	input [WIDTH-1:0] wdata, 
+	input [WIDTH-1:0] wdata,
 	input we, clk,
 	output reg [WIDTH - 1:0] q
 );
@@ -258,11 +257,11 @@ module BRAM
 
 	// use a multi-dimensional packed array to model individual bytes within the word
 	logic [BYTES-1:0][BYTE_WIDTH-1:0] ram[0:WORDS-1];
-  
+
   // Add the initial file in ram
   initial	begin
   $('$')readmemb("$(RTLModuleName)_BramInit.txt",ram);
-  end	
+  end
 
 	always_ff@(posedge clk)
 	begin
@@ -298,6 +297,99 @@ local _, message = preprocess {input=BRAMGen, output=BramFile}
 if message ~= nil then print(message) end
 BramFile:close()
 ]=]}
+
+XilinxBramGen = [=[
+#local table_size_tmp = # LineTotal
+#local Num64GV = LineTotal[table_size_tmp] + 1
+module BRAM (waddr, raddr, be, wdata, we, clk, q);
+    parameter ADDR_WIDTH = $(getGVBit(Num64GV)),
+              BYTE_WIDTH = 8,
+              BYTES = 8,
+              WIDTH = BYTES * BYTE_WIDTH;
+    // Define ports.
+    input                    clk;
+    input                    we;
+    input  [BYTES-1:0]       be;
+    input  [ADDR_WIDTH-1:0]  waddr;
+    input  [ADDR_WIDTH-1:0]  raddr;
+    input  [WIDTH -1:0]      wdata;
+    output reg  [WIDTH-1:0]  q;
+    reg    [WIDTH -1:0] RAM [(1 << ADDR_WIDTH) -1:0];
+    reg    [BYTE_WIDTH - 1:0]   di0, di1, di2, di3, di4, di5, di6, di7;
+
+    // Add the initial file in ram
+    initial	begin
+      $('$')readmemb("$(RTLModuleName)_BramInit.txt",RAM);
+    end
+    always @(be or wdata)
+    begin
+        if (be[7])
+            di7 = wdata[8*BYTE_WIDTH-1:7*BYTE_WIDTH];
+        else
+            di7 = RAM[waddr][8*BYTE_WIDTH-1:7*BYTE_WIDTH];
+
+        if (be[6])
+            di6 = wdata[7*BYTE_WIDTH-1:6*BYTE_WIDTH];
+        else
+            di6 = RAM[waddr][7*BYTE_WIDTH-1:6*BYTE_WIDTH];
+
+        if (be[5])
+            di5 = wdata[6*BYTE_WIDTH-1:5*BYTE_WIDTH];
+        else
+            di5 = RAM[waddr][6*BYTE_WIDTH-1:5*BYTE_WIDTH];
+
+        if (be[4])
+            di4 = wdata[5*BYTE_WIDTH-1:4*BYTE_WIDTH];
+        else
+            di4 = RAM[waddr][5*BYTE_WIDTH-1:4*BYTE_WIDTH];
+
+        if (be[3])
+            di3 = wdata[4*BYTE_WIDTH-1:3*BYTE_WIDTH];
+        else
+            di3 = RAM[waddr][4*BYTE_WIDTH-1:3*BYTE_WIDTH];
+
+        if (be[2])
+            di2 = wdata[3*BYTE_WIDTH-1:2*BYTE_WIDTH];
+        else
+            di2 = RAM[waddr][3*BYTE_WIDTH-1:2*BYTE_WIDTH];
+
+        if (be[1])
+            di1 = wdata[2*BYTE_WIDTH-1:1*BYTE_WIDTH];
+        else
+            di1 = RAM[waddr][2*BYTE_WIDTH-1:1*BYTE_WIDTH];
+
+        if (be[0])
+            di0 = wdata[BYTE_WIDTH-1:0];
+        else
+            di0 = RAM[waddr][BYTE_WIDTH-1:0];
+
+    end
+
+    always @(posedge clk) begin
+      if (we)
+        RAM[waddr] <= {di7,di6,di5,di4,di3,di2,di1,di0};
+        q <= RAM[raddr];
+    end
+
+endmodule
+]=]
+
+Passes.XilinxBramGen = { FunctionScript = [=[
+if Functions[FuncInfo.Name] ~= nil then
+end
+]=], GlobalScript =[=[
+table_name = {}
+table_num = {}
+LineTotal = {}
+local preprocess = require "luapp" . preprocess
+local _, message = preprocess {input=BlockRAMInitFileGenScript}
+local BramFile = assert(io.open (BRAMXILINXFILE, "w+"))
+local preprocess = require "luapp" . preprocess
+local _, message = preprocess {input=XilinxBramGen, output=BramFile}
+if message ~= nil then print(message) end
+BramFile:close()
+]=]}
+
 
 DUTtbGen = [=[
 `timescale 1 ps/ 1 ps
