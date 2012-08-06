@@ -965,14 +965,10 @@ static unsigned buildReadFU(VSchedGraph &G, MachineInstr *MI, VSUnit *U,
 
 void VSchedGraph::insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset) {
   unsigned StepsToCopy = getStepsToFinish(MI);
-  if (StepsToCopy == 0) {
-    if (U->isControl())
-      return;
-    else
-      // We need to copy the result of data-path operations at least 1 slots
-      // later.
-      StepsToCopy += 1;
-  }
+  if (StepsToCopy == 0 && U->isControl()) return;
+
+  // We need to copy the result of data-path operations at least 1 slots later.
+  StepsToCopy = std::max(StepsToCopy, 1u);
 
   unsigned Slot = U->getSlot() + Offset;
   unsigned ResultWire = MI->getOperand(0).getReg();
