@@ -871,7 +871,7 @@ void VRASimple::mergeIdenticalDatapath(LiveInterval *LI) {
     // Datapath op should define and only define its result at operand 0.
     unsigned NewReg = MI->getOperand(0).getReg();
     // Ignore the dead datapath ops.
-    if (MRI->use_empty(NewReg)) continue;
+    if (NewReg == 0 || MRI->use_empty(NewReg)) continue;
 
     std::pair<DatapathOpMap::iterator, bool> p =
       Users.insert(std::make_pair(MI, NewReg));
