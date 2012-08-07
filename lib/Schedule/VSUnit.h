@@ -419,8 +419,6 @@ public:
 
   MachineInstr *instr_back() const { return Instrs.back(); }
 
-  // If this Schedule Unit is just the place holder for the Entry node.
-  bool isEntry() const { return getRepresentativePtr().isMBB(); }
   bool isPHI() const {
     if (MachineInstr *MI = getRepresentativePtr())
       return MI->isPHI();
