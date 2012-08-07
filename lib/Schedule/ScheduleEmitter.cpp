@@ -505,8 +505,8 @@ struct MicroStateBuilder {
 
 //===----------------------------------------------------------------------===//
 typedef std::pair<MachineInstr*, OpSlot> InSUInstInfo;
-static inline bool sort_intra_latency(const InSUInstInfo &LHS,
-                                      const InSUInstInfo &RHS) {
+template<typename T>
+static inline bool sort_intra_latency(const T &LHS, const T &RHS) {
   return LHS.second < RHS.second;
 }
 
@@ -532,7 +532,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     }
 
     // Sort the instructions, so we can emit them in order.
-    std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
+    std::sort(Insts.begin(), Insts.end(), sort_intra_latency<InSUInstInfo>);
 
     bool IsDangling = A->isDangling();
 
