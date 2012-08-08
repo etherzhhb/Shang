@@ -1398,8 +1398,6 @@ unsigned VSchedGraph::emitSchedule() {
       if (U->getSlot() < getEndSlot(ParentBB)) U->setIsDangling(false);
       else  U->scheduledTo(getEndSlot(U->getParentBB()));
     }
-
-    fixChainedDatapathRC(U);
   }
 
   // Merge the data-path SU vector to the control-path SU vector.

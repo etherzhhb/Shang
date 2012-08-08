@@ -314,51 +314,6 @@ void VSchedGraph::viewDPGraph() {
   ViewGraph(G, "Data-path-Dependencies-Graph");
 }
 
-void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
-  assert(U->isDatapath() && "Expected datapath operation!");
-  assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
-
-  MachineInstr *MI = U->getRepresentativePtr();
-  MachineBasicBlock *ParentMBB = MI->getParent();
-  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = DLInfo.getDepLatInfo(MI);
-  assert(DepLatInfo && "dependence latency information not available?");
-
-  typedef DetialLatencyInfo::DepLatInfoTy::const_iterator dep_it;
-  // If multi-cycle chain is disable, a copy is always need.
-  bool NeedCopyToReg = DisableMultiCyclesChain;
-
-  for (dep_it I = DepLatInfo->begin(), E = DepLatInfo->end(); I != E; ++I) {
-    const MachineInstr *SrcMI = I->first;
-
-    // Ignore the entry root.
-    if (SrcMI == 0 || SrcMI->getParent() != ParentMBB)
-      continue;
-
-    unsigned SrcOpC = SrcMI->getOpcode();
-    // Ignore the operations without interesting function unit.
-    if (VInstrInfo::hasTrivialFU(SrcOpC)) continue;
-
-    VSUnit *SrcSU = lookupSUnit(SrcMI);
-    assert(SrcSU && "Source schedule unit not exist?");
-    unsigned SrcCopySlot =
-      SrcSU->getFinSlot() + VInstrInfo::isWriteUntilFinish(SrcOpC);
-    // Is the datapath operation chained with its depending control operation?
-    if (SrcCopySlot > U->getSlot()) {
-      NeedCopyToReg = true;
-      // FIXME: Also compute the optimize copy slot.
-      break;
-    }
-  }
-
-  if (!NeedCopyToReg) {
-    assert(MI->getDesc().getNumDefs() == 1
-           && "Expect datapath operation have only 1 define!");
-
-    unsigned Reg = MI->getOperand(0).getReg();
-    DLInfo.MRI->setRegClass(Reg, &VTM::WireRegClass);
-  }
-}
-
 void VSchedGraph::clearDanglingFlagForTree(VSUnit *Root) {
   // Perform depth first search to find node that reachable from Root.
   std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;

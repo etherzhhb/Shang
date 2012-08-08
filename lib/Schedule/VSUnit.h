@@ -991,12 +991,6 @@ public:
   void updateInterBBSlack();
   unsigned emitSchedule();
   //}
-
-  // If a datapath operation is chained with a non-trivial control operation,
-  // copy its result to register, otherwise the result register of the function
-  // unit of the control operation may have a long live interval and hard to
-  // be shared.
-  void fixChainedDatapathRC(VSUnit *U);
 };
 
 static inline VSchedGraph::iterator cp_begin(VSchedGraph *G) {
