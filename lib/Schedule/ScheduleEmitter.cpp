@@ -970,7 +970,7 @@ struct ChainBreaker {
 
   void buildFUCtrl(VSUnit *U);
 
-  void visitUse(MachineInstr *MI, ValDef &Def);
+  void visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling);
 
   void visitDef(MachineInstr *MI, ValDef &Def);
 
@@ -1164,7 +1164,7 @@ ValDef *ChainBreaker::breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot
   return SrcDef;
 }
 
-void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
+void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling) {
   if (MI->isPseudo()) return;
 
   unsigned CurBBNum = MBB->getNumber();
@@ -1180,30 +1180,46 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
     if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
 
     ValDef *SrcVal = lookupValDef(MO.getReg());
-    bool IsInSameBB = SrcVal->getParentBB() == MBB;
 
     // Try to break the chain to shorten the live-interval of the FU.
     // FIXME: Calculate the slot the break the chain, and break the chain lazily.
-    int ChainBreakingSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
-    bool ChainCouldBeBroken = ChainBreakingSlack >= 0;
-    if (SrcVal->IsChainedWithFU && ChainCouldBeBroken)
-      SrcVal = getValInReg(*SrcVal, ReadSlot);
-
-    if (IsPipelined) {
-      unsigned ChainEndSlot = IsDatapath ? Def.FinishSlot : Def.ChainStart;
-      // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
-      // value 1 slot after its schedule slot.
-      if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
-
-      // Break the chain to preserve anti-dependencies.
-      SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, ReadSlot, CurII);
+    if (SrcVal->IsChainedWithFU) {
+      int ChainBreakingSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
+      if (ChainBreakingSlack >= 0) SrcVal = getValInReg(*SrcVal, ReadSlot);
     }
 
-    Def.IsChainedWithFU |= SrcVal->IsChainedWithFU && IsDatapath;
+    // If the current MI is dnagling, read the latest value.
+    if (IsDangling) {
+      while (SrcVal->Next
+             && getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal->Next) >= 0) {
+        SrcVal = SrcVal->Next;
+      }
+    }
 
-    // Find the longest chain.
-    if (IsDatapath && !IsPipeStage)
-      Def.ChainStart = std::min(Def.ChainStart, getChainStartAtCurBB(*SrcVal));
+    // Try to break the chain to preserve the anti-dependencies in pipelined
+    // block, but ignore the value from other BB, which are invariants.
+    if (SrcVal->getParentBB() == MBB) {
+      // The dangling MI is not read by the MI in the same BB, hence there is
+      // no anti-dependencies to preserve.
+      if (IsPipelined && !IsDangling) {
+        unsigned ChainEndSlot = IsDatapath ? Def.FinishSlot : Def.ChainStart;
+        // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
+        // value 1 slot after its schedule slot.
+        if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
+
+        // Break the chain to preserve anti-dependencies.
+        SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, ReadSlot, CurII);
+      }
+
+      // Find the longest chain.
+      if (IsDatapath && !IsPipeStage)
+        Def.ChainStart = std::min(Def.ChainStart, SrcVal->ChainStart);
+
+      Def.IsChainedWithFU |= SrcVal->IsChainedWithFU && IsDatapath;
+    }
+
+    assert((SrcVal->getParentBB() == MBB || !SrcVal->IsChainedWithFU)
+           && "Unexpected cross BB chain.");
 
     // Update the used register.
     if (MO.getReg() != SrcVal->RegNum)
@@ -1253,9 +1269,10 @@ void ChainBreaker::visit(VSUnit *U) {
     unsigned Opcode = MI->getOpcode();
     unsigned SchedSlot = U->getSlot() + I->second / 2;
     unsigned Latency = G.getStepsToFinish(MI);
+    bool IsDangling = U->isDangling();
     ValDef Def(*MI, SchedSlot, SchedSlot + Latency);
 
-    visitUse(MI, Def);
+    visitUse(MI, Def, IsDangling);
     // Do not export the define of VOpMvPhi, which is used by the PHI only.
     if (Opcode == VTM::VOpMvPhi) continue;
 
