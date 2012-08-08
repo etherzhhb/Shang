@@ -711,22 +711,19 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
 
   assert(A->num_instrs() == 1 && "Unexpected multiple MI in data-path operation!");
   MachineInstr *MI = A->getRepresentativePtr();
-  unsigned StepsToFinish = G.getStepsToFinish(MI);
-  if (StepsToFinish) {
-    const DepLatInfoTy *DepLats = G.getDepLatInfo(MI);
-    for (src_it I = DepLats->begin(), E = DepLats->end(); I != E; ++I) {
-      VSUnit *SrcSU = G.lookupSUnit(I->first);
-      assert(SrcSU && SrcSU->isControl() && "Bad source scheduling unit!");
-      // Get the minimal latency from the control-path dependencies to current
-      // MI, when bit-level chaining is enabled, they are in fact the latencies
-      // from the control-path dependencies to the first started bit of current
-      // MI.
-      int Latency = floor(DetialLatencyInfo::getMinLatency(*I));
+  const DepLatInfoTy *DepLats = G.getDepLatInfo(MI);
+  for (src_it I = DepLats->begin(), E = DepLats->end(); I != E; ++I) {
+    VSUnit *SrcSU = G.lookupSUnit(I->first);
+    assert(SrcSU && SrcSU->isControl() && "Bad source scheduling unit!");
+    // Get the minimal latency from the control-path dependencies to current
+    // MI, when bit-level chaining is enabled, they are in fact the latencies
+    // from the control-path dependencies to the first started bit of current
+    // MI.
+    int Latency = floor(DetialLatencyInfo::getMinLatency(*I));
 
-      A->addDep<false>(SrcSU, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
+    A->addDep<false>(SrcSU, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
 
-      if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
-    }
+    if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
   }
 
   // If the atom depend on nothing and it must has some dependence edge,
