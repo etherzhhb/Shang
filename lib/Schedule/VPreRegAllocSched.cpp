@@ -702,8 +702,8 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
 
       if (U->isControl()) continue;
 
-      if (unsigned Latency = U->getLatency())
-        A->addDep<false>(U, VDEdge::CreateValDep(Latency));
+      unsigned Latency = std::max(U->getLatency(), 1u);
+      A->addDep<false>(U, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
     }
 
     return;
