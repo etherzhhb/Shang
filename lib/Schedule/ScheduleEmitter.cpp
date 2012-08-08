@@ -876,26 +876,35 @@ void VSchedGraph::insertDelayBlocks() {
 }
 
 namespace {
-struct ChainValDef {
+struct ValDef {
   unsigned RegNum;
-  unsigned ChainStart;
   unsigned FinishSlot;
+  ValDef *Next;
+
+  ValDef(unsigned RegNum, unsigned FinishSlot)
+    : RegNum(RegNum), FinishSlot(FinishSlot), Next(0) {}
+};
+
+struct ChainValDef : public ValDef {
+  unsigned ChainStart;
   MachineInstr &MI;
   bool IsChainedWithFU;
-  ChainValDef *Next;
 
   explicit ChainValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot)
-    : RegNum(0), ChainStart(SchedSlot), FinishSlot(FinishSlot), MI(MI),
+    : ValDef(0, FinishSlot), ChainStart(SchedSlot), MI(MI),
       IsChainedWithFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
                        // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
                        // and VOpDstMux.
-                       && !VInstrInfo::isCopyLike(MI.getOpcode())),
-      Next(0) {}
+                       && !VInstrInfo::isCopyLike(MI.getOpcode())) {}
 
   MachineBasicBlock *getParentBB() const { return MI.getParent(); }
   unsigned getParentBBNum() const { return getParentBB()->getNumber(); }
 
   bool isCopy() const { return FinishSlot == ChainStart; }
+
+  ChainValDef *getNext() const {
+    return static_cast<ChainValDef*>(Next);
+  }
 };
 
 struct ChainBreaker {
@@ -1079,8 +1088,8 @@ ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
   if (Def->getParentBB() != MBB) Slot = Def->FinishSlot;
 
   // Get the value just before ReadSlot.
-  while (Def->Next && Def->Next->ChainStart <= Slot)
-    Def = Def->Next;
+  while (Def->Next && Def->getNext()->ChainStart <= Slot)
+    Def = Def->getNext();
 
   if (Def->ChainStart != Slot) {
     // Insert the copy operation.
@@ -1098,7 +1107,7 @@ ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
 
     NewVal->Next = Def->Next;
     Def->Next = NewVal;
-    Def = Def->Next;
+    Def = Def->getNext();
   }
 
   return Def;
@@ -1156,7 +1165,7 @@ ChainValDef *ChainBreaker::breakChainForAntiDep(ChainValDef *SrcDef,
     // another register in later slots.
     if (!SrcDef->Next || SrcDef->Next->FinishSlot > ReadSlot) {
       unsigned CopySlot = std::min(ChainStartSlot + II, ReadSlot);
-      ChainValDef *SrcNext = SrcDef->Next;
+      ChainValDef *SrcNext = SrcDef->getNext();
       // FIXME: The may exists next value, but the copy is schedule to a slot
       // which is too late, we may reuse this value by reschedule it.
       SrcDef->Next = 0;
@@ -1166,7 +1175,7 @@ ChainValDef *ChainBreaker::breakChainForAntiDep(ChainValDef *SrcDef,
       SrcDef->Next = NewVal;
     }
 
-    SrcDef = SrcDef->Next;
+    SrcDef = SrcDef->getNext();
     ChainStartSlot = getChainStartAtCurBB(*SrcDef);
     ChainLength =  ChainEndSlot - ChainStartSlot;
   }
@@ -1212,7 +1221,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
     // If the current MI is dangling, read the latest value.
     if (IsDangling) {
       while (SrcVal->Next) {
-        SrcVal = SrcVal->Next;
+        SrcVal = SrcVal->getNext();
         assert(getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal) >= 0
                && "Unexpected finish after dangling node start!");
       }
