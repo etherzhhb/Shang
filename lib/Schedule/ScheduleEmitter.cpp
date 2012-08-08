@@ -881,21 +881,23 @@ struct ValDef {
   unsigned ChainStart;
   const unsigned FinishSlot;
   MachineInstr &MI;
-  const bool UseFU;
   bool IsChainedWithFU;
   ValDef *Next;
 
   explicit ValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot,
                   unsigned RegNum = 0, bool IsChainedWithFU = false)
     : RegNum(RegNum), ChainStart(SchedSlot), FinishSlot(FinishSlot), MI(MI),
-      UseFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
-            // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
-            // and VOpDstMux.
-            && !VInstrInfo::isCopyLike(MI.getOpcode())),
-      IsChainedWithFU(IsChainedWithFU), Next(0) {}
+      IsChainedWithFU((!VInstrInfo::getPreboundFUId(&MI).isTrivial()
+                       // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
+                       // and VOpDstMux.
+                       && !VInstrInfo::isCopyLike(MI.getOpcode()))
+                      || IsChainedWithFU),
+      Next(0) {}
 
   MachineBasicBlock *getParentBB() const { return MI.getParent(); }
   unsigned getParentBBNum() const { return getParentBB()->getNumber(); }
+
+  bool isCopy() const { return FinishSlot == ChainStart; }
 };
 
 struct ChainBreaker {
@@ -1076,7 +1078,7 @@ ValDef *ChainBreaker::getValInReg(ValDef &Def, unsigned Slot) {
 
   ValDef *&ValInReg = Def.Next;
   if (!ValInReg) {
-    assert(Def.FinishSlot != Def.ChainStart && "Already a copy!");
+    assert(!Def.isCopy() && "Already a copy!");
     // Insert the copy operation.
     VSUnit *DefSU = G.lookupSUnit(&Def.MI);
     assert(!DefSU->isDangling() && "Cannot insert Copy for dangling SU!");
@@ -1168,8 +1170,10 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
   unsigned CurBBNum = MBB->getNumber();
   bool IsDatapath = VInstrInfo::isDatapath(MI->getOpcode());
   bool IsPipeStage = MI->getOpcode() == VTM::VOpPipelineStage;
-  const unsigned ReadSlot = Def.ChainStart;
-
+  // The control-path operation can read the old value just before the new
+  // value come out, calculate the latest slot at which the value can be read
+  // by current operation.
+  const unsigned ReadSlot = IsDatapath ? Def.ChainStart : Def.ChainStart - 1;
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI->getOperand(i);
 
@@ -1178,17 +1182,12 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
     ValDef *SrcVal = lookupValDef(MO.getReg());
     bool IsInSameBB = SrcVal->getParentBB() == MBB;
 
-    int Slack = getSlackFromChainStart(ReadSlot, CurBBNum, *SrcVal);
-    assert(Slack >= 0 && "Bad Slack!");
     // Try to break the chain to shorten the live-interval of the FU.
     // FIXME: Calculate the slot the break the chain, and break the chain lazily.
-    if (SrcVal->IsChainedWithFU || SrcVal->UseFU) {
-      int ChainSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
-      if (ChainSlack >= (IsDatapath ? 0 : 1))
-        SrcVal = getValInReg(*SrcVal, ReadSlot);
-    }
-
-    Def.IsChainedWithFU |= (SrcVal->IsChainedWithFU || SrcVal->UseFU) && IsDatapath;
+    int ChainBreakingSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
+    bool ChainCouldBeBroken = ChainBreakingSlack >= 0;
+    if (SrcVal->IsChainedWithFU && ChainCouldBeBroken)
+      SrcVal = getValInReg(*SrcVal, ReadSlot);
 
     if (IsPipelined) {
       unsigned ChainEndSlot = IsDatapath ? Def.FinishSlot : Def.ChainStart;
@@ -1196,12 +1195,11 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
       // value 1 slot after its schedule slot.
       if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
 
-      // The control-path operation can read the old value just before the new
-      // value come out, allowing the chain being 1 cycle longer.
-      unsigned LastBreakAt = IsDatapath ? ReadSlot : ReadSlot - 1;
       // Break the chain to preserve anti-dependencies.
-      SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, LastBreakAt, CurII);
+      SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, ReadSlot, CurII);
     }
+
+    Def.IsChainedWithFU |= SrcVal->IsChainedWithFU && IsDatapath;
 
     // Find the longest chain.
     if (IsDatapath && !IsPipeStage)
