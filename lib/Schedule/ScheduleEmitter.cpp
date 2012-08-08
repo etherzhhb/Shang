@@ -878,23 +878,24 @@ void VSchedGraph::insertDelayBlocks() {
 namespace {
 struct ValDef {
   unsigned RegNum;
-  unsigned SupportSlot;
-  const unsigned CopySlot;
-  MachineInstr *MI;
+  unsigned ChainStart;
+  const unsigned FinishSlot;
+  MachineInstr &MI;
   const bool UseFU;
   bool IsChainedWithFU;
   ValDef *Next;
 
-  explicit ValDef(MachineInstr *MI, unsigned SchedSlot, unsigned CopySlot)
-    : RegNum(0), SupportSlot(SchedSlot), CopySlot(CopySlot), MI(MI),
-      UseFU(!VInstrInfo::getPreboundFUId(MI).isTrivial()
+  explicit ValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot,
+                  unsigned RegNum = 0, bool IsChainedWithFU = false)
+    : RegNum(RegNum), ChainStart(SchedSlot), FinishSlot(FinishSlot), MI(MI),
+      UseFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
             // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
             // and VOpDstMux.
-            && !VInstrInfo::isCopyLike(MI->getOpcode())),
-      IsChainedWithFU(false), Next(0) {}
+            && !VInstrInfo::isCopyLike(MI.getOpcode())),
+      IsChainedWithFU(IsChainedWithFU), Next(0) {}
 
-  MachineBasicBlock *getParentBB() const { return MI->getParent(); }
-  unsigned getParentBBNum() const { return MI->getParent()->getNumber(); }
+  MachineBasicBlock *getParentBB() const { return MI.getParent(); }
+  unsigned getParentBBNum() const { return getParentBB()->getNumber(); }
 };
 
 struct ChainBreaker {
@@ -917,12 +918,12 @@ struct ChainBreaker {
     return at->second;
   }
 
-  unsigned getCopySlotAtCurBB(const ValDef &Def) {
-    return Def.getParentBB() == MBB ? Def.CopySlot : StartSlot;
+  unsigned getFinishAtCurBB(const ValDef &Def) {
+    return Def.getParentBB() == MBB ? Def.FinishSlot : StartSlot;
   }
 
-  unsigned getSupportSlotAtCurBB(const ValDef &Def) {
-    return Def.getParentBB() == MBB ? Def.CopySlot : StartSlot;
+  unsigned getChainStartAtCurBB(const ValDef &Def) {
+    return Def.getParentBB() == MBB ? Def.ChainStart : StartSlot;
   }
 
   int getSlack(unsigned UseSlot, unsigned UseBBNum,
@@ -932,35 +933,38 @@ struct ChainBreaker {
     return Slack;
   }
 
-  int getSlackFromSupportSlot(unsigned UseSlot, unsigned UseBBNum,
+  int getSlackFromChainStart(unsigned UseSlot, unsigned UseBBNum,
                               const ValDef &Def) const {
-    return getSlack(UseSlot, UseBBNum, Def.SupportSlot, Def.getParentBBNum());
+    return getSlack(UseSlot, UseBBNum, Def.ChainStart, Def.getParentBBNum());
   }
 
-  int getSlackFromCopySlot(unsigned UseSlot, unsigned UseBBNum,
-                           const ValDef &Def) const {
-    return getSlack(UseSlot, UseBBNum, Def.CopySlot, Def.getParentBBNum());
+  int getSlackFromFinish(unsigned UseSlot, unsigned UseBBNum,
+                         const ValDef &Def) const {
+    return getSlack(UseSlot, UseBBNum, Def.FinishSlot, Def.getParentBBNum());
   }
 
   MachineBasicBlock *MBB;
-  unsigned II, StartSlot;
+  unsigned CurII, StartSlot;
   bool IsPipelined;
 
   explicit ChainBreaker(VSchedGraph *G)
-    : G(*G), MRI(*G->DLInfo.MRI), MBB(0), II(0), StartSlot(0),
+    : G(*G), MRI(*G->DLInfo.MRI), MBB(0), CurII(0), StartSlot(0),
       IsPipelined(false) {}
 
   void updateMBB(MachineBasicBlock *NewMBB) {
     MBB = NewMBB;
     StartSlot = G.getStartSlot(MBB);
-    II = G.getII(MBB);
+    CurII = G.getII(MBB);
     IsPipelined = G.isPipelined(MBB);
   }
 
   MachineInstr *buildReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset,
-                            bool Dead = false);
+                            FuncUnitId Id = FuncUnitId(), bool Dead = false);
 
   ValDef *getValInReg(ValDef &Def, unsigned Slot);
+  ValDef *insertCopyAtSlot(ValDef &SrcDef, unsigned Slot);
+  ValDef *breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot,
+                               unsigned ReadSlot, unsigned II);
 
   void buildFUCtrl(VSUnit *U);
 
@@ -973,13 +977,13 @@ struct ChainBreaker {
 }
 
 MachineInstr *ChainBreaker::buildReadFU(MachineInstr *MI, VSUnit *U,
-                                        unsigned Offset, bool Dead) {
+                                        unsigned Offset, FuncUnitId Id,
+                                        bool Dead) {
   unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
   unsigned ResultWire = MI->getOperand(0).getReg();
   unsigned ResultReg = Dead ? 0 : MRI.createVirtualRegister(&VTM::DRRegClass);
 
   DebugLoc dl = MI->getDebugLoc();
-  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   MachineBasicBlock::instr_iterator IP = MI;
   ++IP;
 
@@ -1040,15 +1044,15 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
     // The result is not provided by PipeStage.
     // Copy the result of the pipe stage to register if it has any user.
     if (!MRI.use_empty(BRAMOpResult))
-      buildReadFU(PipeStage, U, G.getStepsToFinish(PipeStage));
+      buildReadFU(PipeStage, U, G.getStepsToFinish(PipeStage), Id);
   } else if (!Id.isTrivial()) {
     // The result of InternalCall is hold by the ReadReturn operation, so we
     // do not need to create a new register to hold the result. Otherwise, a
     // new register is needed.
-    buildReadFU(MI, U, G.getStepsToFinish(MI), Id.getFUType() == VFUs::CalleeFN);
+    bool IsWaitOnly = Id.getFUType() == VFUs::CalleeFN;
+    buildReadFU(MI, U, G.getStepsToFinish(MI), Id, IsWaitOnly);
     MRI.setRegClass(MI->getOperand(0).getReg(), RC);
   }
-
 
   // We also need to disable the FU.
   if (Id.isBound()) {
@@ -1068,25 +1072,94 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
 }
 
 ValDef *ChainBreaker::getValInReg(ValDef &Def, unsigned Slot) {
-  assert(Slot >= Def.CopySlot && "Read before write detected!");
+  assert(Slot >= Def.FinishSlot && "Read before write detected!");
 
   ValDef *&ValInReg = Def.Next;
   if (!ValInReg) {
-    assert(Def.CopySlot != Def.SupportSlot && "Already a copy!");
+    assert(Def.FinishSlot != Def.ChainStart && "Already a copy!");
     // Insert the copy operation.
-    VSUnit *DefSU = G.lookupSUnit(Def.MI);
+    VSUnit *DefSU = G.lookupSUnit(&Def.MI);
     assert(!DefSU->isDangling() && "Cannot insert Copy for dangling SU!");
-    unsigned CopyOffset = Def.CopySlot - DefSU->getSlot();
-    MachineInstr *ReadFU = buildReadFU(Def.MI, DefSU, CopyOffset);
+    unsigned CopyOffset = Def.FinishSlot - DefSU->getSlot();
+    MachineInstr *ReadFU = buildReadFU(&Def.MI, DefSU, CopyOffset);
 
     // Remember the value definition for the copy.
     ValInReg = Allocator.Allocate();
-    new (ValInReg) ValDef(ReadFU, Def.CopySlot, Def.CopySlot);
+    new (ValInReg) ValDef(*ReadFU, Def.FinishSlot, Def.FinishSlot);
     ValInReg->RegNum = ReadFU->getOperand(0).getReg();
     addValDef(ValInReg);
   }
 
   return ValInReg;
+}
+
+ValDef *ChainBreaker::insertCopyAtSlot(ValDef &SrcDef, unsigned Slot) {
+  assert(SrcDef.ChainStart < Slot && SrcDef.Next == 0 && "Cannot insert copy!");
+
+  // Create the copy.
+  MachineInstr *MI = &SrcDef.MI;
+
+  unsigned RegWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
+  unsigned ResultWire = MI->getOperand(0).getReg();
+  unsigned ResultReg = MRI.createVirtualRegister(&VTM::DRRegClass);
+
+  DebugLoc dl = MI->getDebugLoc();
+  bool InSameBB = MI->getParent() == MBB;
+  MachineBasicBlock::iterator IP = InSameBB ?
+                                   llvm::next(MachineBasicBlock::iterator(MI)) :
+                                   MBB->getFirstNonPHI();
+  // FIXME: Predicate the copy with the codition of the user.
+  MachineInstr *ReadFU
+    = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
+    .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
+    .addOperand(VInstrInfo::CreateReg(ResultWire, RegWidth, false))
+    .addImm(FuncUnitId().getData()).addOperand(VInstrInfo::CreatePredicate())
+    .addOperand(VInstrInfo::CreateTrace());
+
+  VSUnit *U = InSameBB ? G.lookupSUnit(MI) : G.lookupSUnit(MBB);
+  assert(Slot >= U->getSlot() && "Unexpected negative offset!");
+  G.mapMI2SU(ReadFU, U, Slot - U->getSlot(), true);
+  G.addDummyLatencyEntry(ReadFU);
+
+  // Remember the value definition for the copy.
+  ValDef *NewDef = Allocator.Allocate();
+  new (NewDef) ValDef(*ReadFU, Slot, Slot);
+  NewDef->RegNum = ResultReg;
+  addValDef(NewDef);
+
+  return NewDef;
+}
+
+ValDef *ChainBreaker::breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot,
+                                           unsigned ReadSlot, unsigned II) {
+  // Break the chain to preserve anti-dependencies.
+  // FIXME: Calculate the first slot available for inserting the copy.
+  unsigned ChainStartSlot = getChainStartAtCurBB(*SrcDef);
+  int ChainLength =  ChainEndSlot - ChainStartSlot;
+
+  while (ChainLength > int(II)) {
+    assert(SrcDef->FinishSlot <= ReadSlot
+           && "Cannot break the chain to preserve anti-dependency!");
+    // Try to get the next value define, which hold the value of UseVal in
+    // another register in later slots.
+    if (!SrcDef->Next || SrcDef->Next->FinishSlot > ReadSlot) {
+      unsigned CopySlot = std::min(ChainStartSlot + II, ReadSlot);
+      ValDef *SrcNext = SrcDef->Next;
+      // FIXME: The may exists next value, but the copy is schedule to a slot
+      // which is too late, we may reuse this value by reschedule it.
+      SrcDef->Next = 0;
+      ValDef *NewVal = insertCopyAtSlot(*SrcDef, CopySlot);
+      // Insert the new value into the list.
+      NewVal->Next = SrcNext;
+      SrcDef->Next = NewVal;
+    }
+
+    SrcDef = SrcDef->Next;
+    ChainStartSlot = getChainStartAtCurBB(*SrcDef);
+    ChainLength =  ChainEndSlot - ChainStartSlot;
+  }
+
+  return SrcDef;
 }
 
 void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
@@ -1095,7 +1168,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
   unsigned CurBBNum = MBB->getNumber();
   bool IsDatapath = VInstrInfo::isDatapath(MI->getOpcode());
   bool IsPipeStage = MI->getOpcode() == VTM::VOpPipelineStage;
-  const unsigned UseSlot = Def.SupportSlot;
+  const unsigned ReadSlot = Def.ChainStart;
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI->getOperand(i);
@@ -1105,55 +1178,34 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def) {
     ValDef *SrcVal = lookupValDef(MO.getReg());
     bool IsInSameBB = SrcVal->getParentBB() == MBB;
 
-    int Slack = getSlackFromSupportSlot(UseSlot, CurBBNum, *SrcVal);
+    int Slack = getSlackFromChainStart(ReadSlot, CurBBNum, *SrcVal);
     assert(Slack >= 0 && "Bad Slack!");
     // Try to break the chain to shorten the live-interval of the FU.
     // FIXME: Calculate the slot the break the chain, and break the chain lazily.
     if (SrcVal->IsChainedWithFU || SrcVal->UseFU) {
-      int ChainSlack = getSlackFromCopySlot(UseSlot, CurBBNum, *SrcVal);
+      int ChainSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
       if (ChainSlack >= (IsDatapath ? 0 : 1))
-        SrcVal = getValInReg(*SrcVal, UseSlot);
+        SrcVal = getValInReg(*SrcVal, ReadSlot);
     }
 
     Def.IsChainedWithFU |= (SrcVal->IsChainedWithFU || SrcVal->UseFU) && IsDatapath;
 
     if (IsPipelined) {
+      unsigned ChainEndSlot = IsDatapath ? Def.FinishSlot : Def.ChainStart;
+      // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
+      // value 1 slot after its schedule slot.
+      if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
+
+      // The control-path operation can read the old value just before the new
+      // value come out, allowing the chain being 1 cycle longer.
+      unsigned LastBreakAt = IsDatapath ? ReadSlot : ReadSlot - 1;
       // Break the chain to preserve anti-dependencies.
-      for (;;){
-        int SupportSlack = 0;
-
-        if (IsDatapath) {
-          unsigned CopySlot = Def.CopySlot;
-          // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
-          // value 1 slot after its schedule slot.
-          if (IsPipeStage) CopySlot = UseSlot + 1;
-
-          SupportSlack = CopySlot - getSupportSlotAtCurBB(*SrcVal);
-        } else
-          SupportSlack = UseSlot - getSupportSlotAtCurBB(*SrcVal);
-
-        if (SupportSlack > int(II)) {
-          assert(getCopySlotAtCurBB(*SrcVal) < UseSlot + (IsDatapath ? 1 : 0)
-                 && "Cannot break the chain to preserve anti-dependency!");
-          // Try to get the next value define, which hold the value of UseVal in
-          // another register in later slots.
-          ValDef *NextVal = SrcVal->Next;
-          if (!NextVal) {
-
-          }
-
-          SrcVal = NextVal;
-        } else
-          // No need to break the chain since the anti-dependencies is preserved.
-          break;
-      }
+      SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, LastBreakAt, CurII);
     }
 
-    // The operand of data-path operation is support by its dependencies,
-    // we need to calculate the support slot transitively.
-    // And the PipeStage is actually control-path operation.
+    // Find the longest chain.
     if (IsDatapath && !IsPipeStage)
-      Def.SupportSlot = std::min(Def.SupportSlot, getSupportSlotAtCurBB(*SrcVal));
+      Def.ChainStart = std::min(Def.ChainStart, getChainStartAtCurBB(*SrcVal));
 
     // Update the used register.
     if (MO.getReg() != SrcVal->RegNum)
@@ -1169,6 +1221,14 @@ void ChainBreaker::visitDef(MachineInstr *MI, ValDef &Def) {
 
     Def.RegNum = MO.getReg();
   }
+}
+
+static inline bool canForwardSrcVal(unsigned Opcode) {
+  // Try to forward the copied value. However, do not forward the VOpDstMux,
+  // otherwise we may extend the live-interval of the VOpDstMux and prevent
+  // it from binding to the specific Mux.
+  return VInstrInfo::isCopyLike(Opcode) && Opcode != VTM::VOpPipelineStage &&
+         Opcode != VTM::PHI && Opcode != VTM::VOpDstMux;
 }
 
 void ChainBreaker::visit(VSUnit *U) {
@@ -1195,9 +1255,7 @@ void ChainBreaker::visit(VSUnit *U) {
     unsigned Opcode = MI->getOpcode();
     unsigned SchedSlot = U->getSlot() + I->second / 2;
     unsigned Latency = G.getStepsToFinish(MI);
-    if (VInstrInfo::isDatapath(MI->getOpcode()))
-      Latency = std::max(1u, Latency);
-    ValDef Def(MI, SchedSlot, SchedSlot + Latency);
+    ValDef Def(*MI, SchedSlot, SchedSlot + Latency);
 
     visitUse(MI, Def);
     // Do not export the define of VOpMvPhi, which is used by the PHI only.
@@ -1212,16 +1270,16 @@ void ChainBreaker::visit(VSUnit *U) {
     if (VInstrInfo::isDatapath(Opcode))
       MRI.setRegClass(Def.RegNum, &VTM::WireRegClass);
 
-    // Remember the value define.
-    ValDef *NewDef = new (Allocator.Allocate()) ValDef(Def);
+    // The result of data-path operation is available 1 slot after the operation
+    // start.
+    if (VInstrInfo::isDatapath(Opcode)) Latency = std::max(1u, Latency);
+
+    ValDef *NewDef = Allocator.Allocate();
+    new (NewDef) ValDef(*MI, Def.ChainStart, SchedSlot + Latency, Def.RegNum,
+                        Def.IsChainedWithFU);
     addValDef(NewDef);
 
-    // Try to forward the copied value. However, do not forward the VOpDstMux,
-    // otherwise we may extend the live-interval of the VOpDstMux and prevent
-    // it from binding to the specific Mux.
-    if ((!VInstrInfo::isCopyLike(Opcode) && Opcode != VTM::VOpPipelineStage)
-        || Opcode == VTM::PHI || Opcode == VTM::VOpDstMux)
-      continue;
+    if (!canForwardSrcVal(Opcode)) continue;
 
     // Link the source and the destinate value define of copy operation together.
     const MachineOperand &CopiedMO = MI->getOperand(1);
