@@ -876,15 +876,15 @@ void VSchedGraph::insertDelayBlocks() {
 }
 
 namespace {
-struct ValDef {
+struct ChainValDef {
   unsigned RegNum;
   unsigned ChainStart;
   unsigned FinishSlot;
   MachineInstr &MI;
   bool IsChainedWithFU;
-  ValDef *Next;
+  ChainValDef *Next;
 
-  explicit ValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot)
+  explicit ChainValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot)
     : RegNum(0), ChainStart(SchedSlot), FinishSlot(FinishSlot), MI(MI),
       IsChainedWithFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
                        // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
@@ -902,27 +902,27 @@ struct ChainBreaker {
   VSchedGraph &G;
   MachineRegisterInfo &MRI;
 
-  SpecificBumpPtrAllocator<ValDef> Allocator;
-  typedef std::map<unsigned, ValDef*> ValDefMapTy;
+  SpecificBumpPtrAllocator<ChainValDef> Allocator;
+  typedef std::map<unsigned, ChainValDef*> ValDefMapTy;
   ValDefMapTy ValDefs;
 
-  void addValDef(ValDef *Def) {
+  void addValDef(ChainValDef *Def) {
     bool succ = ValDefs.insert(std::make_pair(Def->RegNum, Def)).second;
     assert(succ && "ValDef already existed?");
     (void) succ;
   }
 
-  ValDef *lookupValDef(unsigned RegNum) {
+  ChainValDef *lookupValDef(unsigned RegNum) {
     ValDefMapTy::iterator at = ValDefs.find(RegNum);
     assert(at != ValDefs.end() && "ValDef not found!");
     return at->second;
   }
 
-  unsigned getFinishAtCurBB(const ValDef &Def) {
+  unsigned getFinishAtCurBB(const ChainValDef &Def) {
     return Def.getParentBB() == MBB ? Def.FinishSlot : StartSlot;
   }
 
-  unsigned getChainStartAtCurBB(const ValDef &Def) {
+  unsigned getChainStartAtCurBB(const ChainValDef &Def) {
     return Def.getParentBB() == MBB ? Def.ChainStart : StartSlot;
   }
 
@@ -934,12 +934,12 @@ struct ChainBreaker {
   }
 
   int getSlackFromChainStart(unsigned UseSlot, unsigned UseBBNum,
-                              const ValDef &Def) const {
+                             const ChainValDef &Def) const {
     return getSlack(UseSlot, UseBBNum, Def.ChainStart, Def.getParentBBNum());
   }
 
   int getSlackFromFinish(unsigned UseSlot, unsigned UseBBNum,
-                         const ValDef &Def) const {
+                         const ChainValDef &Def) const {
     return getSlack(UseSlot, UseBBNum, Def.FinishSlot, Def.getParentBBNum());
   }
 
@@ -961,17 +961,17 @@ struct ChainBreaker {
   MachineInstr *buildReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset,
                             FuncUnitId Id = FuncUnitId(), bool Dead = false);
 
-  ValDef *getValInReg(ValDef *Def, unsigned Slot);
-  ValDef *insertCopyAtSlot(ValDef &SrcDef, unsigned Slot);
-  ValDef *breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot,
-                               unsigned ReadSlot, unsigned II);
+  ChainValDef *getValInReg(ChainValDef *Def, unsigned Slot);
+  ChainValDef *insertCopyAtSlot(ChainValDef &SrcDef, unsigned Slot);
+  ChainValDef *breakChainForAntiDep(ChainValDef *SrcDef, unsigned ChainEndSlot,
+                                    unsigned ReadSlot, unsigned II);
 
   void buildFUCtrl(VSUnit *U);
 
-  void visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling,
+  void visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
                 unsigned LatestChainEnd);
 
-  void visitDef(MachineInstr *MI, ValDef &Def);
+  void visitDef(MachineInstr *MI, ChainValDef &Def);
 
   void visit(VSUnit *U);
 };
@@ -1073,7 +1073,7 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
   }
 }
 
-ValDef *ChainBreaker::getValInReg(ValDef *Def, unsigned Slot) {
+ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
   assert(Slot >= Def->FinishSlot && "Read before write detected!");
   // Only return the value at then end of the BB, do not perform cross BB copy.
   if (Def->getParentBB() != MBB) Slot = Def->FinishSlot;
@@ -1091,8 +1091,8 @@ ValDef *ChainBreaker::getValInReg(ValDef *Def, unsigned Slot) {
     MachineInstr *ReadFU = buildReadFU(&Def->MI, DefSU, CopyOffset);
 
     // Remember the value definition for the copy.
-    ValDef *NewVal = Allocator.Allocate();
-    new (NewVal) ValDef(*ReadFU, Slot, Slot);
+    ChainValDef *NewVal = Allocator.Allocate();
+    new (NewVal) ChainValDef(*ReadFU, Slot, Slot);
     NewVal->RegNum = ReadFU->getOperand(0).getReg();
     addValDef(NewVal);
 
@@ -1104,7 +1104,7 @@ ValDef *ChainBreaker::getValInReg(ValDef *Def, unsigned Slot) {
   return Def;
 }
 
-ValDef *ChainBreaker::insertCopyAtSlot(ValDef &SrcDef, unsigned Slot) {
+ChainValDef *ChainBreaker::insertCopyAtSlot(ChainValDef &SrcDef, unsigned Slot){
   assert(SrcDef.ChainStart < Slot && SrcDef.Next == 0 && "Cannot insert copy!");
 
   // Create the copy.
@@ -1119,7 +1119,7 @@ ValDef *ChainBreaker::insertCopyAtSlot(ValDef &SrcDef, unsigned Slot) {
   MachineBasicBlock::iterator IP = InSameBB ?
                                    llvm::next(MachineBasicBlock::iterator(MI)) :
                                    MBB->getFirstNonPHI();
-  // FIXME: Predicate the copy with the codition of the user.
+  // FIXME: Predicate the copy with the condition of the user.
   MachineInstr *ReadFU
     = BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpReadFU))
     .addOperand(VInstrInfo::CreateReg(ResultReg, RegWidth, true))
@@ -1133,16 +1133,17 @@ ValDef *ChainBreaker::insertCopyAtSlot(ValDef &SrcDef, unsigned Slot) {
   G.addDummyLatencyEntry(ReadFU);
 
   // Remember the value definition for the copy.
-  ValDef *NewDef = Allocator.Allocate();
-  new (NewDef) ValDef(*ReadFU, Slot, Slot);
+  ChainValDef *NewDef = Allocator.Allocate();
+  new (NewDef) ChainValDef(*ReadFU, Slot, Slot);
   NewDef->RegNum = ResultReg;
   addValDef(NewDef);
 
   return NewDef;
 }
 
-ValDef *ChainBreaker::breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot,
-                                           unsigned ReadSlot, unsigned II) {
+ChainValDef *ChainBreaker::breakChainForAntiDep(ChainValDef *SrcDef,
+                                                unsigned ChainEndSlot,
+                                                unsigned ReadSlot, unsigned II){
   // Break the chain to preserve anti-dependencies.
   // FIXME: Calculate the first slot available for inserting the copy.
   unsigned ChainStartSlot = getChainStartAtCurBB(*SrcDef);
@@ -1155,11 +1156,11 @@ ValDef *ChainBreaker::breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot
     // another register in later slots.
     if (!SrcDef->Next || SrcDef->Next->FinishSlot > ReadSlot) {
       unsigned CopySlot = std::min(ChainStartSlot + II, ReadSlot);
-      ValDef *SrcNext = SrcDef->Next;
+      ChainValDef *SrcNext = SrcDef->Next;
       // FIXME: The may exists next value, but the copy is schedule to a slot
       // which is too late, we may reuse this value by reschedule it.
       SrcDef->Next = 0;
-      ValDef *NewVal = insertCopyAtSlot(*SrcDef, CopySlot);
+      ChainValDef *NewVal = insertCopyAtSlot(*SrcDef, CopySlot);
       // Insert the new value into the list.
       NewVal->Next = SrcNext;
       SrcDef->Next = NewVal;
@@ -1173,7 +1174,7 @@ ValDef *ChainBreaker::breakChainForAntiDep(ValDef *SrcDef, unsigned ChainEndSlot
   return SrcDef;
 }
 
-void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling,
+void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
                             unsigned LatestChainEnd) {
   if (MI->isPseudo()) return;
 
@@ -1189,7 +1190,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling,
 
     if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
 
-    ValDef *SrcVal = lookupValDef(MO.getReg());
+    ChainValDef *SrcVal = lookupValDef(MO.getReg());
     bool InSameBB = SrcVal->getParentBB() == MBB;
 
     // Try to break the chain to shorten the live-interval of the FU.
@@ -1251,7 +1252,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ValDef &Def, bool IsDangling,
   }
 }
 
-void ChainBreaker::visitDef(MachineInstr *MI, ValDef &Def) {
+void ChainBreaker::visitDef(MachineInstr *MI, ChainValDef &Def) {
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI->getOperand(i);
 
@@ -1312,7 +1313,7 @@ void ChainBreaker::visit(VSUnit *U) {
     unsigned SchedSlot = U->getSlot() + I->second / 2;
     unsigned Latency = G.getStepsToFinish(MI);
     bool IsDangling = U->isDangling();
-    ValDef Def(*MI, SchedSlot, SchedSlot + Latency);
+    ChainValDef Def(*MI, SchedSlot, SchedSlot + Latency);
 
     visitUse(MI, Def, IsDangling, LatestChainEnd);
     // Do not export the define of VOpMvPhi, which is used by the PHI only.
@@ -1331,10 +1332,9 @@ void ChainBreaker::visit(VSUnit *U) {
       // operation start.
       Latency = std::max(1u, Latency);
       Def.FinishSlot = std::max(SchedSlot + Latency, Def.FinishSlot);
-
     }
 
-    ValDef *NewDef = new (Allocator.Allocate()) ValDef(Def);
+    ChainValDef *NewDef = new (Allocator.Allocate()) ChainValDef(Def);
     addValDef(NewDef);
 
     if (!canForwardSrcVal(Opcode)) continue;
@@ -1342,7 +1342,7 @@ void ChainBreaker::visit(VSUnit *U) {
     // Link the source and the destinate value define of copy operation together.
     const MachineOperand &CopiedMO = MI->getOperand(1);
     if (CopiedMO.isReg() && CopiedMO.getReg()) {
-      ValDef *CopiedDef = lookupValDef(CopiedMO.getReg());
+      ChainValDef *CopiedDef = lookupValDef(CopiedMO.getReg());
       assert(CopiedDef->Next == 0 && "Value had already copied!");
       CopiedDef->Next = NewDef;
     }
