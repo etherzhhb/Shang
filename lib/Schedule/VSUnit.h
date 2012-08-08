@@ -722,9 +722,7 @@ private:
 
   // Insert the copy operations which copy the result of the operations to
   // registers, so that we can break the chain.
-  void insertReadFUAndDisableFU();
-  MachineInstr *insertDisableFU(VSUnit *U);
-  void insertReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset = 0);
+  void insertFUCtrlAndCopy();
   // This function should visit the instructions in topological order, i.e. all
   // the dependencies of MI should had been visited before MI.
   // If we need to copy the result of MI to register return true, otherwise,
