@@ -278,7 +278,6 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   unsigned TotalCycles = G.emitSchedule();
   FInfo->setTotalSlots(TotalCycles);
 
-
   cleanUpSchedule();
 
   return true;

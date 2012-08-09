@@ -134,7 +134,8 @@ namespace {
       MachineOperand &SrcMO = MI->getOperand(1);
       LiveInterval *SrcLI = &LIS->getInterval(SrcMO.getReg()),
                    *DstLI = &LIS->getInterval(MI->getOperand(0).getReg());
-      assert(SrcMO.isKill() && "Expect source register be killed by copy!");
+      assert((SrcMO.isKill() || MI->isIdentityCopy())
+             && "Expect source register be killed by copy!");
       // No need to coalesce the idnetical copies.
       if (SrcLI != DstLI) {
         // We need to swap the SrcLI and DstLI if DstLI contains PHIDef/PHIKill.
