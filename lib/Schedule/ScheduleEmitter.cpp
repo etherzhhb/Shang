@@ -1073,8 +1073,9 @@ void ChainBreaker::visitDef(MachineInstr *MI, ChainValDef &Def) {
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI->getOperand(i);
 
-    if (!MO.isReg() || !MO.isDef() || !MO.getReg()) break;
+    if (!MO.isReg() || !MO.isDef() || !MO.getReg()) continue;
 
+    assert(Def.RegNum == 0 && "Unexpected multiple defines!");
     Def.RegNum = MO.getReg();
   }
 }
@@ -1141,10 +1142,10 @@ void ChainBreaker::visit(VSUnit *U) {
     // This MI define nothing, do not remember the value define.
     if (Def.RegNum == 0) continue;
 
-    if (VInstrInfo::isDatapath(Opcode)) {
-      // Fix the register class for the result of data-path operation.
-      MRI.setRegClass(Def.RegNum, &VTM::WireRegClass);
+    // Fix the register class for the result.
+    MRI.setRegClass(Def.RegNum, VRegisterInfo::getRepRegisterClass(Opcode));
 
+    if (VInstrInfo::isDatapath(Opcode)) {
       // The result of data-path operation is available 1 slot after the
       // operation start.
       Latency = std::max(1u, Latency);

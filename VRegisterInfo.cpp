@@ -164,9 +164,11 @@ unsigned VRegisterInfo::getSubReg(unsigned RegNo, unsigned Index) const {
 }
 
 
-const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
-  switch (OpCode) {
-  default:                  return &VTM::WireRegClass;
+const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned Opcode) {
+  if (VInstrInfo::isDatapath(Opcode)) return &VTM::WireRegClass;
+
+  switch (Opcode) {
+  default:                  return &VTM::DRRegClass;
   case VTM::VOpAdd:         return &VTM::RADDRegClass;
   case VTM::VOpSRA:         return &VTM::RASRRegClass;
   case VTM::VOpSRL:         return &VTM::RLSRRegClass;
