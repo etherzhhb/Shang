@@ -20,8 +20,8 @@ passes including:
 *  (pre-schedule) Arithmetic/bitwise operation strength reduction
 *  Pre-schedule logic synthesis with [ABC](http://www.eecs.berkeley.edu/~alanmi/abc/)
 (optional, maps all bitwise logic operations to look-up tables)
-*  Scheduling pass that support Multi-cycles chaining
-*  Unified register/functional-unit allocation and binding
+*  SDC-based Scheduling pass which supports multi-cycles chaining and global code motion (only apply to a specific kind of operations at the moment).
+*  Weighted compatibility graph-based unified register/functional-unit allocation and binding pass.
 *  [Register-transfer level](http://en.wikipedia.org/wiki/Register-transfer_level)
 optimizations, e.g. common subexpression elimination by and-invert graph (AIG)
 based structural hashing.
@@ -37,9 +37,9 @@ Multi-cycles Chaining).
 Shang cooperates with others components in the same system.
 *  ...
 
-Combining these together, Shang outperform the commercial tool eXCite by 10% and
+Combining these together, Shang outperforms the commercial tool eXCite by 10% and
 the open source HLS tool LegUp by 30%, respectively, with a naive FUs/Registers
-sharing algorithm which only share FUs/Registers with identical fanins.
+sharing algorithm which only shares FUs/Registers with identical fanins.
 
 Getting Start
 -------------
