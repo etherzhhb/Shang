@@ -302,24 +302,24 @@ struct MicroStateBuilder {
   bool emitQueueEmpty() const { return SUnitsToEmit.empty(); }
 
   // Main state building function.
-  MachineInstr *buildMicroState(unsigned Slot);
+  void buildBundle(unsigned Slot);
 
   // Fuse instructions in a bundle.
-  void moveInstr(MachineInstr &Inst, OpSlot SchedSlot, FuncUnitId FUId);
+  void moveInstr(MachineInstr &Inst, OpSlot SchedSlot);
 
   void updateOperand(MachineInstr &Inst, OpSlot SchedSlot);
 
   // Build the machine operand that use at a specified slot.
-  unsigned getRegUseOperand(unsigned Reg, OpSlot ReadSlot) {
+  unsigned getRegAtSlot(unsigned Reg, OpSlot ReadSlot) {
     PHIDefMapType::iterator at = PHIDefs.find(Reg);
 
     if (at == PHIDefs.end()) return Reg;
 
-    return getRegUseOperand(at->second.first, ReadSlot, at->second.second);;
+    return getRegAtSlot(at->second.first, ReadSlot, at->second.second);;
   }
 
   // Build the machine operand that read the wire definition at a specified slot.
-  unsigned getRegUseOperand(ValDef *VD, OpSlot ReadSlot, unsigned SizeInBits);
+  unsigned getRegAtSlot(ValDef *VD, OpSlot ReadSlot, unsigned SizeInBits);
 
   void emitPHIDef(MachineInstr *PN) {
     // FIXME: Place the PHI define at the right slot to avoid the live interval
@@ -417,7 +417,7 @@ struct MicroStateBuilder {
   // Increase the slot counter and emit all pending schedule units.
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
-    buildMicroState(CurSlot);
+    buildBundle(CurSlot);
     SUnitsToEmit.clear();
     // Advance current slot.
     ++CurSlot;
@@ -427,7 +427,7 @@ struct MicroStateBuilder {
     // Note that SUnitsToEmit is empty now, so we do not emitting any new
     // atoms.
     while (CurSlot < TargetSlot && CurSlot < ScheduleEndSlot)
-      buildMicroState(CurSlot++);
+      buildBundle(CurSlot++);
 
     return CurSlot;
   }
@@ -451,12 +451,13 @@ static inline bool sort_intra_latency(const T &LHS, const T &RHS) {
   return LHS.second < RHS.second;
 }
 
-MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
-  for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
-       E = SUnitsToEmit.end(); I !=E; ++I) {
-    VSUnit *A = *I;
+void MicroStateBuilder::buildBundle(unsigned Slot) {
+  typedef SmallVectorImpl<VSUnit*>::iterator iterator;
+  SmallVector<InSUInstInfo, 8> Insts;
 
-    SmallVector<InSUInstInfo, 8> Insts;
+  for (iterator I = SUnitsToEmit.begin(), E = SUnitsToEmit.end(); I !=E; ++I) {
+    VSUnit *A = *I;
+    Insts.clear();
 
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
       MachineInstr *Inst = A->getPtrAt(i);
@@ -478,7 +479,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       MachineInstr *MI = I->first;
       OpSlot S = I->second;
 
-      // We may need to insert PHIs to preserve SSA from.
+      // We may need to insert PHIs to preserve SSA from in a pipelined block.
       if (isMBBPipelined) updateOperand(*MI, S);
 
       if (MI->isPHI()) {
@@ -497,11 +498,10 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         continue;
       }
 
-      moveInstr(*MI, S, VInstrInfo::getPreboundFUId(MI));
+      // Move the instructions to the right place according to its schedule.
+      moveInstr(*MI, S);
     }
   }
-
-  return 0;
 }
 
 void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
@@ -518,7 +518,7 @@ void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
 
     if (MO.isUse()) {
       // Update the operand.
-      MO.ChangeToRegister(getRegUseOperand(MO.getReg(), SchedSlot), false);
+      MO.ChangeToRegister(getRegAtSlot(MO.getReg(), SchedSlot), false);
       continue;
     }
 
@@ -536,8 +536,7 @@ void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
   }
 }
 
-void MicroStateBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot,
-                                  FuncUnitId FUId) {
+void MicroStateBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot) {
   bool IsCtrl = VInstrInfo::isControl(Inst.getOpcode());
 
   unsigned Opcode = Inst.getOpcode();
@@ -563,10 +562,10 @@ void MicroStateBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot,
   MBB.insert(MachineBasicBlock::instr_iterator(IP), &Inst);
 }
 
-unsigned MicroStateBuilder::getRegUseOperand(ValDef *VD, OpSlot ReadSlot,
-                                             unsigned SizeInBits) {
-  // Move the value to a new register otherwise the it will be overwritten.
-  // If read before write in machine code, insert a phi node.
+unsigned MicroStateBuilder::getRegAtSlot(ValDef *VD, OpSlot ReadSlot,
+                                         unsigned SizeInBits) {
+  // If the use is appear before the definition of the register, we need to
+  // insert PHI nodes to preserve SSA-form.
   while (isReadWrapAround(ReadSlot, VD)) {
     if (VD->Next == 0) {
       unsigned RegNo = createPHI(VD->RegNum, SizeInBits);
@@ -589,7 +588,7 @@ void MicroStateBuilder::updateLiveOuts() {
   for (iterator I = PHIDefs.begin(), E = PHIDefs.end(); I != E; ++I) {
     unsigned Reg = I->first;
     ValDef *Def = I->second.first;
-    // Get the latest value.
+    // Get the live-out value.
     while (Def->Next)
       Def = Def->Next;
 
@@ -602,6 +601,7 @@ void MicroStateBuilder::updateLiveOuts() {
 
       if (MI.getParent() == &MBB) continue;
 
+      // Use the live-out value in other MBBs.
       MO.ChangeToRegister(Def->RegNum, false);
     }
   }
