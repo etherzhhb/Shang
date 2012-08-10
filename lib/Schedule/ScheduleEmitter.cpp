@@ -153,19 +153,47 @@ public:
   }
 };
 
-struct ValDef {
+template<typename T>
+struct ValDefBase {
   unsigned RegNum;
   unsigned FinishSlot;
-  ValDef *Next;
+  T *Next;
 
-  ValDef(unsigned RegNum, unsigned FinishSlot)
+  ValDefBase(unsigned RegNum, unsigned FinishSlot)
     : RegNum(RegNum), FinishSlot(FinishSlot), Next(0) {}
+
+  // Return the last value of the define chain.
+  inline T *getLatestValue() {
+    T *Def = static_cast<T*>(this);
+    while (Def->Next)
+      Def = Def->Next;
+
+    return Def;
+  }
+
+  // Insert V at the end of the link list.
+  void push_back(T *V) {
+    assert(Next == 0 && "Not at the back of the list!");
+    Next = V;
+  }
+
+  // Insert V after the current node, and return the newly inserted node.
+  T *insertAfter(T *V) {
+    V->Next = Next;
+    Next = V;
+    return V;
+  }
 };
 
-// Helper class to build Micro state.
-struct MicroStateBuilder {
-  MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
-  void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
+struct SimpleValDef : public ValDefBase<SimpleValDef> {
+  SimpleValDef(unsigned RegNum, unsigned FinishSlot)
+    : ValDefBase<SimpleValDef>(RegNum, FinishSlot) {}
+};
+
+// Helper class to build bundles.
+struct BundleBuilder {
+  BundleBuilder(const BundleBuilder&);     // DO NOT IMPLEMENT
+  void operator=(const BundleBuilder&); // DO NOT IMPLEMENT
 
   VSchedGraph &State;
   MachineBasicBlock &MBB;
@@ -179,8 +207,8 @@ struct MicroStateBuilder {
   VFInfo &VFI;
 
   SmallVector<VSUnit*, 8> SUnitsToEmit;
-  SpecificBumpPtrAllocator<ValDef> Allocator;
-  inline ValDef *createValDef(unsigned RegNum, unsigned SchedSlot){
+  SpecificBumpPtrAllocator<SimpleValDef> Allocator;
+  inline SimpleValDef *createValDef(unsigned RegNum, unsigned SchedSlot){
     // Compute the loop boundary, the last slot before starting a new loop,
     // which is at the same time with the first slot of next iteration.
     unsigned LoopBoundarySlot = 0;
@@ -195,17 +223,17 @@ struct MicroStateBuilder {
     assert(LoopBoundarySlot > ScheduleStartSlot
             && "LoopBoundary should bigger than start slot!");
 
-    return new (Allocator.Allocate()) ValDef(RegNum, LoopBoundarySlot);
+    return new (Allocator.Allocate()) SimpleValDef(RegNum, LoopBoundarySlot);
   }
     
   typedef SmallVector<InsertPosTy, 32> IPVector;
   IPVector CtrlIPs, DataPathIPs;
 
   // register number -> wire define.
-  typedef std::map<unsigned, std::pair<ValDef*, unsigned> > PHIDefMapType;
+  typedef std::map<unsigned, std::pair<SimpleValDef*, unsigned> > PHIDefMapType;
   PHIDefMapType PHIDefs;
 
-  MicroStateBuilder(VSchedGraph &S, MachineBasicBlock *MBB, unsigned StartSlot)
+  BundleBuilder(VSchedGraph &S, MachineBasicBlock *MBB, unsigned StartSlot)
   : State(S), MBB(*MBB), ScheduleStartSlot(S.getStartSlot(MBB)),
     ScheduleLoopOpSlot(S.getLoopOpSlot(MBB)), ScheduleEndSlot(S.getEndSlot(MBB)),
     II(S.getII(MBB)), StartSlot(StartSlot), isMBBPipelined(S.isPipelined(MBB)),
@@ -270,7 +298,7 @@ struct MicroStateBuilder {
     return Idx;
   }
 
-  bool isReadWrapAround(OpSlot ReadSlot, ValDef *VD) const {
+  bool isReadWrapAround(OpSlot ReadSlot, SimpleValDef *VD) const {
     return OpSlot(VD->FinishSlot, true) < ReadSlot;
   }
 
@@ -319,7 +347,7 @@ struct MicroStateBuilder {
   }
 
   // Build the machine operand that read the wire definition at a specified slot.
-  unsigned getRegAtSlot(ValDef *VD, OpSlot ReadSlot, unsigned SizeInBits);
+  unsigned getRegAtSlot(SimpleValDef *VD, OpSlot ReadSlot, unsigned SizeInBits);
 
   void emitPHIDef(MachineInstr *PN) {
     // FIXME: Place the PHI define at the right slot to avoid the live interval
@@ -451,7 +479,7 @@ static inline bool sort_intra_latency(const T &LHS, const T &RHS) {
   return LHS.second < RHS.second;
 }
 
-void MicroStateBuilder::buildBundle(unsigned Slot) {
+void BundleBuilder::buildBundle(unsigned Slot) {
   typedef SmallVectorImpl<VSUnit*>::iterator iterator;
   SmallVector<InSUInstInfo, 8> Insts;
 
@@ -504,7 +532,7 @@ void MicroStateBuilder::buildBundle(unsigned Slot) {
   }
 }
 
-void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
+void BundleBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
   // Adjust the operand by the timing.
   for (unsigned i = 0 , e = Inst.isPHI() ? 1 : Inst.getNumOperands();
        i != e; ++i) {
@@ -528,7 +556,7 @@ void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
     }
 
     unsigned BitWidth = VInstrInfo::getBitWidth(MO);
-    ValDef *VD = createValDef(Reg, SchedSlot.getSlot());
+    SimpleValDef *VD = createValDef(Reg, SchedSlot.getSlot());
 
     bool inserted
       = PHIDefs.insert(std::make_pair(Reg, std::make_pair(VD, BitWidth))).second;
@@ -536,7 +564,7 @@ void MicroStateBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
   }
 }
 
-void MicroStateBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot) {
+void BundleBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot) {
   bool IsCtrl = VInstrInfo::isControl(Inst.getOpcode());
 
   unsigned Opcode = Inst.getOpcode();
@@ -562,7 +590,7 @@ void MicroStateBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot) {
   MBB.insert(MachineBasicBlock::instr_iterator(IP), &Inst);
 }
 
-unsigned MicroStateBuilder::getRegAtSlot(ValDef *VD, OpSlot ReadSlot,
+unsigned BundleBuilder::getRegAtSlot(SimpleValDef *VD, OpSlot ReadSlot,
                                          unsigned SizeInBits) {
   // If the use is appear before the definition of the register, we need to
   // insert PHI nodes to preserve SSA-form.
@@ -570,9 +598,7 @@ unsigned MicroStateBuilder::getRegAtSlot(ValDef *VD, OpSlot ReadSlot,
     if (VD->Next == 0) {
       unsigned RegNo = createPHI(VD->RegNum, SizeInBits);
 
-      ValDef *NewValDef = createValDef(RegNo, VD->FinishSlot + II);
-      assert(VD->Next == 0 && "PHI already existed!");
-      VD->Next = NewValDef;
+      VD->push_back(createValDef(RegNo, VD->FinishSlot + II));
     }
 
     VD = VD->Next;
@@ -581,16 +607,14 @@ unsigned MicroStateBuilder::getRegAtSlot(ValDef *VD, OpSlot ReadSlot,
   return VD->RegNum;
 }
 
-void MicroStateBuilder::updateLiveOuts() {
+void BundleBuilder::updateLiveOuts() {
   typedef MachineRegisterInfo::use_iterator use_it;
   typedef PHIDefMapType::iterator iterator;
 
   for (iterator I = PHIDefs.begin(), E = PHIDefs.end(); I != E; ++I) {
     unsigned Reg = I->first;
-    ValDef *Def = I->second.first;
     // Get the live-out value.
-    while (Def->Next)
-      Def = Def->Next;
+    SimpleValDef *Def = I->second.first->getLatestValue();
 
     // No need to update if the value is not wrapped.
     if (Reg == Def->RegNum) continue;
@@ -693,13 +717,13 @@ void VSchedGraph::insertDelayBlocks() {
 }
 
 namespace {
-struct ChainValDef : public ValDef {
+struct ChainValDef : public ValDefBase<ChainValDef> {
   unsigned ChainStart;
   MachineInstr &MI;
   bool IsChainedWithFU;
 
   explicit ChainValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot)
-    : ValDef(0, FinishSlot), ChainStart(SchedSlot), MI(MI),
+    : ValDefBase<ChainValDef>(0, FinishSlot), ChainStart(SchedSlot), MI(MI),
       IsChainedWithFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
                        // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
                        // and VOpDstMux.
@@ -709,10 +733,6 @@ struct ChainValDef : public ValDef {
   unsigned getParentBBNum() const { return getParentBB()->getNumber(); }
 
   bool isCopy() const { return FinishSlot == ChainStart; }
-
-  ChainValDef *getNext() const {
-    return static_cast<ChainValDef*>(Next);
-  }
 };
 
 struct ChainBreaker {
@@ -896,8 +916,8 @@ ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
   if (Def->getParentBB() != MBB) Slot = Def->FinishSlot;
 
   // Get the value just before ReadSlot.
-  while (Def->Next && Def->getNext()->ChainStart <= Slot)
-    Def = Def->getNext();
+  while (Def->Next && Def->Next->ChainStart <= Slot)
+    Def = Def->Next;
 
   if (Def->ChainStart != Slot) {
     // Insert the copy operation.
@@ -913,9 +933,7 @@ ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
     NewVal->RegNum = ReadFU->getOperand(0).getReg();
     addValDef(NewVal);
 
-    NewVal->Next = Def->Next;
-    Def->Next = NewVal;
-    Def = Def->getNext();
+    Def = Def->insertAfter(NewVal);
   }
 
   return Def;
@@ -973,17 +991,10 @@ ChainValDef *ChainBreaker::breakChainForAntiDep(ChainValDef *SrcDef,
     // another register in later slots.
     if (!SrcDef->Next || SrcDef->Next->FinishSlot > ReadSlot) {
       unsigned CopySlot = std::min(ChainStartSlot + II, ReadSlot);
-      ChainValDef *SrcNext = SrcDef->getNext();
-      // FIXME: The may exists next value, but the copy is schedule to a slot
-      // which is too late, we may reuse this value by reschedule it.
-      SrcDef->Next = 0;
-      ChainValDef *NewVal = insertCopyAtSlot(*SrcDef, CopySlot);
-      // Insert the new value into the list.
-      NewVal->Next = SrcNext;
-      SrcDef->Next = NewVal;
+      SrcDef->insertAfter(insertCopyAtSlot(*SrcDef, CopySlot));
     }
 
-    SrcDef = SrcDef->getNext();
+    SrcDef = SrcDef->Next;
     ChainStartSlot = getChainStartAtCurBB(*SrcDef);
     ChainLength =  ChainEndSlot - ChainStartSlot;
   }
@@ -1027,13 +1038,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
     }
 
     // If the current MI is dangling, read the latest value.
-    if (IsDangling) {
-      while (SrcVal->Next) {
-        SrcVal = SrcVal->getNext();
-        assert(getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal) >= 0
-               && "Unexpected finish after dangling node start!");
-      }
-    }
+    if (IsDangling) SrcVal = SrcVal->getLatestValue();
 
     // Try to break the chain to preserve the anti-dependencies in pipelined
     // block, but ignore the value from other BB, which are invariants.
@@ -1050,15 +1055,19 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
         SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, ReadSlot, CurII);
       }
 
-      // Find the longest chain.
-      if (IsDatapath && !IsPipeStage) {
+      // Find the longest chain so that we can break the chain to preserve the
+      // anti-dependencies.
+      if (IsDatapath && !IsPipeStage)
         Def.ChainStart = std::min(Def.ChainStart, SrcVal->ChainStart);
-        // FIXME: The finish slot calculation should be improve.
-        Def.FinishSlot = std::max(Def.FinishSlot, SrcVal->FinishSlot);
-      }
 
       Def.IsChainedWithFU |= SrcVal->IsChainedWithFU && IsDatapath;
     }
+
+    // FIXME: The finish slot calculation should be improve:
+    // unsigned ExtraLatencyFromSrc = std::max(Src.Latency - Def.Latnecy, 0);
+    // Def.FinishSlot = std::max(Def.FinishSlot,
+    //                           SrcVal->FinishSlot + ExtraLatencyFromSrc);
+    Def.FinishSlot = std::max(Def.FinishSlot, SrcVal->FinishSlot);
 
     assert((SrcVal->getParentBB() == MBB || !SrcVal->IsChainedWithFU)
            && "Unexpected cross BB chain.");
@@ -1161,8 +1170,7 @@ void ChainBreaker::visit(VSUnit *U) {
     const MachineOperand &CopiedMO = MI->getOperand(1);
     if (CopiedMO.isReg() && CopiedMO.getReg()) {
       ChainValDef *CopiedDef = lookupValDef(CopiedMO.getReg());
-      assert(CopiedDef->Next == 0 && "Value had already copied!");
-      CopiedDef->Next = NewDef;
+      CopiedDef->push_back(NewDef);
     }
   }
 }
@@ -1257,7 +1265,7 @@ unsigned VSchedGraph::emitSchedule(iterator su_begin, iterator su_end,
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
   // Build bundle from schedule units.
-  MicroStateBuilder StateBuilder(*this, MBB, StartSlot);
+  BundleBuilder StateBuilder(*this, MBB, StartSlot);
   DEBUG(dbgs() << "\nEmitting schedule in MBB#" << MBB->getNumber() << '\n';
         dbgs() << "Sorted AllSUs:\n";
               for (iterator I = su_begin, E = su_end; I != E; ++I)
