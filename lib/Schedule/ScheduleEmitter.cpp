@@ -507,8 +507,7 @@ void BundleBuilder::buildBundle(unsigned Slot) {
       MachineInstr *MI = I->first;
       OpSlot S = I->second;
 
-      // We may need to insert PHIs to preserve SSA from in a pipelined block.
-      if (isMBBPipelined) updateOperand(*MI, S);
+      updateOperand(*MI, S);
 
       if (MI->isPHI()) {
         emitPHIDef(MI);
@@ -546,7 +545,10 @@ void BundleBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
 
     if (MO.isUse()) {
       // Update the operand.
-      MO.ChangeToRegister(getRegAtSlot(MO.getReg(), SchedSlot), false);
+      if (isMBBPipelined)
+        MO.ChangeToRegister(getRegAtSlot(MO.getReg(), SchedSlot), false);
+      
+      MO.setIsKill(false);
       continue;
     }
 
@@ -554,6 +556,10 @@ void BundleBuilder::updateOperand(MachineInstr &Inst, OpSlot SchedSlot) {
       MO.ChangeToRegister(0, true);
       continue;
     }
+
+    // We only create the value define if the BB is pipelined, in that case, we
+    // may need to insert PHI nodes to preserve SSA form.
+    if (!isMBBPipelined) continue;
 
     unsigned BitWidth = VInstrInfo::getBitWidth(MO);
     SimpleValDef *VD = createValDef(Reg, SchedSlot.getSlot());
