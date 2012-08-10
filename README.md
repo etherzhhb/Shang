@@ -20,7 +20,7 @@ passes including:
 *  (pre-schedule) Arithmetic/bitwise operation strength reduction
 *  Pre-schedule logic synthesis with [ABC](http://www.eecs.berkeley.edu/~alanmi/abc/)
 (optional, maps all bitwise logic operations to look-up tables)
-*  SDC-based Scheduling pass which supports multi-cycles chaining and global code motion (only apply to a specific kind of operations at the moment).
+*  SDC-based Scheduling pass which support multi-cycles chaining and global code motion (only apply to a specific kind of operations at the moment).
 *  Weighted compatibility graph-based unified register/functional-unit allocation and binding pass.
 *  [Register-transfer level](http://en.wikipedia.org/wiki/Register-transfer_level)
 optimizations, e.g. common subexpression elimination by and-invert graph (AIG)
@@ -138,17 +138,17 @@ installed or lib placed.
 #####Run the testsuite#####
 By running the testsuite you can verify your installation and checking the correction of verilog file converted by Shang. 
 You can synthesis or simulate not only all the c file in CHStone but alse the specific c file at once.
-In order to simulate all benchmark file,you can run:
+In order to simulate all programs in the benchmark, you can run:
 <pre>
 cd shang-build
 make benchmark_test
 </pre>
-In order to simulate and synthesis all benchmark file,you can run:
+In order to simulate and synthesis all programs in the benchmark, you can run:
 <pre>
 cd shang-build
 make benchmark_report
 </pre>
-Using float64_add.c as example,you can alse simulate the specific c file like this:
+Using float64_add.c as example, you can alse simulate the specific c program like this:
 <pre>
 cd shang-build
 make float64_add_IMS_ASAP_diff_output
@@ -192,8 +192,9 @@ testsuite\benchmark\ChStone\dfadd into the corresponding RTL code.
 Now we supposed that we wirte a Lua script named "configure.lua" for Shang. To
 begin with, You should assign the input path of .bc or .ll file (float64_add.bc). 
 We also presume that the output path is the same as the input path. We output
-the RLT code (float64_add.v) and timing constraint code(float64_add.sdc).
-a simple example:   
+the RLT code (float64_add.v) and timing constraints script(float64_add.sdc).
+a simple example:
+
     InDir = [[your-work-dir]]
     OutDir = Indir
     InputFile = InDir .. 'float64_add.bc'
@@ -205,10 +206,10 @@ If we want to convert certain function (float64_add in this case) into hardware,
 we should have the following statement in the Lua script.      
 <pre><code>Functions.float64_add = { ModName = float64_add,
                           Scheduling = SynSettings.ASAP,
-                          Pipeline = SynSettings.DontPipeline }</code></pre>
+                          Pipeline = SynSettings.IMS }</code></pre>
 In this table, we create a table in which the "ModName" is the name of the
 converted verilog module, the "Scheduling" is the schedule mode of Shang (ASAP or ILP etc.),
-the "Pipeline" is the option whether we use pipeline in Shang.
+the "Pipeline" is the option whether we use software pipelining in Shang.
 ######3.  Setup the platform information script.######
 Supposed that we use the EP2C35F672C6 FPGA of altera, we could create another lua
 script named "EP2C35F672C6.lua" to hold the platform information of EP2C35F672C6.
@@ -239,7 +240,8 @@ The "EP2C35F672C6.lua" could be like this:
         
     FUs.MemoryBus = { Latency= 0.5, StartInterval=1, AddressWidth=POINTER_SIZE_IN_BITS, DataWidth=64 }
         
-    FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, InitFileDir = TEST_BINARY_ROOT, Template=[=[
+    FUs.BRam = { Latency=1, StartInterval=1, DataWidth = 64, InitFileDir = [[the-dir-to-place the init files]],
+                 Template=[=[
         
     // Block Ram $(num)
     reg                      bram$(num)we;
@@ -265,18 +267,20 @@ The "EP2C35F672C6.lua" could be like this:
     end
     ]=]}
 
-In this script, we configure the period of corresponding paltform and parameter
-of function units. We make the latency table for the combinational logic.(to be continued...)   
-In configure.lua, we have to include the EP2C35F672C6.lua with the following
+In this script, we configure the target period of the hardware implemenation and
+setup the parameters about the function units in the target FPGA platform.
+We make the latency table for the combinational logic.(to be continued...)   
+
+Then we can include the EP2C35F672C6.lua in configure.lua with the following
 statement:   
 
     -- load platform information script
     dofile(InDir .. 'EP2C35F672C6.lua')
 
 ######4.  Setup the other configuration.######
-User will find the other configuration in the example configure.lua at the XXXX.    
-As a whole the example configure.lua should look like this(without the
-configuration information mentioned in setp 4):  
+User will find the other configuration in the example configure.lua in the testsuit
+build directory. As a whole the example configure.lua should look like this(without
+the configuration information mentioned in setp 4):  
 <pre><code>-- Setup the input and output path.
 InDir = [[D:/float64_add/]]
 OutDir = Indir
