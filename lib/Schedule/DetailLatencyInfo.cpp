@@ -20,8 +20,9 @@
 using namespace llvm;
 
 static cl::opt<bool>
-EnableBLC("vtm-enable-blc", cl::desc("Enable bit level chaining"),
-cl::init(true));
+EnableBLC("vtm-enable-blc",
+          cl::desc("Enable bit-level chaining"),
+          cl::init(true));
 
 INITIALIZE_PASS(DetialLatencyInfo, "detail-latency-info",
                 "Calculating the latency of instructions",
