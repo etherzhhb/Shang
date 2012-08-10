@@ -1113,8 +1113,6 @@ void ChainBreaker::visit(VSUnit *U) {
   // pipelined block.
   unsigned LatestChainEnd = U->getFinSlot();
   if (IsPipelined && U->isDatapath() && !U->isDangling()) {
-    unsigned USlot = U->getSlot();
-
     typedef VSUnit::use_iterator use_it;
     for (use_it I = duse_begin(U), E = duse_end(U); I != E; ++I) {
       VSUnit *User = *I;
