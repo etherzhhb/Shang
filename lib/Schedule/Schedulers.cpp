@@ -1,4 +1,4 @@
-//===-- ForceDirectedScheduling.cpp - ForceDirected Scheduler ---*- C++ -*-===//
+//===-- Schedulers.cpp - Implemenation of Schedulers ------------*- C++ -*-===//
 //
 // Copyright: 2011 by SYSU EDA Group. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
@@ -11,7 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the Force Direct Schedulers
+// This file implement the ASAP Scheduling and Iterative Modulo Scheduling
+// algorithm.
 //
 //===----------------------------------------------------------------------===//
 

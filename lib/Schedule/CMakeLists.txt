@@ -6,20 +6,20 @@ include_directories(
 )
 
 add_llvm_library(VTMSchedule
-  CompGraph.cpp
-  ForceDirectedScheduling.cpp
-  SchedulingBase.cpp
-  VSUnit.cpp
-  UnbalanceMuxPrebind.cpp
   AdjustLIForBundles.cpp
+  CompGraph.cpp
+  DetailLatencyInfo.cpp
   PrebindMuxBase.cpp
-  ScheduleEmitter.cpp
   RecurrenceFinder.cpp
+  ScheduleEmitter.cpp
+  Schedulers.cpp
+  SchedulingBase.cpp
+  SDCScheduler.cpp
+  UnbalanceMuxPrebind.cpp
+  VSUnit.cpp
   VPreRegAllocSched.cpp
   VRegAllocSimple.cpp
   VAliasAnalysis.cpp
-  SDCScheduler.cpp
-  DetailLatencyInfo.cpp
 )
 
 target_link_libraries (
