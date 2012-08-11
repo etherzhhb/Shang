@@ -56,8 +56,10 @@ public:
     vastExpr,
     vastWire,
     vastRegister,
-    vastMachineOperand,
-    vastLastValueType = vastMachineOperand,
+    // CustomNode used by pre-scheduling data-path optimizer and the IR level
+    // resource usage estimation pass.
+    vastCustomNode,
+    vastLastValueType = vastCustomNode,
     vastPort,
     vastSlot,
 
