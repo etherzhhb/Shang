@@ -69,15 +69,20 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
   MachineRegisterInfo *MRI;
   MachineDominatorTree *DT;
   MachineBasicBlock *Entry;
-  // VASTExpr management, managed by VASTModule.
-  VASTModule Mod;
+  // VASTExprs are managed by DatapathContainer.
+  DatapathContainer DPContainer;
   OwningPtr<DatapathBuilder> Builder;
   typedef DenseMap<MachineOperand, VASTMachineOperand*,
                    VMachineOperandValueTrait> VASTMOMapTy;
   VASTMOMapTy VASTMOs;
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return Mod.getOrCreateImmediate(Value, BitWidth);
+    return DPContainer.getOrCreateImmediate(Value, BitWidth);
+  }
+
+  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                        unsigned UB, unsigned LB) {
+    return DPContainer.createExpr(Opc, Ops, UB, LB);;
   }
 
   // Remember in which MachineBasicBlock the expression is first created, we can
@@ -94,11 +99,6 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
 
   typedef std::map<VASTValPtr, unsigned> Val2RegMapTy;
   Val2RegMapTy Val2Reg;
-
-  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                        unsigned UB, unsigned LB) {
-    return Mod.createExpr(Opc, Ops, UB, LB);;
-  }
 
   // TODO: Remember the outputs by wires?.
   VASTValPtr getOrCreateVASTMO(MachineOperand DefMO) {
@@ -118,7 +118,7 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     return E->isInlinable();
   }
 
-  PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0), Mod("m"){
+  PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0) {
     initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
   }
 
@@ -237,7 +237,7 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     Builder.reset();
     DeleteContainerSeconds(VASTMOs);
     Val2Reg.clear();
-    Mod.reset();
+    DPContainer.reset();
   }
 };
 }
