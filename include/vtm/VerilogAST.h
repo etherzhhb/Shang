@@ -201,18 +201,14 @@ typedef PtrInvPair<VASTValue> VASTValPtr;
 class VASTUse : public ilist_node<VASTUse> {
   VASTValPtr V;
   VASTValue *User;
-  friend class VASTExpr;
 
   friend struct ilist_sentinel_traits<VASTUse>;
-  VASTUse(VASTValPtr v = 0, VASTValue *user = 0);
 
   void operator=(const VASTUse &RHS); // DO NOT IMPLEMENT
   VASTUse(const VASTUse &RHS); // DO NOT IMPLEMENT
-
-  friend class VASTModule;
-  friend class VASTSlot;
-  friend class VASTWire;
 public:
+  VASTUse(VASTValPtr v = 0, VASTValue *user = 0);
+
   bool isInvalid() const { return !V; }
 
   void set(VASTValPtr RHS) {
@@ -407,17 +403,17 @@ template<> struct simplify_type<VASTUse> {
 
 class VASTImmediate : public VASTValue {
   VASTImmediate(uint64_t Imm, unsigned BitWidth)
-    : VASTValue(vastImmediate, BitWidth) {
+               : VASTValue(vastImmediate, BitWidth) {
     Contents.IntVal = Imm;
   }
-
-  friend class VASTModule;
 
   void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   void printAsOperandImpl(raw_ostream &OS) const {
     printAsOperandImpl(OS, getBitWidth(), 0);
   }
+
+  friend class DatapathContainer;
 public:
   uint64_t getUnsignedValue() const {
     return getBitSlice64(Contents.IntVal, getBitWidth());
@@ -636,7 +632,7 @@ private:
   explicit VASTExpr(Opcode Opc, uint8_t numOps, unsigned UB,
                     unsigned LB, const FoldingSetNodeIDRef ID);
 
-  friend class VASTModule;
+  friend class DatapathContainer;
 
   void printAsOperandInteral(raw_ostream &OS) const;
 
@@ -1090,8 +1086,45 @@ public:
                              const AndCndVec &Cnds);
 };
 
+// The container to hold all VASTExprs in data-path of the design.
+class DatapathContainer {
+  // The unique immediate in the data-path.
+  typedef DenseMap<std::pair<uint64_t, char>, VASTImmediate*> UniqueImmSetTy;
+  UniqueImmSetTy UniqueImms;
+  
+  // Expression in data-path
+  FoldingSet<VASTExpr> UniqueExprs;
+
+protected:
+  BumpPtrAllocator Allocator;
+
+public:
+  BumpPtrAllocator *getAllocator() { return &Allocator; }
+
+  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                        unsigned UB, unsigned LB);
+
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    Value = getBitSlice64(Value, BitWidth);
+    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
+    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
+    if (!Imm) {// Create the immediate if it is not yet created.
+      Imm = Allocator.Allocate<VASTImmediate>();
+      new (Imm) VASTImmediate(Value, BitWidth);
+    }
+
+    return Imm;
+  }
+
+  VASTImmediate *getBoolImmediate(bool Value) {
+    return getOrCreateImmediate(Value ? 1 : 0, 1);
+  }
+
+  void reset();
+};
+
 // The class that represent Verilog modulo.
-class VASTModule : public VASTNode {
+class VASTModule : public VASTNode, public DatapathContainer {
 public:
   typedef SmallVector<VASTPort*, 16> PortVector;
   typedef PortVector::iterator port_iterator;
@@ -1116,19 +1149,12 @@ private:
   WireVector Wires;
   RegisterVector Registers;
 
-  // Expression in data-path
-  FoldingSet<VASTExpr> UniqueExprs;
-
   typedef StringMap<VASTNamedValue*> SymTabTy;
   SymTabTy SymbolTable;
   typedef StringMapEntry<VASTNamedValue*> SymEntTy;
 
-  typedef DenseMap<std::pair<uint64_t, char>, VASTImmediate*> UniqueImmSetTy;
-  UniqueImmSetTy UniqueImms;
-
   // The Name of the Design.
   std::string Name;
-  BumpPtrAllocator Allocator;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
@@ -1206,26 +1232,6 @@ public:
 
   virtual void *Allocate(size_t Num, size_t Alignment){
     return Allocator.Allocate(Num, Alignment);
-  }
-
-  BumpPtrAllocator *getAllocator() { return &Allocator; }
-
-  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                        unsigned UB, unsigned LB);
-
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    Value = getBitSlice64(Value, BitWidth);
-    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
-    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
-    if (!Imm) {// Create the immediate if it is not yet created.
-      Imm = Allocator.Allocate<VASTImmediate>();
-      new (Imm) VASTImmediate(Value, BitWidth);
-    }
-    return Imm;
-  }
-
-  VASTImmediate *getBoolImmediate(bool Value) {
-    return getOrCreateImmediate(Value ? 1 : 0, 1);
   }
 
   VASTSlot *getOrCreateSlot(unsigned SlotNum, MachineBasicBlock *BB) {

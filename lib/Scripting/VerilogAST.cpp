@@ -430,51 +430,15 @@ float VASTExpr::getLSBDelay() const {
   return Delay;
 }
 
-std::string VASTModule::DirectClkEnAttr = "";
-std::string VASTModule::ParallelCaseAttr = "";
-std::string VASTModule::FullCaseAttr = "";
-
-void VASTModule::reset() {
-  // Release all ports.
-  Slots.clear();
-  Ports.clear();
-  Wires.clear();
-  Registers.clear();
+void DatapathContainer::reset() {
   UniqueExprs.clear();
-  SymbolTable.clear();
   UniqueImms.clear();
   Allocator.Reset();
-  FUPortOffsets.clear();
-  NumArgPorts = 0;
-  RetPortIdx = 0;
 }
 
-VASTModule::~VASTModule() {
-  reset();
-
-  delete &(DataPath.str());
-  delete &(ControlBlock.str());
-}
-
-void VASTModule::printDatapath(raw_ostream &OS) const{
-  for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
-       I != E; ++I) {
-    VASTWire *W = *I;
-    // Do not print the trivial dead data-path.
-    if (W->getAssigningValue() && (W->isPinned() || !W->use_empty()))
-      W->printAssignment(OS);
-  }
-}
-
-void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
-  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
-       I != E; ++I)
-    (*I)->printAssignment(OS, this);
-}
-
-VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
-                                  ArrayRef<VASTValPtr> Ops,
-                                  unsigned UB, unsigned LB) {
+VASTValPtr DatapathContainer::createExpr(VASTExpr::Opcode Opc,
+                                         ArrayRef<VASTValPtr> Ops,
+                                         unsigned UB, unsigned LB) {
   assert(!Ops.empty() && "Unexpected empty expression");
   if (Ops.size() == 1) {
     switch (Opc) {
@@ -516,6 +480,47 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
 
   E->ExprSize = ExprSize;
   return E;
+}
+
+std::string VASTModule::DirectClkEnAttr = "";
+std::string VASTModule::ParallelCaseAttr = "";
+std::string VASTModule::FullCaseAttr = "";
+
+void VASTModule::reset() {
+  DatapathContainer::reset();
+
+  // Release all ports.
+  Slots.clear();
+  Ports.clear();
+  Wires.clear();
+  Registers.clear();
+  SymbolTable.clear();
+  FUPortOffsets.clear();
+  NumArgPorts = 0;
+  RetPortIdx = 0;
+}
+
+VASTModule::~VASTModule() {
+  reset();
+
+  delete &(DataPath.str());
+  delete &(ControlBlock.str());
+}
+
+void VASTModule::printDatapath(raw_ostream &OS) const{
+  for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
+       I != E; ++I) {
+    VASTWire *W = *I;
+    // Do not print the trivial dead data-path.
+    if (W->getAssigningValue() && (W->isPinned() || !W->use_empty()))
+      W->printAssignment(OS);
+  }
+}
+
+void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
+  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
+       I != E; ++I)
+    (*I)->printAssignment(OS, this);
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
