@@ -93,9 +93,9 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
   MachineBasicBlock *calculateInsertMBB(VASTExpr *Expr) const;
   MachineInstr *calculateInsertPos(VASTExpr *Expr, MachineInstr *CurIP) const;
 
-  void enterMBB(MachineBasicBlock &MBB);
+  void prepareMBB(MachineBasicBlock &MBB);
 
-  void leaveMBB(MachineBasicBlock &MBB);
+  void verifyMBB(MachineBasicBlock &MBB);
 
   typedef std::map<VASTValPtr, unsigned> Val2RegMapTy;
   Val2RegMapTy Val2Reg;
@@ -130,7 +130,8 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     AU.setPreservesCFG();
   }
 
-  bool optimizeMBB(MachineBasicBlock &MBB);
+  void buildDatapath(MachineBasicBlock &MBB);
+  void rewriteDatapath(MachineBasicBlock &MBB);
   VASTValPtr buildDatapath(MachineInstr *MI);
 
   void rewriteDepForPHI(MachineInstr *PHI, MachineInstr *IncomingPos);
@@ -255,7 +256,6 @@ Pass *llvm::createPreSchedRTLOptPass() {
 char PreSchedRTLOpt::ID = 0;
 
 bool PreSchedRTLOpt::runOnMachineFunction(MachineFunction &F) {
-  bool Changed = false;
   MRI = &F.getRegInfo();
   DT = &getAnalysis<MachineDominatorTree>();
   Builder.reset(new DatapathBuilder(*this, *MRI));
@@ -264,36 +264,41 @@ bool PreSchedRTLOpt::runOnMachineFunction(MachineFunction &F) {
   ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
   typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
 
-  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I)
-    Changed = optimizeMBB(**I);
+  // Build the data-path according to the machine function.
+  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
+    prepareMBB(**I);
+    buildDatapath(**I);
+  }
+
+  // Perform optimizations.
+
+  // Rewrite the operations in data-path.
+  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
+    rewriteDatapath(**I);
+    verifyMBB(**I);
+  }
 
   // Verify the function.
   F.verify(this);
-  return Changed;
+  return true;
 }
 
-bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
-  enterMBB(MBB);
-
+void PreSchedRTLOpt::buildDatapath(MachineBasicBlock &MBB) {
   DEBUG(dbgs() << "Before Rtl Optimization:\n";
         MBB.dump(););
 
   MachineBasicBlock::instr_iterator I = MBB.instr_begin(), E = MBB.instr_end();
 
   // Skip the PHINodes.
-  while (I->isPHI())
+  while (I != E && I->isPHI())
     ++I;
 
   typedef MachineBasicBlock::instr_iterator instr_iterator;
   instr_iterator InsertPos = I;
-  bool LastMIIsTerminator = false;
   while (I != E) {
-    // Do not insert the instruction between terminators.
-    if (!LastMIIsTerminator) InsertPos = I;
     MachineInstr *MI = I++;
-    LastMIIsTerminator |= MI->isTerminator();
 
-    // Try to add the instruction into the Datapath net-list.
+    // Try to add the instruction into the data-path net-list.
     if (VASTValPtr V = buildDatapath(MI)) {
       MI->eraseFromParent();
       continue;
@@ -308,6 +313,27 @@ bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
       MI->eraseFromParent();
       continue;
     }
+  }
+}
+
+void PreSchedRTLOpt::rewriteDatapath(MachineBasicBlock &MBB) {
+  DEBUG(dbgs() << "Before Rtl Optimization:\n";
+        MBB.dump(););
+
+  MachineBasicBlock::instr_iterator I = MBB.instr_begin(), E = MBB.instr_end();
+
+  // Skip the PHINodes.
+  while (I != E && I->isPHI())
+    ++I;
+
+  typedef MachineBasicBlock::instr_iterator instr_iterator;
+  instr_iterator InsertPos = I;
+  bool LastMIIsTerminator = false;
+  while (I != E) {
+    // Do not insert the instruction between terminators.
+    if (!LastMIIsTerminator) InsertPos = I;
+    MachineInstr *MI = I++;
+    LastMIIsTerminator |= MI->isTerminator();
 
     const MCInstrDesc &TID = MI->getDesc();
 
@@ -317,8 +343,8 @@ bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
       if (!MO.isReg() || MO.isDef() || MO.getReg() == 0)
         continue;
 
-      bool IsPredicate = i < TID.getNumOperands()&&TID.OpInfo[i].isPredicate();
-      // All operand of br instruction are predicates.
+      bool IsPredicate = i < TID.getNumOperands() && TID.OpInfo[i].isPredicate();
+      // All operand of branch instruction are predicates.
       IsPredicate |= VInstrInfo::isBrCndLike(TID.getOpcode());
       rewriteExprTreeForMO(MO, InsertPos, IsPredicate, false);
     }
@@ -332,10 +358,6 @@ bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
          PI != PE && PI->isPHI(); ++PI)
       rewriteDepForPHI(PHI++, InsertPos);
   }
-
-
-  leaveMBB(MBB);
-  return true;
 }
 
 void PreSchedRTLOpt::rewriteDepForPHI(MachineInstr *PHI,
@@ -522,7 +544,6 @@ unsigned PreSchedRTLOpt::rewriteICmp(VASTExpr *Expr, MachineInstr *IP) {
   return DefMO.getReg();
 }
 
-
 void PreSchedRTLOpt::buildNot(unsigned DstReg, const MachineOperand &Op) {
   MachineInstr *IP = getInsertPos(Op);
   BuildMI(*IP->getParent(), IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpNot))
@@ -570,7 +591,6 @@ static unsigned GetSameWidth(const MachineOperand &LHS,
   assert(BitWidth == VInstrInfo::getBitWidth(RHS) && "Bitwidth not match!");
   return BitWidth;
 }
-
 
 template<unsigned Opcode, typename BitwidthFN>
 unsigned PreSchedRTLOpt::rewriteNAryExpr(VASTExpr *Expr, MachineInstr *IP,
@@ -786,17 +806,19 @@ MachineInstr *PreSchedRTLOpt::calculateInsertPos(VASTExpr *Expr,
   return MBB->getFirstInstrTerminator();
 }
 
-void PreSchedRTLOpt::leaveMBB(MachineBasicBlock &MBB) {
+void PreSchedRTLOpt::verifyMBB(MachineBasicBlock &MBB) {
+  // Verify the MBB.
   bool Termiator = false;
   typedef MachineBasicBlock::instr_iterator it;
   for (it I = it(MBB.getFirstNonPHI()), E = MBB.instr_end(); I != E; ++I) {
-    assert(!I->isPHI());
-    assert(!Termiator || I->isTerminator());
+    assert(!I->isPHI() && "PHI in the wrong position!");
+    assert((!Termiator || I->isTerminator())
+           && "Terminator in the wrong position!");
     Termiator |= I->isTerminator();
   }
 }
 
-void PreSchedRTLOpt::enterMBB(MachineBasicBlock &MBB) {
+void PreSchedRTLOpt::prepareMBB(MachineBasicBlock &MBB) {
   // Fix the terminators so we can safely insert the instructions before the
   // first terminator of a MBB.
   fixTerminators(&MBB);
