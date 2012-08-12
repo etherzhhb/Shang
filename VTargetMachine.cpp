@@ -260,6 +260,8 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addIRPasses() {
+    PM->add(createDesignMetricsPass());
+
     // Basic AliasAnalysis support.
     // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
     // BasicAliasAnalysis wins if they disagree. This is intended to help

@@ -32,6 +32,8 @@ extern char &AdjustLIForBundlesID;
 
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
+FunctionPass *createDesignMetricsPass();
+
 // Always inline function.
 Pass *createHLSInlinerPass();
 

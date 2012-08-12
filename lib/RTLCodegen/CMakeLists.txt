@@ -3,6 +3,8 @@ add_llvm_library(VTMRTLCodegen
   VASTExprBuilder.cpp
   VerilogASTBuilder.cpp
   VerilogASTWriter.cpp
+  IR2Datapath.cpp
+  DesignMetrics.cpp
   MachineFunction2Datapath.cpp
   PreSchedRTLOpt.cpp
   ControlLogicBuilder.cpp
