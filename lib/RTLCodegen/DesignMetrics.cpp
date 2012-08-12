@@ -22,7 +22,8 @@
 #include "llvm/Pass.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Support/InstIterator.h"
-#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/Support/CFG.h"
 #define DEBUG_TYPE "vtm-design-metrics"
 #include "llvm/Support/Debug.h"
 
@@ -86,7 +87,8 @@ class DesignMetrics : public EarlyDatapathBuilderContext {
 public:
   DesignMetrics(TargetData *TD) : Builder(*this, TD) {}
 
-  void addInstruction(Instruction &Inst);
+  void visit(Instruction &Inst);
+  void visit(BasicBlock &BB);
 
   // Visit all data-path expression and compute the cost.
   uint64_t getDatapathFUCost() const;
@@ -132,7 +134,7 @@ VASTValPtr DesignMetrics::getAsOperand(Value *Op, bool GetAsInlineOperand) {
   return ValueOp;
 }
 
-void DesignMetrics::addInstruction(Instruction &Inst) {
+void DesignMetrics::visit(Instruction &Inst) {
   if (VASTValPtr V = Builder.visit(Inst)) {
     Builder.indexVASTExpr(&Inst, V);
     return;
@@ -146,6 +148,31 @@ void DesignMetrics::addInstruction(Instruction &Inst) {
     if (VASTValPtr V = Builder.lookupExpr(*I))
       LiveOutedVal.insert(V.get());
   }
+}
+
+void DesignMetrics::visit(BasicBlock &BB) {
+  typedef BasicBlock::iterator iterator;
+  for (iterator I = BB.begin(), E = BB.end(); I != E; ++I) {
+    // PHINodes will be handled in somewhere else.
+    if (isa<PHINode>(I)) continue;
+
+    visit(*I);
+  }
+
+  // Remember the incoming value from the current BB of the PHINodes in
+  // successors as live-outed values.
+  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI) {
+    BasicBlock *SuccBB = *SI;
+    for (iterator I = SuccBB->begin(), E = SuccBB->end(); I != E; ++I) {
+      PHINode *PN = dyn_cast<PHINode>(I);
+      if (PN == 0) break;
+
+      Value *LiveOutedFromBB = PN->DoPHITranslation(SuccBB, &BB);
+      if (VASTValPtr V = Builder.lookupExpr(LiveOutedFromBB))
+        LiveOutedVal.insert(V.get());
+    }
+  }
+
 }
 
 uint64_t DesignMetrics::getFUCost(VASTValue *V) const {
@@ -224,8 +251,10 @@ char DesignMetricsPass::ID = 0;
 bool DesignMetricsPass::runOnFunction(Function &F) {
   DesignMetrics Metrics(&getAnalysis<TargetData>());
 
-  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-    Metrics.addInstruction(*I);
+  ReversePostOrderTraversal<BasicBlock*> RPO(&F.getEntryBlock());
+  typedef ReversePostOrderTraversal<BasicBlock*>::rpo_iterator iterator;
+  for (iterator I = RPO.begin(), E = RPO.end(); I != E; ++I)
+    Metrics.visit(**I);
 
   DEBUG(dbgs() << "Data-path cost of function " << F.getName() << ':'
                << Metrics.getDatapathFUCost() << '\n');

@@ -42,7 +42,7 @@ class EarlyDatapathBuilder : public VASTExprBuilder,
   }
 
 public:
-  typedef ValueMap<Value*, VASTValPtr> ValueMapTy;
+  typedef DenseMap<Value*, VASTValPtr> ValueMapTy;
 private:
   ValueMapTy Value2Expr;
   TargetData *TD;
