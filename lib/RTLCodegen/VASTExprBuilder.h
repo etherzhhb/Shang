@@ -87,6 +87,7 @@ public:
   }
 };
 
+// The helper class to collect the information about the operands of a VASTExpr.
 template<VASTExpr::Opcode Opcode>
 struct VASTExprOpInfo {
   VASTExprOpInfo() {}
@@ -115,6 +116,7 @@ class VASTExprBuilder {
     return false;
   }
 
+  // The helper iterator class to collect all leaf operand of an expression tree.
   template<VASTExpr::Opcode Opcode, class _Container>
   struct op_filler_iterator : public std::iterator<std::output_iterator_tag,
                                                    void, void, void, void> {
@@ -161,6 +163,7 @@ class VASTExprBuilder {
   VASTValPtr padHeadOrTail(VASTValPtr V, unsigned BitWidth, bool ByOnes,
                            bool PadTail);
 
+protected:
   VASTValPtr padHigherBits(VASTValPtr V, unsigned BitWidth, bool ByOnes) {
     return padHeadOrTail(V, BitWidth, ByOnes, false);
   }
@@ -169,7 +172,6 @@ class VASTExprBuilder {
     return padHeadOrTail(V, BitWidth, ByOnes, true);
   }
 
-protected:
   VASTExprBuilderContext &Context;
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)

@@ -32,9 +32,9 @@ extern char &AdjustLIForBundlesID;
 
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
-Pass *createDetialLatencyInfoPass();
 // Always inline function.
 Pass *createHLSInlinerPass();
+
 Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
@@ -54,6 +54,7 @@ Pass *createPrebindUnbalanceMuxPass();
 Pass *createBasicPrebindMuxPass();
 Pass *createMemOpsFusingPass();
 Pass *createDeadMemOpEliminationPass();
+Pass *createDetialLatencyInfoPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.

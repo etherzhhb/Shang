@@ -11,8 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file define the classes which convert MachineFunction to VASTExprs and
-// vice versa.
+// This file define the classes which convert MachineFunction to VASTExprs.
 //
 //===----------------------------------------------------------------------===//
 #ifndef VTM_MACHINE_FUNCTION_TO_DATAPATH
@@ -38,16 +37,16 @@ public:
 class DatapathBuilder : public VASTExprBuilder {
 public:
   typedef std::map<unsigned, VASTValPtr> RegIdxMapTy;
+private:
   MachineRegisterInfo &MRI;
   RegIdxMapTy Idx2Expr;
 
   DatapathBuilderContext &getContext() {
-    return reinterpret_cast<DatapathBuilderContext&>(Context);
+    return static_cast<DatapathBuilderContext&>(Context);
   }
 
 public:
-  explicit DatapathBuilder(VASTExprBuilderContext &Context,
-                           MachineRegisterInfo &MRI)
+  DatapathBuilder(VASTExprBuilderContext &Context, MachineRegisterInfo &MRI)
     : VASTExprBuilder(Context), MRI(MRI) {}
 
   VASTValPtr getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true) {
