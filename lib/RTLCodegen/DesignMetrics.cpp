@@ -18,6 +18,7 @@
 
 #include "IR2Datapath.h"
 #include "vtm/Passes.h"
+#include "vtm/DesignMetrics.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Target/TargetData.h"
@@ -49,11 +50,9 @@ public:
     OS << *V << '[' << UB << ',' << LB << ']';
   }
 };
-}
 
-namespace {
 // FIXME: Move the class definition to a header file.
-class DesignMetrics : public EarlyDatapathBuilderContext {
+class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   // Data-path container to hold the optimized data-path of the design.
   DatapathContainer DPContainer;
   EarlyDatapathBuilder Builder;
@@ -85,10 +84,16 @@ class DesignMetrics : public EarlyDatapathBuilderContext {
   uint64_t getExprTreeFUCost(VASTValPtr Root, ValSetTy &Visited) const;
   uint64_t getFUCost(VASTValue *V) const;
 public:
-  DesignMetrics(TargetData *TD) : Builder(*this, TD) {}
+  explicit DesignMetricsImpl(TargetData *TD) : Builder(*this, TD) {}
 
   void visit(Instruction &Inst);
   void visit(BasicBlock &BB);
+  void visit(Function &F);
+
+  void reset() {
+    DPContainer.reset();
+    LiveOutedVal.clear();
+  }
 
   // Visit all data-path expression and compute the cost.
   uint64_t getDatapathFUCost() const;
@@ -108,7 +113,7 @@ struct DesignMetricsPass : public FunctionPass {
 };
 }
 
-VASTValPtr DesignMetrics::getAsOperand(Value *Op, bool GetAsInlineOperand) {
+VASTValPtr DesignMetricsImpl::getAsOperand(Value *Op, bool GetAsInlineOperand) {
   if (ConstantInt *Int = dyn_cast<ConstantInt>(Op)) {
     unsigned ConstantSize = Int->getType()->getScalarSizeInBits();
     // Do not create the immediate if it is too wide.
@@ -134,7 +139,7 @@ VASTValPtr DesignMetrics::getAsOperand(Value *Op, bool GetAsInlineOperand) {
   return ValueOp;
 }
 
-void DesignMetrics::visit(Instruction &Inst) {
+void DesignMetricsImpl::visit(Instruction &Inst) {
   if (VASTValPtr V = Builder.visit(Inst)) {
     Builder.indexVASTExpr(&Inst, V);
     return;
@@ -150,7 +155,7 @@ void DesignMetrics::visit(Instruction &Inst) {
   }
 }
 
-void DesignMetrics::visit(BasicBlock &BB) {
+void DesignMetricsImpl::visit(BasicBlock &BB) {
   typedef BasicBlock::iterator iterator;
   for (iterator I = BB.begin(), E = BB.end(); I != E; ++I) {
     // PHINodes will be handled in somewhere else.
@@ -175,7 +180,14 @@ void DesignMetrics::visit(BasicBlock &BB) {
 
 }
 
-uint64_t DesignMetrics::getFUCost(VASTValue *V) const {
+void DesignMetricsImpl::visit(Function &F) {
+  ReversePostOrderTraversal<BasicBlock*> RPO(&F.getEntryBlock());
+  typedef ReversePostOrderTraversal<BasicBlock*>::rpo_iterator iterator;
+  for (iterator I = RPO.begin(), E = RPO.end(); I != E; ++I)
+    visit(**I);
+}
+
+uint64_t DesignMetricsImpl::getFUCost(VASTValue *V) const {
   VASTExpr *Expr = dyn_cast<VASTExpr>(V);
   // We can only estimate the cost of VASTExpr.
   if (!Expr) return 0;
@@ -195,7 +207,7 @@ uint64_t DesignMetrics::getFUCost(VASTValue *V) const {
   return 0;
 }
 
-uint64_t DesignMetrics::getExprTreeFUCost(VASTValPtr Root, ValSetTy &Visited)
+uint64_t DesignMetricsImpl::getExprTreeFUCost(VASTValPtr Root, ValSetTy &Visited)
                                           const {
   uint64_t Cost = 0;
   // FIXME: Provide a generic depth-first search iterator for VASTValue tree.
@@ -235,7 +247,7 @@ uint64_t DesignMetrics::getExprTreeFUCost(VASTValPtr Root, ValSetTy &Visited)
   return Cost;
 }
 
-uint64_t DesignMetrics::getDatapathFUCost() const {
+uint64_t DesignMetricsImpl::getDatapathFUCost() const {
   uint64_t Cost = 0;
   ValSetTy Visited;
 
@@ -246,15 +258,35 @@ uint64_t DesignMetrics::getDatapathFUCost() const {
   return Cost;
 }
 
+DesignMetrics::DesignMetrics(TargetData *TD)
+  : Impl(new DesignMetricsImpl(TD)) {}
+
+DesignMetrics::~DesignMetrics() { delete Impl; }
+
+void DesignMetrics::visit(Instruction &Inst) {
+  Impl->visit(Inst);
+}
+
+void DesignMetrics::visit(BasicBlock &BB) {
+  Impl->visit(BB);
+}
+
+void DesignMetrics::visit(Function &F) {
+  Impl->visit(F);
+}
+
+uint64_t DesignMetrics::getDatapathFUCost() const {
+  return Impl->getDatapathFUCost();
+}
+
+void DesignMetrics::reset() { Impl->reset(); }
+
 char DesignMetricsPass::ID = 0;
 
 bool DesignMetricsPass::runOnFunction(Function &F) {
   DesignMetrics Metrics(&getAnalysis<TargetData>());
 
-  ReversePostOrderTraversal<BasicBlock*> RPO(&F.getEntryBlock());
-  typedef ReversePostOrderTraversal<BasicBlock*>::rpo_iterator iterator;
-  for (iterator I = RPO.begin(), E = RPO.end(); I != E; ++I)
-    Metrics.visit(**I);
+  Metrics.visit(F);
 
   DEBUG(dbgs() << "Data-path cost of function " << F.getName() << ':'
                << Metrics.getDatapathFUCost() << '\n');
