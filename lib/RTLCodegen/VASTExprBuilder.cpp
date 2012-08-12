@@ -938,15 +938,13 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
 
     switch(Opc) {
     case VASTExpr::dpShl:{
-      VASTValPtr PaddingBits = buildBitSliceExpr(getOrCreateImmediate(0,8), 
-                                                 ImmVal, 0);
+      VASTValPtr PaddingBits = getOrCreateImmediate(0, ImmVal);
       LHS = buildBitSliceExpr(LHS, LHS->getBitWidth() - ImmVal, 0);
       VASTValPtr Ops[] = { LHS, PaddingBits }; 
       return buildBitCatExpr(Ops, BitWidth);
     }
     case VASTExpr::dpSRL:{
-      VASTValPtr PaddingBits = buildBitSliceExpr(getOrCreateImmediate(0,8), 
-                                                 ImmVal, 0);
+      VASTValPtr PaddingBits = getOrCreateImmediate(0, ImmVal);
       LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ImmVal);
       VASTValPtr Ops[] = { PaddingBits, LHS }; 
       return buildBitCatExpr(Ops, BitWidth);
