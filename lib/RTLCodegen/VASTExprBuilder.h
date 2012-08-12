@@ -232,6 +232,11 @@ public:
   }
 
   VASTValPtr buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
+
+  VASTValPtr getSignBit(VASTValPtr V) {
+    return buildBitSliceExpr(V, V->getBitWidth(), V->getBitWidth() - 1);
+  }
+
   VASTValPtr buildBitCatExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
   VASTValPtr buildAndExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
   VASTValPtr buildSelExpr(VASTValPtr Cnd, VASTValPtr TrueV, VASTValPtr FalseV,

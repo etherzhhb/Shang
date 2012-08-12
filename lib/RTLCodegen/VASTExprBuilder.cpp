@@ -952,8 +952,7 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
       return buildBitCatExpr(Ops, BitWidth);
     }
     case VASTExpr::dpSRA:{ 
-      VASTValPtr SignBitOps[] = { buildBitSliceExpr(LHS, LHS->getBitWidth(), 
-                                  LHS->getBitWidth() - 1), 
+      VASTValPtr SignBitOps[] = { getSignBit(LHS),
                                   getOrCreateImmediate(ImmVal, 8) };
       VASTValPtr SignBits = buildExpr(VASTExpr::dpBitRepeat, SignBitOps, 
                                       ImmVal);
