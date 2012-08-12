@@ -693,10 +693,6 @@ public:
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
 
-  float getTotalDelay() const;
-  float getMSBDelay() const;
-  float getLSBDelay() const;
-
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTExpr *A) { return true; }
   static inline bool classof(const VASTNode *A) {
