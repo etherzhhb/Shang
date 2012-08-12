@@ -160,7 +160,7 @@ struct VTMPassConfig : public TargetPassConfig {
     printAndVerify("After logic synthesis.");
 
     // Clean up the MachineFunction.
-    addPass(MachineCSEID);
+    // addPass(MachineCSEID);
     // Clean up the MachineFunction.
     addPass(DeadMachineInstructionElimID);
   }
