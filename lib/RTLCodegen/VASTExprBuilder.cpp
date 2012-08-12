@@ -431,16 +431,18 @@ struct VASTExprOpInfo<VASTExpr::dpAnd> {
 
       LoPt = CountTrailingZeros_64(KnownZeros);
       HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(KnownZeros));
+      assert(HiPt > LoPt && "Bad split point!");
       return true;
     }
 
-    unsigned NotKnownZeros = ~KnownZeros;
+    uint64_t NotKnownZeros = ~KnownZeros;
     if (isShiftedMask_64(NotKnownZeros) || isMask_64(NotKnownZeros)) {
       unsigned NumZeros = CountPopulation_64(KnownZeros);
       if (NumZeros < OperandWidth / 2) return false;
 
       LoPt = CountTrailingZeros_64(NotKnownZeros);
       HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(NotKnownZeros));
+      assert(HiPt > LoPt && "Bad split point!");
       return true;
     }
 
