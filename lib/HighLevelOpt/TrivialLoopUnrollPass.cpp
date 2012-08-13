@@ -14,11 +14,13 @@
 
 #define DEBUG_TYPE "trivial-loop-unroll"
 #include "vtm/Passes.h"
+#include "vtm/DesignMetrics.h"
+#include "vtm/FUInfo.h"
 
 #include "llvm/IntrinsicInst.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Analysis/LoopPass.h"
-#include "llvm/Analysis/CodeMetrics.h"
+#include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Support/CommandLine.h"
@@ -32,34 +34,35 @@
 using namespace llvm;
 
 namespace {
-  class TrivialLoopUnroll : public LoopPass {
-  public:
-    static char ID; // Pass ID, replacement for typeid
-    TrivialLoopUnroll() : LoopPass(ID) {
-      initializeTrivialLoopUnrollPass(*PassRegistry::getPassRegistry());
-    }
+class TrivialLoopUnroll : public LoopPass {
+public:
+  static char ID; // Pass ID, replacement for typeid
+  TrivialLoopUnroll() : LoopPass(ID) {
+    initializeTrivialLoopUnrollPass(*PassRegistry::getPassRegistry());
+  }
 
-    bool runOnLoop(Loop *L, LPPassManager &LPM);
+  bool runOnLoop(Loop *L, LPPassManager &LPM);
 
-    /// This transformation requires natural loop information & requires that
-    /// loop preheaders be inserted into the CFG...
-    ///
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-      AU.addRequired<LoopInfo>();
-      AU.addPreserved<LoopInfo>();
-      AU.addRequiredID(LoopSimplifyID);
-      AU.addPreservedID(LoopSimplifyID);
-      AU.addRequiredID(LCSSAID);
-      AU.addPreservedID(LCSSAID);
-      AU.addRequired<ScalarEvolution>();
-      AU.addPreserved<ScalarEvolution>();
-      // FIXME: Loop unroll requires LCSSA. And LCSSA requires dom info.
-      // If loop unroll does not preserve dom info then LCSSA pass on next
-      // loop will receive invalid dom info.
-      // For now, recreate dom info, if loop is unrolled.
-      AU.addPreserved<DominatorTree>();
-    }
-  };
+  /// This transformation requires natural loop information & requires that
+  /// loop preheaders be inserted into the CFG...
+  ///
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<TargetData>();
+    AU.addRequired<LoopInfo>();
+    AU.addPreserved<LoopInfo>();
+    AU.addRequiredID(LoopSimplifyID);
+    AU.addPreservedID(LoopSimplifyID);
+    AU.addRequiredID(LCSSAID);
+    AU.addPreservedID(LCSSAID);
+    AU.addRequired<ScalarEvolution>();
+    AU.addPreserved<ScalarEvolution>();
+    // FIXME: Loop unroll requires LCSSA. And LCSSA requires dom info.
+    // If loop unroll does not preserve dom info then LCSSA pass on next
+    // loop will receive invalid dom info.
+    // For now, recreate dom info, if loop is unrolled.
+    AU.addPreserved<DominatorTree>();
+  }
+};
 }
 
 char TrivialLoopUnroll::ID = 0;
@@ -76,89 +79,10 @@ Pass *llvm::createTrivialLoopUnrollPass() {
   return new TrivialLoopUnroll();
 }
 
-namespace {
-struct HLSCodeMetrics {
-  unsigned NumInsts, NumMemInsts, NumInlineCandidates;
-  HLSCodeMetrics()
-    : NumInsts(0), NumMemInsts(0), NumInlineCandidates(0) {}
-
-  /// analyzeBasicBlock - Fill in the current structure with information gleaned
-  /// from the specified block.
-  void analyzeBasicBlock(const BasicBlock *BB) {
-    for (BasicBlock::const_iterator II = BB->begin(), E = BB->end();
-         II != E; ++II) {
-      const Instruction *I = II;
-
-      if (isa<PHINode>(I)) continue;           // PHI nodes don't count.
-
-      // Special handling for calls.
-      switch (I->getOpcode()) {
-      case Instruction::And:
-      case Instruction::Xor:
-      case Instruction::Or:
-        continue;
-      case Instruction::Call:
-      case Instruction::Invoke:
-        visitCallInst(I, BB);
-      case Instruction::Load:
-      case Instruction::Store:
-        ++NumMemInsts;
-        continue;
-      }
-
-      // Zero cost instructions.
-      if (I->isCast() || I->isTerminator())
-        continue;
-
-      if ((I->isBinaryOp() || isa<ICmpInst>(I))
-          && (isa<Constant>(I->getOperand(0))||isa<Constant>(I->getOperand(1))))
-        continue;
-
-      if (I->isShift() && isa<Constant>(I->getOperand(1)))
-        continue;
-
-      ++NumInsts;
-    }
-  }
-
-  void visitCallInst(const Instruction *I, const BasicBlock * BB ) {
-    if (const IntrinsicInst *IntrinsicI = dyn_cast<IntrinsicInst>(I)) {
-      switch (IntrinsicI->getIntrinsicID()) {
-      default: break;
-      case Intrinsic::dbg_declare:
-      case Intrinsic::dbg_value:
-      case Intrinsic::invariant_start:
-      case Intrinsic::invariant_end:
-      case Intrinsic::lifetime_start:
-      case Intrinsic::lifetime_end:
-      case Intrinsic::objectsize:
-      case Intrinsic::ptr_annotation:
-      case Intrinsic::var_annotation:
-        // These intrinsics don't count as size.
-        return;
-      }
-    }
-
-    ImmutableCallSite CS(cast<Instruction>(I));
-
-    if (const Function *F = CS.getCalledFunction()) {
-      // If a function is both internal and has a single use, then it is
-      // extremely likely to get inlined in the future (it was probably
-      // exposed by an interleaved devirtualization pass).
-      if (!CS.isNoInline() && F->hasInternalLinkage() && F->hasOneUse())
-        ++NumInlineCandidates;
-    }
-  }
-
-  unsigned getSize() const {
-    // FIXME: Unrolling memory operations introduce extra control cost, model
-    // the cost correctly.
-    return NumMemInsts + NumMemInsts * 8 + NumInlineCandidates * 256;
-  }
-};
-}
-
 bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
+  // Only unroll the deepest loops in the loop nest.
+  if (!L->empty()) return false;
+
   LoopInfo *LI = &getAnalysis<LoopInfo>();
   ScalarEvolution *SE = &getAnalysis<ScalarEvolution>();
 
@@ -166,12 +90,6 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   DEBUG(dbgs() << "Loop Unroll: F[" << Header->getParent()->getName()
         << "] Loop %" << Header->getName() << "\n");
   (void)Header;
-
-  // Determine the current unrolling threshold.  While this is normally set
-  // from UnrollThreshold, it is overridden to a smaller value if the current
-  // function is marked as optimize-for-size, and the unroll threshold was
-  // not user specified.
-  unsigned Threshold = 16;
 
   // Find trip count and trip multiple if count is not available
   unsigned TripCount = 0;
@@ -187,50 +105,53 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Use a default unroll-count if the user doesn't specify a value
   // and the trip count is a run-time value.  The default is different
   // for run-time or compile-time trip count loops.
-  unsigned Count = 0;
+  // Conservative heuristic: if we know the trip count, see if we can
+  // completely unroll (subject to the threshold, checked below); otherwise
+  // try to find greatest modulo of the trip count which is still under
+  // threshold value.
+  if (TripCount == 0)
+    return false;
 
-  if (Count == 0) {
-    // Conservative heuristic: if we know the trip count, see if we can
-    // completely unroll (subject to the threshold, checked below); otherwise
-    // try to find greatest modulo of the trip count which is still under
-    // threshold value.
-    if (TripCount == 0)
-      return false;
-    Count = TripCount;
+  unsigned Count = TripCount;
+
+  DesignMetrics Metrics(&getAnalysis<TargetData>());
+
+  LoopBlocksDFS DFS(L);
+  DFS.perform(LI);
+
+  // Visit the blocks in top-order.
+  Metrics.visit(DFS.beginRPO(), DFS.endRPO());
+
+  unsigned NumInlineCandidates = Metrics.getNumCalls();
+
+  uint64_t LoopSize = Metrics.getResourceCost() * Count;
+  DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
+
+  if (NumInlineCandidates != 0) {
+    DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
+    return false;
   }
 
-  HLSCodeMetrics Metrics;
-  for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
-    I != E; ++I)
-    Metrics.analyzeBasicBlock(*I);
-  unsigned NumInlineCandidates = Metrics.NumInlineCandidates;
+  // Compute the unroll count according to the size of the loop.
+  uint64_t Size = (uint64_t)LoopSize * Count;
+  // FIXME: Read the threshold from the constraints script.
+  unsigned Threshold = VFUs::MulCost[63] * 8;
 
-  // Don't allow an estimate of size zero.  This would allows unrolling of loops
-  // with huge iteration counts, which is a compile time problem even if it's
-  // not a problem for code quality.
-  if (unsigned LoopSize = Metrics.getSize()) {
-    DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
-    if (NumInlineCandidates != 0) {
-      DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
+  if (TripCount != 1 && Size > Threshold) {
+    DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
+          << " because size: " << Size << ">" << Threshold << "\n");
+    if (TripCount) {
+      // Reduce unroll count to be modulo of TripCount for partial unrolling
+      Count = Threshold / LoopSize;
+      while (Count != 0 && TripCount % Count != 0)
+        --Count;
+    }
+
+    if (Count < 2) {
+      DEBUG(dbgs() << "  could not unroll partially\n");
       return false;
     }
-    uint64_t Size = (uint64_t)LoopSize * Count;
-    if (TripCount != 1 && Size > Threshold) {
-      DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
-            << " because size: " << Size << ">" << Threshold << "\n");
-      if (TripCount) {
-        // Reduce unroll count to be modulo of TripCount for partial unrolling
-        Count = Threshold / LoopSize;
-        while (Count != 0 && TripCount % Count != 0)
-          --Count;
-      }
-
-      if (Count < 2) {
-        DEBUG(dbgs() << "  could not unroll partially\n");
-        return false;
-      }
-      DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
-    }
+    DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
   }
 
   // Unroll the loop.
