@@ -871,6 +871,11 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
       // operands together, still, we may pad the higher bit for additions.
       Hi = padHigherBits(Hi, BitWidth - TailingZeros, false);
 
+    // Because the operand of addition is truncated, so it may have a smaller
+    // bitwidth.
+    if (NotEndWithZeros->getBitWidth() < TailingZeros)
+      NotEndWithZeros = padHigherBits(NotEndWithZeros, TailingZeros, false);
+
     // We can directly forward the lower part.
     VASTValPtr Lo = buildBitSliceExpr(NotEndWithZeros, TailingZeros, 0);
     // Concatenate them together.
