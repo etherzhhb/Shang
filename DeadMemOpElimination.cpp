@@ -140,6 +140,11 @@ DeadMemOpElimination::handleMemOp(instr_iterator I, DefMapTy &Defs,
   // Now MI is a load.
   if (!canHandleLastStore) return I;
 
+  MachineMemOperand *LastMO = *LastMI->memoperands_begin();
+  // We can only handle last store if and only if their memory operand have
+  // the must-alias address and the same size.
+  if (LastMO->getSize() != MO->getSize()) return I;
+
   // Loading the value that just be stored, the load is not necessary.
   MachineOperand LoadedMO = MI->getOperand(0);
   MachineOperand StoredMO = LastMI->getOperand(2);
