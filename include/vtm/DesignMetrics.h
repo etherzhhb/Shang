@@ -37,13 +37,25 @@ public:
   // Visit the LLVM IR and collect the information to estimate the metrics of
   // the design.
   void visit(Instruction &Inst);
+  void visit(Instruction *Inst) { visit(*Inst); }
+
   void visit(BasicBlock &BB);
+  void visit(BasicBlock *BB) { visit(*BB); }
+
   void visit(Function &F);
+  void visit(Function *F) { visit(*F); }
+
+  template<typename Iterator>
+  void visit(Iterator I, Iterator E) {
+    while (I != E)
+      visit(*I++);
+  }
 
   void reset();
 
   // Visit all data-path expression and compute the cost.
   uint64_t getResourceCost() const;
+  unsigned getNumCalls() const;
 };
 }
 

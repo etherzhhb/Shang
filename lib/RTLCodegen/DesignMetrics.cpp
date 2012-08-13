@@ -62,7 +62,7 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   ValSetTy LiveOutedVal;
 
   ValSetTy AddressBusFanins, DataBusFanins;
-
+  unsigned NumCalls;
   // TODO: Model the control-path, in the control-path, we can focus on the MUX
   // in the control-path, note that the effect of FU allocation&binding
   // algorithm should also be considered when estimating resource usage.
@@ -90,7 +90,7 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   void visitLoadInst(LoadInst &I);
   void visitStoreInst(StoreInst &I);
 public:
-  explicit DesignMetricsImpl(TargetData *TD) : Builder(*this, TD) {}
+  explicit DesignMetricsImpl(TargetData *TD) : Builder(*this, TD), NumCalls(0){}
 
   void visit(Instruction &Inst);
   void visit(BasicBlock &BB);
@@ -101,11 +101,13 @@ public:
     LiveOutedVal.clear();
     AddressBusFanins.clear();
     DataBusFanins.clear();
+    NumCalls = 0;
   }
 
   // Visit all data-path expression and compute the cost.
   uint64_t getDatapathFUCost() const;
   uint64_t getMemBusMuxCost() const;
+  unsigned getNumCalls() const { return NumCalls; }
 };
 
 struct DesignMetricsPass : public FunctionPass {
@@ -183,6 +185,8 @@ void DesignMetricsImpl::visit(Instruction &Inst) {
     visitLoadInst(*LI);
   else if (StoreInst *SI = dyn_cast<StoreInst>(&Inst))
     visitStoreInst(*SI);
+  else if (isa<CallInst>(Inst))
+    ++NumCalls;
 }
 
 void DesignMetricsImpl::visit(BasicBlock &BB) {
@@ -309,6 +313,8 @@ void DesignMetrics::visit(BasicBlock &BB) {
 void DesignMetrics::visit(Function &F) {
   Impl->visit(F);
 }
+
+unsigned DesignMetrics::getNumCalls() const { return Impl->getNumCalls(); }
 
 uint64_t DesignMetrics::getResourceCost() const {
   return Impl->getDatapathFUCost() + Impl->getMemBusMuxCost();
