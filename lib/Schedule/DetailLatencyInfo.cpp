@@ -323,8 +323,9 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
   const MCInstrDesc &TID = MI->getDesc();
   bool IsControl = VInstrInfo::isControl(TID.getOpcode());
 
-  // Iterate from use to define.
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+  // Iterate from use to define, ignore the the incoming value of PHINodes.
+  // Because the incoming value may be not visited yet.
+  for (unsigned i = 0, e = MI->isPHI() ? 1 : MI->getNumOperands(); i != e; ++i){
     const MachineOperand &MO = MI->getOperand(i);
 
     // Only care about a use register.
