@@ -316,8 +316,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
-                                    DepLatInfoTy &CurLatInfo,
-                                    bool IgnorePHISrc) {
+                                    DepLatInfoTy &CurLatInfo) {
   const MachineBasicBlock *CurMBB = MI->getParent();
 
   const MCInstrDesc &TID = MI->getDesc();
@@ -337,7 +336,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
     assert(SrcMI && "Virtual register use without define!");
 
     // Do we ignore phi as dependence? Also ignore self loop.
-    if ((SrcMI->isPHI() && IgnorePHISrc) || SrcMI == MI) continue;
+    if (SrcMI == MI) continue;
     unsigned OpSize = VInstrInfo::getBitWidth(MO);
 
     float OpDelay = 0.0f;
@@ -399,7 +398,7 @@ bool DetialLatencyInfo::runOnMachineFunction(MachineFunction &MF) {
   // Iterate the BBs in topological order.
   for (rpo_it BI = Ord.begin(), BE = Ord.end(); BI != BE; ++BI)
     for (mi_it I = (*BI)->instr_begin(), E = (*BI)->instr_end(); I != E; ++I)
-      addInstrInternal(I,  LatencyMap[I], false);
+      addInstrInternal(I,  LatencyMap[I]);
 
   return false;
 }

@@ -130,8 +130,7 @@ private:
 
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
-                                       DepLatInfoTy &CurLatInfo,
-                                       bool IgnorePHISrc);
+                                       DepLatInfoTy &CurLatInfo);
 
 public:
   DetialLatencyInfo();

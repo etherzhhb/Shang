@@ -274,6 +274,7 @@ unsigned SDCSchedulingBase::createStepVariable(const VSUnit* U, unsigned Col) {
   DEBUG(dbgs() <<"Col#" << Col << " name: " <<SVStart << "\n");
   set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
   set_int(lp, Col, TRUE);
+  set_lowbo(lp, Col, ScheduleLB);
   return Col + 1;
 }
 

@@ -330,6 +330,7 @@ public:
   }
 
 protected:
+  const unsigned ScheduleLB;
   lprec *lp;
 
   // Helper class to build the object function for lp.
@@ -358,7 +359,7 @@ protected:
   typedef SUI2IdxMapTy::const_iterator SUIdxIt;
   SUI2IdxMapTy SUIdx;
 
-  SDCSchedulingBase() : lp(0) {}
+  SDCSchedulingBase(unsigned ScheduleLB) : ScheduleLB(ScheduleLB), lp(0) {}
 
   typedef std::vector<SoftConstraint> SoftCstrVecTy;
   SoftCstrVecTy SoftCstrs;
@@ -395,7 +396,8 @@ class SDCScheduler : public SDCSchedulingBase, public Scheduler<IsCtrlPath> {
   typedef SDCSchedulingBase::iterator iterator;
 
 public:
-  explicit SDCScheduler(VSchedGraph &S) : Scheduler<IsCtrlPath>(S) {}
+  explicit SDCScheduler(VSchedGraph &S)
+    : SDCSchedulingBase(S.EntrySlot), Scheduler<IsCtrlPath>(S) {}
 
   unsigned createLPAndVariables() {
     return createLPAndVariables(begin(), end());
