@@ -63,7 +63,6 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool replaceCopyByMove(MachineInstr * Inst);
   void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
-  void FoldAdd(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
 
   bool canbeFold(MachineInstr *MI) const;
 
@@ -241,18 +240,6 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
 bool FixMachineCode::canbeFold(MachineInstr *MI) const {
   if (MI->getOpcode() == VTM::VOpMove) return true;
 
-  if (MI->getOpcode() == VTM::VOpAdd || MI->getOpcode() == VTM::VOpAdd_c) {
-    // Fold the add only if carry input is 0.
-    if (!MI->getOperand(3).isImm() || MI->getOperand(3).getImm() != 0)
-      return false;
-
-    if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
-      return true;
-
-    if (MI->getOperand(2).isImm() && MI->getOperand(2).getImm() == 0)
-      return true;
-  }
-
   return false;
 }
 
@@ -312,27 +299,6 @@ void FixMachineCode::FoldMove(MachineInstr *MI,
   if (MRI->use_empty(DstReg)) MI->eraseFromParent();
 }
 
-void FixMachineCode::FoldAdd(MachineInstr *MI,
-                             std::vector<MachineInstr*> &InstrToFold) {
-  unsigned NoneZeroIdx = 1;
-  if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
-    NoneZeroIdx = 2;
-
-  // Change the add to bitcat(0, NoneZeroOperand) to construct the result.
-  MI->setDesc(TII->get(VTM::VOpBitCat));
-  MI->RemoveOperand(3);
-
-  if (NoneZeroIdx != 2) {
-    unsigned NoneZeroReg = MI->getOperand(NoneZeroIdx).getReg();
-    MI->getOperand(2).ChangeToRegister(NoneZeroReg, false);
-  }
-
-  // Build the carry bit of the original
-  MachineOperand &DummyCarry = MI->getOperand(1);
-  DummyCarry.ChangeToImmediate(0);
-  VInstrInfo::setBitWidth(DummyCarry, 1);
-}
-
 void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
   while (!InstrToFold.empty()) {
     MachineInstr *MI = InstrToFold.back();
@@ -341,10 +307,6 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
     switch (MI->getOpcode()) {
     case VTM::VOpMove:
       FoldMove(MI, InstrToFold);
-      break;
-    case VTM::VOpAdd:
-    case VTM::VOpAdd_c:
-      FoldAdd(MI, InstrToFold);
       break;
     default:
       llvm_unreachable("Trying to fold unexpected instruction!");
