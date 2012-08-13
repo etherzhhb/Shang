@@ -56,6 +56,7 @@ Pass *createPrebindUnbalanceMuxPass();
 Pass *createBasicPrebindMuxPass();
 Pass *createMemOpsFusingPass();
 Pass *createDeadMemOpEliminationPass();
+Pass *createHoistDatapathPass();
 Pass *createDetialLatencyInfoPass();
 Pass *createVPreRegAllocSchedPass();
 

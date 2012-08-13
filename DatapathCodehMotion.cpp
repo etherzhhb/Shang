@@ -17,6 +17,7 @@
 
 #include "vtm/Utilities.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -52,7 +53,14 @@ bool hoistDatapathOp(MachineInstr *MI, MachineDominatorTree  *DT,
   if (MBBToHoist == CurMBB) return false;
 
   MI->removeFromParent();
-  MBBToHoist->insert(MBBToHoist->getFirstInstrTerminator(), MI);
+
+  MachineBasicBlock::instr_iterator IP = MBBToHoist->getFirstInstrTerminator();
+
+  // Insert the imp_def before the PHI incoming copies.
+  while (llvm::prior(IP)->getOpcode() == VTM::VOpMvPhi)
+    --IP;
+
+  MBBToHoist->insert(IP, MI);
   return true;
 }
 
@@ -80,4 +88,32 @@ bool hoistDatapathOpInSuccs(MachineBasicBlock *MBB, MachineDominatorTree *DT,
 
   return MadeChange;
 }
+
+struct HoistDatapathPass : public MachineFunctionPass {
+  static char ID;
+  HoistDatapathPass() : MachineFunctionPass(ID) {}
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.setPreservesCFG();
+    AU.addRequired<MachineDominatorTree>();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) {
+    bool Changed = false;
+    MachineDominatorTree &DT = getAnalysis<MachineDominatorTree>();
+    MachineRegisterInfo &MRI = MF.getRegInfo();
+
+    for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+      Changed |= hoistDatapathOpInMBB(I, &DT, &MRI);
+
+    return Changed;
+  }
+};
+
+Pass *createHoistDatapathPass() {
+  return new llvm::HoistDatapathPass();
 }
+}
+
+char llvm::HoistDatapathPass::ID = 0;

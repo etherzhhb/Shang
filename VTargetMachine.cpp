@@ -163,6 +163,7 @@ struct VTMPassConfig : public TargetPassConfig {
     // addPass(MachineCSEID);
     // Clean up the MachineFunction.
     addPass(DeadMachineInstructionElimID);
+    PM->add(createHoistDatapathPass());
   }
 
   virtual void addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
