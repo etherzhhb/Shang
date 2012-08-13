@@ -14,20 +14,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "vtm/DesignMetrics.h"
+#include "vtm/FUInfo.h"
 #include "vtm/Passes.h"
-#include "llvm/CallingConv.h"
-#include "llvm/Instructions.h"
-#include "llvm/IntrinsicInst.h"
-#include "llvm/Module.h"
-#include "llvm/Type.h"
+
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/Support/CallSite.h"
-#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/InlinerPass.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Target/TargetData.h"
 #include "llvm/Support/raw_ostream.h"
-#define DEBUG_TYPE "AlwaysInlineFunction"
+#define DEBUG_TYPE "vtm-inliner"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -37,22 +35,68 @@ namespace {
 // AlwaysInliner only inlines functions that are mark as "always inline".
 class HLSInliner : public Inliner {
   InlineCostAnalyzer CA;
+  TargetData *TD;
+  CallGraph *CG;
+  DenseMap<const Function*, uint64_t> CachedCost;
 public:
   // Use extremely low threshold.
-  HLSInliner() : Inliner(ID) {
+  HLSInliner() : Inliner(ID), TD(0) {
     initializeHLSInlinerPass(*PassRegistry::getPassRegistry());
   }
+
   static char ID; // Pass identification, replacement for typeid
+
+  uint64_t lookupOrComputeCost(Function *F) {
+    uint64_t &Cost = CachedCost[F];
+
+    if (Cost) return Cost;
+
+    DesignMetrics Metrics(TD);
+    Metrics.visit(*F);
+
+    // The cost increment after the function is inlined.
+    Cost = Metrics.getResourceCost();
+    DEBUG(dbgs() << "Inline cost of function: " << F->getName() << ':'
+                 << Cost << '\n' << "Number of CallSites: " << F->getNumUses()
+                 << '\n');
+
+    Cost *= F->getNumUses() - 1;
+    // Make sure we have a no-zero cost.
+    Cost = std::max(UINT64_C(1), Cost);
+
+    return Cost;
+  }
+
   InlineCost getInlineCost(CallSite CS) {
     Function *F = CS.getCalledFunction();
     if (!F || F->isDeclaration() ||  F->hasFnAttr(Attribute::NoInline))
       return InlineCost::getNever();
 
-    if (F->hasFnAttr(Attribute::AlwaysInline)) return InlineCost::getAlways();
+    CallGraphNode *CGN = (*CG)[F];
+    // Only try to inline the leaves in call graph.
+    if (!CGN->empty()) return InlineCost::getNever();
 
-    return CA.getInlineCost(CS, -1);
+    DEBUG(dbgs() << "Function: " << F->getName() << '\n');
+    uint64_t IncreasedCost = lookupOrComputeCost(F);
+    DEBUG(dbgs() << "Increased cost: " << IncreasedCost << ' '
+                 << "Threshold: " << VFUs::MulCost[63] * 8 << '\n');
+    // FIXME: Read the threshold from the constraints script.
+    if (IncreasedCost < VFUs::MulCost[63] * 8) {
+      DEBUG(dbgs() << "...going to inline function\n");
+      return InlineCost::getAlways();
+    }
+
+    return InlineCost::getNever();
   }
-  virtual bool doInitialization(CallGraph &CG);
+
+  bool doInitialization(CallGraph &CG);
+
+  void releaseMemory() { CachedCost.clear(); }
+
+  void getAnalysisUsage(AnalysisUsage &Info) const {
+    Info.addRequired<TargetData>();
+    Inliner::getAnalysisUsage(Info);
+  }
 };
 }
 
@@ -70,25 +114,8 @@ Pass *llvm::createHLSInlinerPass() {
 // doInitialization - Initializes the vector of functions that have not
 // been annotated with the "always inline" attribute.
 bool HLSInliner::doInitialization(CallGraph &CG) {
-  Module &M = CG.getModule();
-  bool Changed = false;
-
-  for (Module::iterator I = M.begin(), E = M.end();
-       I != E; ++I) {
-    Function *F = I;
-
-    CallGraphNode *CGN = CG[F];
-
-    if (F->isDeclaration() || F->hasFnAttr(Attribute::NoInline)) {
-      DEBUG(dbgs() << "No inline " << F->getName() << '\n');
-      continue;
-    }
-
-    // Inlining the functions with only 1 caller will never increase
-    // the module size.
-    if (CGN->getNumReferences() == 1)
-      F->addAttribute(~0, Attribute::AlwaysInline);
-  }
-
-  return Changed;
+  this->CG = &CG;
+  TD = getAnalysisIfAvailable<TargetData>();
+  assert(TD && "Cannot initialize target data!");
+  return false;
 }
