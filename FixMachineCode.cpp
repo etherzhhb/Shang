@@ -27,7 +27,7 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-fix-machine-code"
 #include "llvm/Support/Debug.h"
@@ -80,6 +80,16 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   std::vector<MachineInstr*> InstrToFold, PNs;
 
+  // Place the BBs in topological order this can benefit some of the later
+  // algorithms.
+  typedef po_iterator<MachineBasicBlock*> po_it;
+  for (po_it I = po_begin(&MF.front()), E = po_end(&MF.front()); I != E; ++I) {
+    MachineBasicBlock *MBB = *I;
+    MF.splice(MF.begin(), MBB);
+  }
+
+  // Reset the MBB numbering.
+  MF.RenumberBlocks();
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
@@ -343,12 +353,19 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
 
 void FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
   MachineOperand &SrcMO = Inst->getOperand(1);
-  MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
-  MachineOperand &SrcDefMO = DefMI->getOperand(0);
-  unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
-  VInstrInfo::setBitWidth(SrcMO, DstWidth);
-  VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
-  VInstrInfo::ChangeCopyToMove(Inst);
+  if (unsigned Reg = SrcMO.getReg()) {
+    MachineInstr *DefMI = MRI->getVRegDef(Reg);
+    MachineOperand &SrcDefMO = DefMI->getOperand(0);
+    unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
+    VInstrInfo::setBitWidth(SrcMO, DstWidth);
+    VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
+    VInstrInfo::ChangeCopyToMove(Inst);
+    return;
+  } 
+
+  Inst->RemoveOperand(1);
+  Inst->setDesc(VInstrInfo::getDesc(VTM::IMPLICIT_DEF));
+  handleImplicitDefs(Inst);
 }
 
 Pass *llvm::createFixMachineCodePass(bool IsPreOpt) {
