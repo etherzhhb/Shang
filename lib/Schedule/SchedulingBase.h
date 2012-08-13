@@ -378,7 +378,7 @@ protected:
 template<bool IsCtrlPath>
 class SDCScheduler : public SDCSchedulingBase, public Scheduler<IsCtrlPath> {
   // The schedule should satisfy the dependences.
-  inline void addDependencyConstraints(lprec *lp);
+  void addDependencyConstraints(lprec *lp);
 
   using Scheduler<IsCtrlPath>::G;
   typedef typename Scheduler<IsCtrlPath>::const_dep_it const_dep_it;

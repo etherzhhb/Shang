@@ -622,19 +622,9 @@ private:
   struct BBInfo {
     VSUnit *Entry, *Exit;
     unsigned II;
-    unsigned StartSlotFromEntry, ExitSlotFromEntry;
-    int MiniInterBBSlack;
 
     unsigned getTotalSlot() const {
       return Exit->getSlot() - Entry->getSlot();
-    }
-
-    int getExtraLatencyFrom(const BBInfo &Pred) const {
-      int ExtraLatency =
-        int(StartSlotFromEntry) - int(Pred.ExitSlotFromEntry) - MiniInterBBSlack;
-      // We may get a negative extra latency which means there is no extra
-      // latency.
-      return std::max(0, ExtraLatency);
     }
   };
 
@@ -661,38 +651,6 @@ private:
     return BBInfoMap[MBB->getNumber()];
   }
 
-  // Helper class to calculate the shortest path from the exit slot of the
-  // source BB to the entry slot of the sink BB.
-  struct BBDistanceMatrix {
-    // Remember the distance from source MBB, the MBB is indexed by its number.
-    typedef std::map<unsigned, unsigned> DistanceVectorTy;
-    // Remember the distance for all MBB, the MBB is indexed by its number.
-    typedef std::map<unsigned, DistanceVectorTy> DistanceMatrixTy;
-    DistanceMatrixTy Matrix;
-
-    unsigned lookupDist(const MachineBasicBlock *Src,
-                        const MachineBasicBlock *Snk) const {
-      return lookupDist(Src->getNumber(), Snk->getNumber());
-    }
-
-    unsigned lookupDist(unsigned SrcBBNum, unsigned SnkBBNum) const {
-        DistanceMatrixTy::const_iterator vec_at = Matrix.find(SnkBBNum);
-        assert(vec_at != Matrix.end() && "Bad SnkBB!");
-        DistanceVectorTy::const_iterator dist_at
-          = vec_at->second.find(SrcBBNum);
-        assert(dist_at != vec_at->second.end() && "Bad SrcBB!");
-        return dist_at->second;
-    }
-
-    // Build the shortest path matrix.
-    // FIXME: We can build the shortest path on demand.
-    void initialMatrix(const VSchedGraph &G);
-    void accumulateDistanceFromPred(const MachineBasicBlock *MBB,
-                                    const VSchedGraph &G);
-  };
-
-  BBDistanceMatrix BBDC;
-
   // If the MI is a branch instruction that branching back to the entry of its
   // parent BB, remember it.
   bool rememberLoopOp(MachineInstr *MI);
@@ -707,13 +665,6 @@ private:
 
   void addSoftConstraintsToBreakChains(SDCSchedulingBase &S);
 
-  // Insert the delay block between BBs, because the scheduler assume that
-  // EndSlot(SrcBB) == StartSlot(SnkBB) for all Edges (SrcBB, Snk) in CFG,
-  // however the equation may not hold, hence we need to:
-  // 1. Calculate the inter-bb-slacks, and
-  // 2. Insert extra delay blocks to eliminate the negative slacks.
-  unsigned calculateMinSlotsFromEntry(VSUnit *BBEntry);
-  int calculateMinInterBBSlack(BBInfo &Info);
   void insertDelayBlocks();
 
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
@@ -810,8 +761,7 @@ public:
     // Initialize the rest of the BBInfo.
     Info.Entry = lookupSUnit(MBB);
     assert(Info.Entry && "Create terminator before creating entry!");
-    Info.ExitSlotFromEntry = Info.StartSlotFromEntry = Info.II = 0;
-    Info.MiniInterBBSlack = 0;
+    Info.II = 0;
 
     // Add the current BBInfo to BBInfoMap.
     BBInfoMap.push_back(Info);
@@ -938,18 +888,6 @@ public:
     return getBBInfo(MBB).getTotalSlot();
   }
 
-  inline unsigned getExtraLatency(const MachineBasicBlock *Src,
-                                  const MachineBasicBlock *Dst) const {
-    return getBBInfo(Dst).getExtraLatencyFrom(getBBInfo(Src));
-  }
-
-  unsigned getInterBBSlack(const VSUnit *Src, const VSUnit *Snk) const {
-    return getInterBBSlack(Src->getParentBB()->getNumber(),
-                           Snk->getParentBB()->getNumber());
-  }
-
-  unsigned getInterBBSlack(unsigned SrcBBNum, unsigned SnkBBNum) const;
-
   // II for Modulo schedule
   inline bool isPipelined(const MachineBasicBlock *MBB) const {
     return getII(MBB) < getTotalSlot(MBB);
@@ -988,7 +926,6 @@ public:
   // scheduled, this can reduce register usage.
   void scheduleControlPath();
   void scheduleDatapath();
-  void updateInterBBSlack();
   unsigned emitSchedule();
   //}
 };

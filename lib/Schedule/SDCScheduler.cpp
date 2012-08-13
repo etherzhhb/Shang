@@ -259,7 +259,7 @@ struct ConstraintHelper {
     RHS -= 0;
 
     if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
-      report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
+      report_fatal_error("SDCScheduler: Can NOT add dependency constraints"
                          " at VSUnit " + utostr_32(DstIdx));
   }
 };
@@ -473,7 +473,7 @@ bool SDCSchedulingBase::solveLP(lprec *lp) {
 }
 
 template<bool IsCtrlPath>
-inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
+void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
   for(VSchedGraph::const_iterator I = begin(), E = end(); I != E; ++I) {
     const VSUnit *U = *I;
     ConstraintHelper H;
@@ -486,13 +486,7 @@ inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       const VSUnit *Src = *DI;
 
       H.resetSrc(Src, this);
-
-      // We may need to consider the inter-bb slack to avoid scheduling U to
-      // invalid slot.
-      int InterBBSlack = 0;
-      if (!IsCtrlPath) InterBBSlack = G.getInterBBSlack(Src, U);
-      
-      H.addConstraintToLP(DI.getEdge(), lp, InterBBSlack);
+      H.addConstraintToLP(DI.getEdge(), lp, 0);
     }
 
     if (IsCtrlPath) continue;
@@ -506,13 +500,7 @@ inline void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       if (!Use->isControl()) continue;
 
       H.resetDst(Use, this);
-
-      // We may need to consider the inter-bb slack to avoid scheduling U to
-      // invalid slot.
-      int InterBBSlack = 0;
-      if (!IsCtrlPath) InterBBSlack = G.getInterBBSlack(U, Use);
-
-      H.addConstraintToLP(Use->getEdgeFrom<IsCtrlPath>(U), lp, InterBBSlack);
+      H.addConstraintToLP(Use->getEdgeFrom<IsCtrlPath>(U), lp, 0);
     }
   }
 }

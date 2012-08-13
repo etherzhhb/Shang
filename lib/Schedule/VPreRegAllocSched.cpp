@@ -1220,8 +1220,6 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
     (void) success;
   }
 
-  G.updateInterBBSlack();
-
   G.scheduleDatapath();
 }
 

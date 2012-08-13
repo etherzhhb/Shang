@@ -698,19 +698,16 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
 }
 
 void VSchedGraph::insertDelayBlock(const BBInfo &Info) {
-  MachineBasicBlock *MBB = Info.Entry->getParentBB();
+  VSUnit *BBEntry = Info.Entry;
+  MachineBasicBlock *MBB = BBEntry->getParentBB();
 
   typedef VSUnit::dep_iterator dep_it;
   for (dep_it I = cp_begin(Info.Entry), E = cp_end(Info.Entry); I != E; ++I) {
     VSUnit *PredTerminator = *I;
-    //DEBUG(dbgs() << "MBB#" << PredTerminator->getParentBB()->getNumber()
-    //             << "->MBB#" << BBEntry->getParentBB()->getNumber() << " slack: "
-    //             << (BBEntry->getSlot() - PredTerminator->getSlot()) << '\n');
 
-    MachineBasicBlock *PredBB = PredTerminator->getParentBB();
-    const BBInfo &PredInfo = getBBInfo(PredBB);
-    if (int ExtraLatency = Info.getExtraLatencyFrom(PredInfo))
-      insertDelayBlock(PredBB, MBB, ExtraLatency);
+    int ExtraLatency = int(BBEntry->getSlot()) - int(PredTerminator->getSlot());
+    if (ExtraLatency > 0)
+      insertDelayBlock(PredTerminator->getParentBB(), MBB, ExtraLatency);
   }
 }
 
@@ -719,7 +716,7 @@ void VSchedGraph::insertDelayBlocks() {
   // we should use the index to iterate over the exiting BBInfos, and the newly
   // pushed BBInfos will not be visited.
   for (unsigned i = 0, e = BBInfoMap.size(); i != e; ++i)
-    if (BBInfoMap[i].MiniInterBBSlack < 0) insertDelayBlock(BBInfoMap[i]);
+    insertDelayBlock(BBInfoMap[i]);
 }
 
 namespace {
@@ -769,9 +766,9 @@ struct ChainBreaker {
     return Def.getParentBB() == MBB ? Def.ChainStart : StartSlot;
   }
 
-  int getSlack(unsigned UseSlot, unsigned UseBBNum,
-               unsigned DefSlot, unsigned DefBBNum) const {
-    int Slack = UseSlot - DefSlot - G.getInterBBSlack(DefBBNum, UseBBNum);
+  inline int getSlack(unsigned UseSlot, unsigned UseBBNum,
+                      unsigned DefSlot, unsigned DefBBNum) const {
+    int Slack = UseSlot - DefSlot;
 
     return Slack;
   }
