@@ -61,7 +61,7 @@ struct FixMachineCode : public MachineFunctionPass {
   bool handleImplicitDefs(MachineInstr *MI);
   void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
 
-  void replaceCopyByMove(MachineInstr * Inst);
+  bool replaceCopyByMove(MachineInstr * Inst);
   void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
   void FoldAdd(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
 
@@ -130,7 +130,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (handleImplicitDefs(Inst)) continue;
 
       // Replace Copy by Move, which can be predicated.
-      if (Inst->isCopy()) replaceCopyByMove(Inst);
+      if (Inst->isCopy() && replaceCopyByMove(Inst))
+        continue;
 
       // Try to eliminate unnecessary moves.
       if (canbeFold(Inst)) {
@@ -279,7 +280,7 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
   }
 
   if (use_empty) MI->removeFromParent();
-  return false;
+  return use_empty;
 }
 
 void FixMachineCode::FoldMove(MachineInstr *MI,
@@ -351,7 +352,7 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
   }
 }
 
-void FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
+bool FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
   MachineOperand &SrcMO = Inst->getOperand(1);
   if (unsigned Reg = SrcMO.getReg()) {
     MachineInstr *DefMI = MRI->getVRegDef(Reg);
@@ -360,12 +361,12 @@ void FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
     VInstrInfo::setBitWidth(SrcMO, DstWidth);
     VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
     VInstrInfo::ChangeCopyToMove(Inst);
-    return;
+    return false;
   } 
 
   Inst->RemoveOperand(1);
   Inst->setDesc(VInstrInfo::getDesc(VTM::IMPLICIT_DEF));
-  handleImplicitDefs(Inst);
+  return handleImplicitDefs(Inst);
 }
 
 Pass *llvm::createFixMachineCodePass(bool IsPreOpt) {
