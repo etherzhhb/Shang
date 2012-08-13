@@ -43,7 +43,7 @@ public:
   void reset();
 
   // Visit all data-path expression and compute the cost.
-  uint64_t getDatapathFUCost() const;
+  uint64_t getResourceCost() const;
 };
 }
 

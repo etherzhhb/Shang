@@ -61,6 +61,8 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   typedef std::set<VASTValue*> ValSetTy;
   ValSetTy LiveOutedVal;
 
+  ValSetTy AddressBusFanins, DataBusFanins;
+
   // TODO: Model the control-path, in the control-path, we can focus on the MUX
   // in the control-path, note that the effect of FU allocation&binding
   // algorithm should also be considered when estimating resource usage.
@@ -83,6 +85,10 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   // tree, insert all visited data-path nodes into Visited.
   uint64_t getExprTreeFUCost(VASTValPtr Root, ValSetTy &Visited) const;
   uint64_t getFUCost(VASTValue *V) const;
+
+  // Collect the fanin information of the memory bus.
+  void visitLoadInst(LoadInst &I);
+  void visitStoreInst(StoreInst &I);
 public:
   explicit DesignMetricsImpl(TargetData *TD) : Builder(*this, TD) {}
 
@@ -93,10 +99,13 @@ public:
   void reset() {
     DPContainer.reset();
     LiveOutedVal.clear();
+    AddressBusFanins.clear();
+    DataBusFanins.clear();
   }
 
   // Visit all data-path expression and compute the cost.
   uint64_t getDatapathFUCost() const;
+  uint64_t getMemBusMuxCost() const;
 };
 
 struct DesignMetricsPass : public FunctionPass {
@@ -139,6 +148,22 @@ VASTValPtr DesignMetricsImpl::getAsOperand(Value *Op, bool GetAsInlineOperand) {
   return ValueOp;
 }
 
+void DesignMetricsImpl::visitLoadInst(LoadInst &I) {
+  Value *Address = I.getPointerOperand();
+  if (VASTValPtr V = Builder.lookupExpr(Address))
+    AddressBusFanins.insert(V.get());
+}
+
+void DesignMetricsImpl::visitStoreInst(StoreInst &I) {
+  Value *Address = I.getPointerOperand();
+  if (VASTValPtr V = Builder.lookupExpr(Address))
+    AddressBusFanins.insert(V.get());
+
+  Value *Data = I.getValueOperand();
+  if (VASTValPtr V = Builder.lookupExpr(Data))
+    DataBusFanins.insert(V.get());
+}
+
 void DesignMetricsImpl::visit(Instruction &Inst) {
   if (VASTValPtr V = Builder.visit(Inst)) {
     Builder.indexVASTExpr(&Inst, V);
@@ -153,6 +178,11 @@ void DesignMetricsImpl::visit(Instruction &Inst) {
     if (VASTValPtr V = Builder.lookupExpr(*I))
       LiveOutedVal.insert(V.get());
   }
+
+  if (LoadInst *LI = dyn_cast<LoadInst>(&Inst))
+    visitLoadInst(*LI);
+  else if (StoreInst *SI = dyn_cast<StoreInst>(&Inst))
+    visitStoreInst(*SI);
 }
 
 void DesignMetricsImpl::visit(BasicBlock &BB) {
@@ -258,6 +288,11 @@ uint64_t DesignMetricsImpl::getDatapathFUCost() const {
   return Cost;
 }
 
+uint64_t DesignMetricsImpl::getMemBusMuxCost() const {
+  return VFUs::getMuxCost(AddressBusFanins.size())
+         + VFUs::getMuxCost(DataBusFanins.size());
+}
+
 DesignMetrics::DesignMetrics(TargetData *TD)
   : Impl(new DesignMetricsImpl(TD)) {}
 
@@ -275,8 +310,8 @@ void DesignMetrics::visit(Function &F) {
   Impl->visit(F);
 }
 
-uint64_t DesignMetrics::getDatapathFUCost() const {
-  return Impl->getDatapathFUCost();
+uint64_t DesignMetrics::getResourceCost() const {
+  return Impl->getDatapathFUCost() + Impl->getMemBusMuxCost();
 }
 
 void DesignMetrics::reset() { Impl->reset(); }
@@ -289,7 +324,7 @@ bool DesignMetricsPass::runOnFunction(Function &F) {
   Metrics.visit(F);
 
   DEBUG(dbgs() << "Data-path cost of function " << F.getName() << ':'
-               << Metrics.getDatapathFUCost() << '\n');
+               << Metrics.getResourceCost() << '\n');
   
   return false;
 }
