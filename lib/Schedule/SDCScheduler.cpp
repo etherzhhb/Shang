@@ -477,6 +477,9 @@ template<bool IsCtrlPath>
 void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
   for(VSchedGraph::const_iterator I = begin(), E = end(); I != E; ++I) {
     const VSUnit *U = *I;
+
+    bool IsBBEntry = U->isBBEntry();
+
     ConstraintHelper H;
     H.resetDst(U, this);
 
@@ -485,9 +488,14 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       assert(!DI.isLoopCarried()
         && "Loop carried dependencies cannot handled by SDC scheduler!");
       const VSUnit *Src = *DI;
+      VDEdge Edge = DI.getEdge();
+
+      // Ignore the control-dependency edges between BBs.
+      if (Src->isTerminator() && IsBBEntry)
+        continue;
 
       H.resetSrc(Src, this);
-      H.addConstraintToLP(DI.getEdge(), lp, 0);
+      H.addConstraintToLP(Edge, lp, 0);
     }
 
     if (IsCtrlPath) continue;
