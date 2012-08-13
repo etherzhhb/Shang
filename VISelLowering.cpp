@@ -92,17 +92,18 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   for (unsigned VT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
        VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
     MVT CurVT = MVT((MVT::SimpleValueType)VT);
+    LegalizeAction CustomOrExpand = CurVT.getSizeInBits()>64 ? Expand : Custom;
 
-    setOperationAction(ISD::FrameIndex, CurVT, Custom);
+    setOperationAction(ISD::FrameIndex, CurVT, CustomOrExpand);
 
     // Lower the add/sub operation to full adder operation.
-    setOperationAction(ISD::ADD, CurVT, Custom);
-    setOperationAction(ISD::ADDC, CurVT, Custom);
+    setOperationAction(ISD::ADD, CurVT, CustomOrExpand);
+    setOperationAction(ISD::ADDC, CurVT, CustomOrExpand);
     // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, CurVT, Custom);
+    setOperationAction(ISD::SUB, CurVT, CustomOrExpand);
     setOperationAction(ISD::SUBE, CurVT, Expand);
     //setOperationAction(ISD::ADDC, CurVT, Expand);
-    setOperationAction(ISD::SUBC, CurVT, Custom);
+    setOperationAction(ISD::SUBC, CurVT, CustomOrExpand);
     // Expand overflow aware operations
     setOperationAction(ISD::SADDO, CurVT, Expand);
     setOperationAction(ISD::SSUBO, CurVT, Expand);
@@ -141,17 +142,17 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     }
 
     // Lower cast node to bit level operation.
-    setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
+    setOperationAction(ISD::SIGN_EXTEND, CurVT, CustomOrExpand);
     setOperationAction(ISD::SIGN_EXTEND_INREG, CurVT, Expand);
-    setOperationAction(ISD::ZERO_EXTEND, CurVT, Custom);
-    setOperationAction(ISD::ANY_EXTEND, CurVT, Custom);
-    setOperationAction(ISD::TRUNCATE, CurVT, Custom);
+    setOperationAction(ISD::ZERO_EXTEND, CurVT, CustomOrExpand);
+    setOperationAction(ISD::ANY_EXTEND, CurVT, CustomOrExpand);
+    setOperationAction(ISD::TRUNCATE, CurVT, CustomOrExpand);
     // Condition code will not work.
     setOperationAction(ISD::SELECT_CC, CurVT, Expand);
     // Lower SetCC to more fundamental operation.
-    setOperationAction(ISD::SETCC, CurVT, Custom);
+    setOperationAction(ISD::SETCC, CurVT, CustomOrExpand);
 
-    setOperationAction(ISD::JumpTable, CurVT, Custom);
+    setOperationAction(ISD::JumpTable, CurVT, CustomOrExpand);
 
     //for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
     //  setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
@@ -694,8 +695,8 @@ bool VTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
 void VTargetLowering::ReplaceNodeResults(SDNode *N,
                                          SmallVectorImpl<SDValue>&Results,
                                          SelectionDAG &DAG ) const {
-  assert(0 && "ReplaceNodeResults not implemented for this target!");
-
+  SDValue Res = LowerOperation(SDValue(N, 0), DAG);
+  if (Res.getNode()) Results.push_back(Res);
 }
 
 void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
