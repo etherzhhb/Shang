@@ -147,10 +147,9 @@ struct VTMPassConfig : public TargetPassConfig {
     PM->add(createVAliasAnalysisPass());
     PM->add(createDeadMemOpEliminationPass());
     PM->add(createMemOpsFusingPass());
+    addPass(DeadMachineInstructionElimID);
     // Construct multiplexer tree for prebound function units.
     PM->add(createPrebindUnbalanceMuxPass());
-
-    // Make sure we have a branch instruction for every success block.
 
     // Fix the machine code for schedule and function unit allocation.
     PM->add(createFixMachineCodePass(false));
