@@ -36,6 +36,7 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -217,6 +218,7 @@ INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
 INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
+INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
 INITIALIZE_PASS_DEPENDENCY(DetialLatencyInfo)
 INITIALIZE_PASS_END(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
@@ -233,6 +235,7 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<ScalarEvolution>();
   AU.addPreserved<ScalarEvolution>();
   AU.addRequired<MachineBlockFrequencyInfo>();
+  AU.addRequired<MachineBranchProbabilityInfo>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
@@ -1189,8 +1192,12 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 
 void VPreRegAllocSched::schedule(VSchedGraph &G) {
   MachineBlockFrequencyInfo &MBFI = getAnalysis<MachineBlockFrequencyInfo>();
+  MachineBranchProbabilityInfo &MBPI
+    = getAnalysis<MachineBranchProbabilityInfo>();
   double FreqSum = 0.0;
+  MachineBasicBlock *EntryBB = G.getEntryBB(), *ExitBB = G.getExitBB();
   typedef MachineFunction::iterator iterator;
+
   for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
     FreqSum += MBFI.getBlockFreq(I).getFrequency();
 
@@ -1201,16 +1208,45 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   // Build the step variables, and no need to schedule at all if all SUs have
   // been scheduled.
   if (Scheduler.createLPAndVariables()) {
-    //Scheduler.buildASAPObject(1.0);
-    //Scheduler.buildOptSlackObject(0.0);
-    for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I) {
-      const MachineBasicBlock *MBB = I;
-      double BBFreq = double(MBFI.getBlockFreq(MBB).getFrequency()) / FreqSum;
+    for (iterator I = EntryBB, E = ExitBB; I != E; ++I) {
+      MachineBasicBlock *MBB = I;
+      BlockFrequency BlockFreq = MBFI.getBlockFreq(MBB);
+      double BBFreq = double(BlockFreq.getFrequency()) / FreqSum;
+      // Avoid setting zero coefficient.
+      BBFreq = std::max(0.001, BBFreq);
+
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
+      // Minimize the latency of the BB.
       // Min (BBEnd - BBStart) * BBFreq;
       // => Max BBStart * BBFreq - BBEnd * BBFreq.
       Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
       Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
+
+      typedef MachineBasicBlock::const_succ_iterator succ_iterator;
+      for (succ_iterator SI = MBB->succ_begin(), SE = MBB->succ_begin();
+           SI != SE; ++SI) {
+        MachineBasicBlock *SuccBB = *SI;
+        // Ignore the back-edges and edge to the virtual ExitBB.
+        if (SuccBB->getNumber() <= MBB->getNumber() || SuccBB == ExitBB)
+          continue;
+
+        BlockFrequency EdgeProb
+          = BlockFreq * MBPI.getEdgeProbability(MBB, SuccBB);
+        double EdgeFreq
+          = double(EdgeProb.getFrequency()) / double(BlockFreq.getFrequency());
+
+        EdgeFreq *= BBFreq;
+        // Avoid setting zero coefficient.
+        EdgeFreq = std::max(0.001, EdgeFreq);
+
+        // Minimize the latency of edge.
+        // Min (SuccBBStart - MBBEnd) * EdgeFreq;
+        // => Max MBBEnd * EdgeFreq - SuccBBStart * EdgeFreq
+        Scheduler.addObjectCoeff(G.lookupSUnit(SuccBB), -EdgeFreq);
+        // Do not set the coefficient of the terminator, otherwise the
+        // coefficient to minimize the latency of the BB will be neutralized.
+        //Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), EdgeFreq);
+      }
     }
 
     bool success = Scheduler.schedule();
