@@ -39,6 +39,8 @@
 
 using namespace llvm;
 STATISTIC(DanglingDatapath, "Number of dangling data-path operations");
+STATISTIC(InterBBLatency,
+          "Number of wait states insert to fix the inter-bb latency");
 
 namespace {
 class OpSlot {
@@ -694,6 +696,7 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
 
   addDummyLatencyEntry(DelayBR);
 
+  InterBBLatency += Latency;
   // TODO: Fix the dependencies edges.
 }
 
