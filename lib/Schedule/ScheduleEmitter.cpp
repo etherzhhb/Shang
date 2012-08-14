@@ -40,7 +40,7 @@
 using namespace llvm;
 STATISTIC(DanglingDatapath, "Number of dangling data-path operations");
 STATISTIC(InterBBLatency,
-          "Number of wait states insert to fix the inter-bb latency");
+          "Number of wait states inserted to fix the inter-bb latency");
 
 namespace {
 class OpSlot {
