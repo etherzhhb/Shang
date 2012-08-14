@@ -801,7 +801,7 @@ struct ChainBreaker {
   MachineInstr *buildReadFU(MachineInstr *MI, VSUnit *U, unsigned Offset,
                             FuncUnitId Id = FuncUnitId(), bool Dead = false);
 
-  ChainValDef *getValInReg(ChainValDef *Def, unsigned Slot);
+  ChainValDef *getValAtSlot(ChainValDef *Def, unsigned Slot, bool CreateCopy);
   ChainValDef *insertCopyAtSlot(ChainValDef &SrcDef, unsigned Slot);
   ChainValDef *breakChainForAntiDep(ChainValDef *SrcDef, unsigned ChainEndSlot,
                                     unsigned ReadSlot, unsigned II);
@@ -913,21 +913,24 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
   }
 }
 
-ChainValDef *ChainBreaker::getValInReg(ChainValDef *Def, unsigned Slot) {
-  assert(Slot >= Def->FinishSlot && "Read before write detected!");
+ChainValDef *ChainBreaker::getValAtSlot(ChainValDef *Def, unsigned Slot,
+                                        bool CreateCopy) {
+  assert((Slot >= Def->FinishSlot || !CreateCopy)
+         && "Read before write detected!");
   // Only return the value at then end of the BB, do not perform cross BB copy.
   if (Def->getParentBB() != MBB) Slot = Def->FinishSlot;
 
   // Get the value just before ReadSlot.
-  while (Def->Next && Def->Next->ChainStart <= Slot)
+  while (Def->Next && Def->Next->FinishSlot <= Slot)
     Def = Def->Next;
 
-  if (Def->ChainStart != Slot) {
+  if (Def->ChainStart != Slot && CreateCopy) {
     // Insert the copy operation.
     VSUnit *DefSU = G.lookupSUnit(&Def->MI);
     assert(!DefSU->isDangling() && "Cannot insert Copy for dangling SU!");
 
     unsigned CopyOffset = Slot - DefSU->getSlot();
+    assert(Slot <= G.getEndSlot(MBB) && "Bad copy slot!");
     MachineInstr *ReadFU = buildReadFU(&Def->MI, DefSU, CopyOffset);
 
     // Remember the value definition for the copy.
@@ -967,6 +970,7 @@ ChainValDef *ChainBreaker::insertCopyAtSlot(ChainValDef &SrcDef, unsigned Slot){
 
   VSUnit *U = InSameBB ? G.lookupSUnit(MI) : G.lookupSUnit(MBB);
   assert(Slot >= U->getSlot() && "Unexpected negative offset!");
+  assert(Slot <= G.getEndSlot(MBB) && "Bad copy slot!");
   G.mapMI2SU(ReadFU, U, Slot - U->getSlot(), true);
   G.addDummyLatencyEntry(ReadFU);
 
@@ -1029,19 +1033,17 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
     int ChainBreakingSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
     if (ChainBreakingSlack >= 0) {
       if (SrcVal->IsChainedWithFU)
-        SrcVal = getValInReg(SrcVal, SrcVal->FinishSlot);
+        SrcVal = getValAtSlot(SrcVal, SrcVal->FinishSlot, true);
 
-      if (IsPipelined && InSameBB
+      if (IsPipelined && InSameBB && !IsDangling
           && LatestChainEnd - SrcVal->ChainStart > CurII
-          && LatestChainEnd - ReadSlot < CurII) {
-
+          && LatestChainEnd - ReadSlot < CurII)
         // Insert the copy to break the chain.
-        SrcVal = getValInReg(SrcVal, ReadSlot);
-      }
+        SrcVal = getValAtSlot(SrcVal, ReadSlot, true);
     }
 
     // If the current MI is dangling, read the latest value.
-    if (IsDangling) SrcVal = SrcVal->getLatestValue();
+    SrcVal = getValAtSlot(SrcVal, ReadSlot, false);
 
     // Try to break the chain to preserve the anti-dependencies in pipelined
     // block, but ignore the value from other BB, which are invariants.
@@ -1220,22 +1222,34 @@ unsigned VSchedGraph::emitSchedule() {
   for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
     VSUnit *U = *I;
 
-    if (U->isDangling()) {
-      MachineBasicBlock *ParentBB = U->getParentBB();
-      if (U->getSlot() < getEndSlot(ParentBB)) U->setIsDangling(false);
-      else  U->scheduledTo(getEndSlot(U->getParentBB()));
-    }
+    if (!U->isDangling()) continue;
+
+    // If the SU is scheduled within the boundary of its parent BB, then it is
+    // not dangling.
+    MachineBasicBlock *ParentBB = U->getParentBB();
+    if (U->getSlot() < getEndSlot(ParentBB)) U->setIsDangling(false);
   }
 
   // Merge the data-path SU vector to the control-path SU vector.
   CPSUs.insert(CPSUs.end(), DPSUs.begin(), DPSUs.end());
-  DPSUs.clear();
 
   // Sort the SUs by parent BB and its schedule.
   std::sort(CPSUs.begin(), CPSUs.end(), top_sort_bb_and_slot);
 
   // Break the chains.
   insertFUCtrlAndCopy();
+
+  // Move the dangling node to the last slot of its parent BB, prepare for
+  // schedule emission.
+  for (iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
+    VSUnit *U = *I;
+
+    if (!U->isDangling()) continue;
+
+    U->scheduledTo(getEndSlot(U->getParentBB()));
+  }
+  // We will not use DPSUs anymore.
+  DPSUs.clear();
 
   unsigned MBBStartSlot = EntrySlot;
   iterator to_emit_begin = CPSUs.begin();
