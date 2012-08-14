@@ -24,9 +24,13 @@ EnableBLC("vtm-enable-blc",
           cl::desc("Enable bit-level chaining"),
           cl::init(true));
 
-INITIALIZE_PASS(DetialLatencyInfo, "detail-latency-info",
-                "Calculating the latency of instructions",
-                false, true)
+INITIALIZE_PASS_BEGIN(DetialLatencyInfo, "detail-latency-info",
+                      "Calculating the latency of instructions",
+                      false, true)
+  INITIALIZE_PASS_DEPENDENCY(MachineBasicBlockTopOrder)
+INITIALIZE_PASS_END(DetialLatencyInfo, "detail-latency-info",
+                    "Calculating the latency of instructions",
+                    false, true)
 
 char DetialLatencyInfo::ID = 0;
 const float DetialLatencyInfo::DeltaLatency = FLT_EPSILON * 8.0f;
@@ -41,6 +45,7 @@ Pass *llvm::createDetialLatencyInfoPass() {
 
 void DetialLatencyInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
+  AU.addRequiredID(MachineBasicBlockTopOrderID);
   AU.setPreservesAll();
 }
 
@@ -391,13 +396,10 @@ float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
 bool DetialLatencyInfo::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
 
-  ReversePostOrderTraversal<MachineBasicBlock*> Ord(MF.begin());
-  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
-  typedef MachineBasicBlock::instr_iterator mi_it;
-
-  // Iterate the BBs in topological order.
-  for (rpo_it BI = Ord.begin(), BE = Ord.end(); BI != BE; ++BI)
-    for (mi_it I = (*BI)->instr_begin(), E = (*BI)->instr_end(); I != E; ++I)
+  typedef MachineFunction::iterator iterator;
+  typedef MachineBasicBlock::instr_iterator instr_iterator;
+  for (iterator BI = MF.begin(), BE = MF.end(); BI != BE; ++BI)
+    for (instr_iterator I = BI->instr_begin(), E = BI->instr_end(); I != E; ++I)
       addInstrInternal(I,  LatencyMap[I]);
 
   return false;

@@ -214,15 +214,16 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 char VPreRegAllocSched::ID = 0;
 
 INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
-  "Verilog pre reg allocet sched", false, false)
-INITIALIZE_PASS_DEPENDENCY(LoopInfo)
-INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
-INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
-INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
-INITIALIZE_PASS_DEPENDENCY(DetialLatencyInfo)
+                      "Verilog pre reg allocet sched", false, false)
+  INITIALIZE_PASS_DEPENDENCY(MachineBasicBlockTopOrder)
+  INITIALIZE_PASS_DEPENDENCY(LoopInfo)
+  INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
+  INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
+  INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
+  INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
+  INITIALIZE_PASS_DEPENDENCY(DetialLatencyInfo)
 INITIALIZE_PASS_END(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
-  "Verilog pre reg allocet sched", false, false)
+                    "Verilog pre reg allocet sched", false, false)
 
 Pass *llvm::createVPreRegAllocSchedPass() {
   return new VPreRegAllocSched();
@@ -230,6 +231,10 @@ Pass *llvm::createVPreRegAllocSchedPass() {
 
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
+  // Topological order of MachineBasicBlocks are not preserved, because we may
+  // insert delay blocks between MBBs, but the newly inserted blocks are placed
+  // at the end of the function.
+  AU.addRequiredID(MachineBasicBlockTopOrderID);
   AU.addRequired<LoopInfo>();
   AU.addPreserved<LoopInfo>();
   AU.addRequired<ScalarEvolution>();
@@ -250,17 +255,6 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MLI = &getAnalysis<MachineLoopInfo>();
   LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
-
-  // Place the BBs in topological order this can benefit some of the later
-  // algorithms.
-  typedef po_iterator<MachineBasicBlock*> po_it;
-  for (po_it I = po_begin(&MF.front()), E = po_end(&MF.front()); I != E; ++I) {
-    MachineBasicBlock *MBB = *I;
-    MF.splice(MF.begin(), MBB);
-  }
-
-  // Reset the MBB numbering.
-  MF.RenumberBlocks();
 
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();

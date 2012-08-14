@@ -84,6 +84,9 @@ Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
+
+
+void initializeMachineBasicBlockTopOrderPass(PassRegistry &Registry);
 void initializeDetialLatencyInfoPass(PassRegistry &Registry);
 void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
 void initializeVAliasAnalysisPass(PassRegistry &Registry);
@@ -91,17 +94,12 @@ void initializeAdjustLIForBundlesPass(PassRegistry &Registry);
 void initializePrebindMuxBasePass(PassRegistry &Registry);
 void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
-
-void initializeCFGShortestPathPass(PassRegistry &Registry);
-
 void initializeHyperBlockFormationPass(PassRegistry &Registry);
-
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 void initializeRtlSSAAnalysisPass(PassRegistry &Registry);
 void initializeVerilogASTBuilderPass(PassRegistry &Registry);
 void initializeVerilogASTWriterPass(PassRegistry &Registry);
-void initializeFunctionFilterPass(PassRegistry &Registry); 
-void initializeRAPass(PassRegistry &Registry);
+void initializeFunctionFilterPass(PassRegistry &Registry);
 void initializeHLSInlinerPass(PassRegistry &Registry);
 void initializeTrivialLoopUnrollPass(PassRegistry &Registry);
 void initializeLoopVectorizerPass(PassRegistry &Registry);

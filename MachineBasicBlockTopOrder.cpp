@@ -30,11 +30,23 @@ namespace llvm {
 public:
   static char ID;
 
-  MachineBasicBlockTopOrder() : MachineFunctionPass(ID) {};
+  MachineBasicBlockTopOrder() : MachineFunctionPass(ID) {
+    initializeMachineBasicBlockTopOrderPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    // FIXME: This pass break MachineBlockPlacementPass.
+    AU.setPreservesAll();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
 };
 }
+
+INITIALIZE_PASS(MachineBasicBlockTopOrder, "machine-basicblock-top-order",
+               "Place the Machine BasicBlocks in topological order",
+               false, true)
 
 char MachineBasicBlockTopOrder::ID = 0;
 char &llvm::MachineBasicBlockTopOrderID= MachineBasicBlockTopOrder::ID;

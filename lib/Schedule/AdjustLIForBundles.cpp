@@ -45,6 +45,7 @@ namespace {
 
     AdjustLIForBundles() : MachineFunctionPass(ID) {
       initializeAdjustLIForBundlesPass(*PassRegistry::getPassRegistry());
+      //initializeMachineBasicBlockTopOrderPass(*PassRegistry::getPassRegistry());
       initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
     }
 
@@ -52,6 +53,8 @@ namespace {
       // Only update live interval analysis.
       AU.setPreservesAll();
       MachineFunctionPass::getAnalysisUsage(AU);
+      // The MachineBasicBlockTopOrder break the LiveIntervals pass.
+      // AU.addRequiredID(MachineBasicBlockTopOrderID);
       //AU.addRequiredID(PHIEliminationID);
       AU.addRequired<LiveIntervals>();
     }

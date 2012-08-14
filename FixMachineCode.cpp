@@ -44,8 +44,10 @@ struct FixMachineCode : public MachineFunctionPass {
   const TargetInstrInfo *TII;
   bool IsPreOpt;
 
-  FixMachineCode(bool isPreOpt) : MachineFunctionPass(ID), MRI(0), TII(0),
-    IsPreOpt(isPreOpt) {}
+  explicit FixMachineCode(bool isPreOpt) : MachineFunctionPass(ID), MRI(0),
+                                           TII(0), IsPreOpt(isPreOpt) {
+    initializeMachineBasicBlockTopOrderPass(*PassRegistry::getPassRegistry());
+  }
 
   //void getAnalysisUsage(AnalysisUsage &AU) const {
   //  MachineFunctionPass::getAnalysisUsage(AU);
@@ -54,6 +56,12 @@ struct FixMachineCode : public MachineFunctionPass {
   //}
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequiredID(MachineBasicBlockTopOrderID);
+    AU.addPreservedID(MachineBasicBlockTopOrderID);
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
 
   void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
   bool simplifyReduction(MachineInstr *MI);
@@ -79,17 +87,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   std::vector<MachineInstr*> InstrToFold, PNs;
 
-  // Place the BBs in topological order this can benefit some of the later
-  // algorithms.
-  typedef po_iterator<MachineBasicBlock*> po_it;
-  for (po_it I = po_begin(&MF.front()), E = po_end(&MF.front()); I != E; ++I) {
-    MachineBasicBlock *MBB = *I;
-    MF.splice(MF.begin(), MBB);
-  }
-
-  // Reset the MBB numbering.
-  MF.RenumberBlocks();
-   // Find out all VOpMove_mi.
+  // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
 

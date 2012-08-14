@@ -30,7 +30,6 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/OwningPtr.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Allocator.h"
 #define DEBUG_TYPE "vtm-pre-schedule-rtl-opt"
@@ -120,12 +119,15 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
 
   PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0) {
     initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
+    initializeMachineBasicBlockTopOrderPass(*PassRegistry::getPassRegistry());
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
+    AU.addRequiredID(MachineBasicBlockTopOrderID);
+    AU.addPreservedID(MachineBasicBlockTopOrderID);
     AU.addRequired<MachineDominatorTree>();
     AU.setPreservesCFG();
   }
@@ -259,27 +261,26 @@ bool PreSchedRTLOpt::runOnMachineFunction(MachineFunction &F) {
   MRI = &F.getRegInfo();
   DT = &getAnalysis<MachineDominatorTree>();
   Builder.reset(new DatapathBuilder(*this, *MRI));
-
   Entry = F.begin();
-  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
-  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+
+  typedef MachineFunction::iterator iterator;
 
   // Build the data-path according to the machine function.
-  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
-    prepareMBB(**I);
-    buildDatapath(**I);
+  for (iterator I = F.begin(), E = F.end(); I != E; ++I) {
+    prepareMBB(*I);
+    buildDatapath(*I);
   }
 
   // Perform optimizations.
 
   // Rewrite the operations in data-path.
-  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
-    rewriteDatapath(**I);
-    verifyMBB(**I);
+  for (iterator I = F.begin(), E = F.end(); I != E; ++I) {
+    rewriteDatapath(*I);
+    verifyMBB(*I);
   }
 
   // Verify the function.
-  F.verify(this);
+  DEBUG(F.verify(this));
   return true;
 }
 
