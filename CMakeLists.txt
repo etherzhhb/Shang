@@ -64,6 +64,7 @@ add_llvm_target(VerilogBackend
   VIntrinsicsInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
+  MachineBasicBlockTopOrder.cpp
 )
 
 target_link_libraries (LLVMVerilogBackend

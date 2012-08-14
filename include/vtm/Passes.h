@@ -29,6 +29,8 @@ class VTargetMachine;
 class MachineRegisterInfo;
 
 extern char &AdjustLIForBundlesID;
+//MachineBasicBlockTopOrder Pass - Place the MachineBasicBlocks in topological order.
+extern char &MachineBasicBlockTopOrderID;
 
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
@@ -82,8 +84,6 @@ Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
-
-//
 void initializeDetialLatencyInfoPass(PassRegistry &Registry);
 void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
 void initializeVAliasAnalysisPass(PassRegistry &Registry);
