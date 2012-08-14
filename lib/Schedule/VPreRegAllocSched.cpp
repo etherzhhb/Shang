@@ -1209,8 +1209,8 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
       // Min (BBEnd - BBStart) * BBFreq;
       // => Max BBStart * BBFreq - BBEnd * BBFreq.
-      Scheduler.addObjectCoeff(G.lookupSUnit(MBB), 1.0);
-      Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -1.0);
+      Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
+      Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
     }
 
     bool success = Scheduler.schedule();
