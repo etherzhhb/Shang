@@ -81,7 +81,7 @@ public:
     DEBUG(dbgs() << "Increased cost: " << IncreasedCost << ' '
                  << "Threshold: " << VFUs::MulCost[63] * 8 << '\n');
     // FIXME: Read the threshold from the constraints script.
-    if (IncreasedCost < VFUs::MulCost[63] * 8) {
+    if (IncreasedCost < VFUs::MulCost[63] * 3) {
       DEBUG(dbgs() << "...going to inline function\n");
       return InlineCost::getAlways();
     }
