@@ -22,6 +22,7 @@
 #include "vtm/Utilities.h"
 
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -45,12 +46,16 @@ STATISTIC(DeadLoadEliminated,
 namespace {
 struct DeadMemOpElimination : public MachineFunctionPass {
   static char ID;
+  AliasAnalysis *AA;
+  ScalarEvolution *SE;
 
-  DeadMemOpElimination() : MachineFunctionPass(ID) {}
+  DeadMemOpElimination() : MachineFunctionPass(ID), AA(0), SE(0) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<AliasAnalysis>();
     AU.addPreserved<AliasAnalysis>();
+    AU.addRequired<ScalarEvolution>();
+    AU.addPreserved<ScalarEvolution>();
     AU.setPreservesCFG();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
@@ -63,14 +68,15 @@ struct DeadMemOpElimination : public MachineFunctionPass {
   instr_iterator handleMemOp(instr_iterator I, DefMapTy &Defs,
                              AliasSetTracker &AST);
 
-  bool runOnMachineBasicBlock(MachineBasicBlock &MBB, AliasAnalysis &AA);
+  bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
 
   bool runOnMachineFunction(MachineFunction &MF) {
-    AliasAnalysis &AA = getAnalysis<AliasAnalysis>();
     bool changed = false;
+    AA = &getAnalysis<AliasAnalysis>();
+    SE = &getAnalysis<ScalarEvolution>();
 
     for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-      changed |= runOnMachineBasicBlock(*I, AA);
+      changed |= runOnMachineBasicBlock(*I);
 
     return changed;
   }
@@ -113,16 +119,26 @@ DeadMemOpElimination::handleMemOp(instr_iterator I, DefMapTy &Defs,
   // AliasAnalysis cannot handle offset right now, so we pretend to write a
   // a big enough size to the location pointed by the base pointer.
   uint64_t Size = MO->getSize() + MO->getOffset();
-  AliasSet *AA = &AST.getAliasSetForPointer(const_cast<Value*>(MO->getValue()),
-                                            Size, 0);
+  AliasSet *ASet = &AST.getAliasSetForPointer(const_cast<Value*>(MO->getValue()),
+                                              Size, 0);
 
-  MachineInstr *&LastMI = Defs[AA];
+  MachineInstr *&LastMI = Defs[ASet];
 
-  bool canHandleLastStore =
-    LastMI && LastMI->getOpcode() != VTM::VOpInternalCall
-    && !(*LastMI->memoperands_begin())->isVolatile() && AA->isMustAlias()
-    // FIXME: We may need to remember the last definition for all predicates.
-    && isPredIdentical(LastMI, MI);
+  bool canHandleLastStore = LastMI && ASet->isMustAlias()
+                            && LastMI->getOpcode() != VTM::VOpInternalCall
+                            // FIXME: We may need to remember the last
+                            // definition for all predicates.
+                            && isPredIdentical(LastMI, MI);
+
+  if (canHandleLastStore) {
+    MachineMemOperand *LastMO = *LastMI->memoperands_begin();
+    // We can only handle last store if and only if their memory operand have
+    // the must-alias address and the same size.
+    canHandleLastStore = LastMO->getSize() == MO->getSize()
+                         && !LastMO->isVolatile()
+                         && MachineMemOperandAlias(MO, LastMO, AA, SE)
+                            == AliasAnalysis::MustAlias;
+  }
 
   // FIXME: These elimination is only valid if we are in single-thread mode!
   if (VInstrInfo::mayStore(MI)) {
@@ -140,11 +156,6 @@ DeadMemOpElimination::handleMemOp(instr_iterator I, DefMapTy &Defs,
   // Now MI is a load.
   if (!canHandleLastStore) return I;
 
-  MachineMemOperand *LastMO = *LastMI->memoperands_begin();
-  // We can only handle last store if and only if their memory operand have
-  // the must-alias address and the same size.
-  if (LastMO->getSize() != MO->getSize()) return I;
-
   // Loading the value that just be stored, the load is not necessary.
   MachineOperand LoadedMO = MI->getOperand(0);
   MachineOperand StoredMO = LastMI->getOperand(2);
@@ -161,9 +172,8 @@ DeadMemOpElimination::handleMemOp(instr_iterator I, DefMapTy &Defs,
   return I;
 }
 
-bool DeadMemOpElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
-                                                  AliasAnalysis &AA) {
-  AliasSetTracker AST(AA);
+bool DeadMemOpElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
+  AliasSetTracker AST(*AA);
   DefMapTy ReachingDefMap;
 
   typedef AliasSetTracker::iterator ast_iterator;
