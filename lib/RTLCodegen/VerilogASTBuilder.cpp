@@ -318,9 +318,9 @@ class VerilogASTBuilder : public MachineFunctionPass,
     return VM->getSlot(SlotNum - 1);
   }
 
-  VASTSlot *getOrCreateInstrSlot(MachineInstr *MI, unsigned ParentIdx) {
-    unsigned SlotNum = VInstrInfo::getInstrSlotNum(MI);
-    return VM->getOrCreateSlot(SlotNum - 1, MI->getParent());
+  VASTSlot *getOrCreateCtrlStartSlot(MachineInstr *MI, unsigned ParentIdx) {
+    unsigned SlotNum = VInstrInfo::getBundleSlot(MI);
+    return VM->getOrCreateSlot(SlotNum - 1, MI);
   }
 
   void OrCnd(VASTUse &U, VASTValPtr Cnd) {
@@ -564,8 +564,11 @@ void VerilogASTBuilder::emitIdleState() {
   SmallVector<VASTValPtr, 1> Cnds(1, StartPort);
   if (!emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds)) {
     unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
-    addSuccSlot(IdleSlot, VM->getOrCreateSlot(EntryStartSlot, EntryBB),
-                StartPort);
+    // Get the second control bundle by skipping the first control bundle and
+    // data-path bundle.
+    MachineBasicBlock::iterator I = llvm::next(EntryBB->begin(), 2);
+
+    addSuccSlot(IdleSlot, VM->getOrCreateSlot(EntryStartSlot, I), StartPort);
   }
 }
 
@@ -576,13 +579,27 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   // The alias slots of pipelined BB.
   SmallVector<VASTSlot*, 8> AliasSlots;
-  typedef MachineBasicBlock::instr_iterator instr_it;
-  typedef MachineBasicBlock::iterator it;
-  it I = MBB.getFirstNonPHI();
+  typedef MachineBasicBlock::instr_iterator instr_iterator;
+  typedef MachineBasicBlock::iterator bundle_iterator;
+  bundle_iterator I = MBB.getFirstNonPHI();
   // Skip the first bundle, it already emitted by the predecessor bbs.
   ++I;
+
   // Emit the data-path bundle right after the first bundle.
   I = emitDatapath(I);
+
+  // Create the slots for all control-path bundles in the current BB.
+  for (bundle_iterator BI = I, BE = MBB.end(); BI != BE && !BI->isTerminator();
+       BI = llvm::next(BI, 2) ) {
+    VASTSlot *LeaderSlot = getOrCreateCtrlStartSlot(BI, startSlot);
+    // Create the alias slots for the pipelined loop.
+    if (startSlot + II < EndSlot) {
+      LeaderSlot->setAliasSlots(LeaderSlot->SlotNum, EndSlot, II);
+      unsigned CurSlotNum = LeaderSlot->SlotNum;
+      for (unsigned S = CurSlotNum + II; S < EndSlot; S += II)
+        VM->getOrCreateSlot(S, BI)->setAliasSlots(CurSlotNum, EndSlot, II);
+    }
+  }
 
   // Emit the other bundles.
   while(!I->isTerminator()) {
@@ -591,14 +608,16 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     unsigned CurSlotNum = VInstrInfo::getBundleSlot(I) - 1;
 
     // Collect slot ready signals.
-    instr_it NextI = instr_it(I);
+    instr_iterator NextI = instr_iterator(I);
+
+    // Create and collect the slots.
+    VASTSlot *LeaderSlot = VM->getSlot(CurSlotNum);
+    assert(LeaderSlot->getBundleStart() == NextI && "BundleStart not match!");
 
     while ((++NextI)->getOpcode() != VTM::CtrlEnd)
       if (NextI->getOpcode() == VTM::VOpReadFU)
-        addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
+        addSlotReady(NextI, getInstrSlot(NextI));
 
-    // Create and collect the slots.
-    VASTSlot *LeaderSlot = VM->getOrCreateSlot(CurSlotNum, &MBB);
     // The control flow of the first slot is not staight-line, so does its
     // alias slots.
     if (CurSlotNum != startSlot)
@@ -607,12 +626,9 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     AliasSlots.push_back(LeaderSlot);
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
-      LeaderSlot->setAliasSlots(CurSlotNum, EndSlot, II);
       for (unsigned slot = CurSlotNum + II; slot < EndSlot; slot += II) {
-        VASTSlot *S = VM->getOrCreateSlot(slot, &MBB);
-        addSuccSlot(VM->getOrCreateSlot(slot - 1, &MBB), S,
-                    VM->getBoolImmediate(true));
-        S->setAliasSlots(CurSlotNum, EndSlot, II);
+        VASTSlot *S = VM->getSlot(slot);
+        addSuccSlot(VM->getSlot(slot - 1), S, VM->getBoolImmediate(true));
         AliasSlots.push_back(S);
       }
     }
@@ -622,8 +638,8 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
       AliasSlots.pop_back_val()->buildReadyLogic(*VM, *Builder);
 
     // Emit the control operations.
-    emitCtrlOp(instr_it(I), NextI, II, IISlot < EndSlot);
-    I = it(llvm::next(NextI));
+    emitCtrlOp(instr_iterator(I), NextI, II, IISlot < EndSlot);
+    I = bundle_iterator(llvm::next(NextI));
     // Emit the datepath of current state.
     I = emitDatapath(I);
   }
@@ -1010,8 +1026,11 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   if (!emitFirstCtrlBundle(TargetBB, CurSlot, Cnds)) {
     // Build the edge if the edge is not bypassed.
     unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
+    // Get the second control bundle by skipping the first control bundle and
+    // data-path bundle.
+    MachineBasicBlock::iterator I = llvm::next(TargetBB->begin(), 2);
 
-    VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetBB);
+    VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, I);
     VASTValPtr Cnd = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
     addSuccSlot(CurSlot, TargetSlot, Cnd);
   }

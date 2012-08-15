@@ -116,10 +116,10 @@ void VASTUse::PinUser() const {
     S->Pin();
 }
 
-VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
+VASTSlot::VASTSlot(unsigned slotNum, MachineInstr *BundleStart, VASTModule *VM)
   : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
     StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum) {
-  Contents.ParentBB = BB;
+  Contents.BundleStart = BundleStart;
 
   // Create the relative signals.
   SlotReg.set(VM->addSlotRegister(this));
@@ -132,6 +132,17 @@ VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
   VASTWire *Active = VM->addWire(SlotName + "Active", 1,
                                  VASTModule::DirectClkEnAttr.c_str());
   SlotActive.set(Active);
+}
+
+MachineInstr *VASTSlot::getBundleStart() const {
+  return Contents.BundleStart;
+}
+
+MachineBasicBlock *VASTSlot::getParentBB() const {
+  if (MachineInstr *BundleStart = getBundleStart())
+    return BundleStart->getParent();
+
+  return 0;
 }
 
 void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM) {
@@ -628,6 +639,20 @@ VASTValPtr VASTModule::getOrCreateSymbol(const std::string &Name,
 
   return V;
 }
+
+VASTSlot * llvm::VASTModule::getOrCreateSlot(unsigned SlotNum,
+                                             MachineInstr *BundleStart) {
+  VASTSlot *&Slot = Slots[SlotNum];
+  if(Slot == 0) {
+    Slot = Allocator.Allocate<VASTSlot>();
+    assert((BundleStart == 0 || BundleStart->getOpcode() == VTM::CtrlStart)
+           && "Bad BundleStart!");
+    new (Slot) VASTSlot(SlotNum, BundleStart, this);
+  }
+
+  return Slot;
+}
+
 
 // Out of line virtual function to provide home for the class.
 void VASTModule::anchor() {}

@@ -33,6 +33,7 @@
 #include <map>
 
 namespace llvm {
+class MachineInstr;
 class MachineBasicBlock;
 class MachineOperand;
 class VASTModule;
@@ -70,7 +71,7 @@ protected:
     int64_t IntVal;
     const char *Name;
     VASTSignal *Signal;
-    MachineBasicBlock *ParentBB;
+    MachineInstr *BundleStart;
   } Contents;
 
   const uint8_t NodeT;
@@ -913,9 +914,10 @@ private:
 public:
   const uint16_t SlotNum;
 
-  VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM);
+  VASTSlot(unsigned slotNum, MachineInstr *BundleStart, VASTModule *VM);
 
-  MachineBasicBlock *getParentBB() const { return Contents.ParentBB; }
+  MachineBasicBlock *getParentBB() const;
+  MachineInstr *getBundleStart() const;
 
   void buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder);
   // Print the logic of ready signal of this slot, need alias slot information.
@@ -1232,20 +1234,7 @@ public:
     return Allocator.Allocate(Num, Alignment);
   }
 
-  VASTSlot *getOrCreateSlot(unsigned SlotNum, MachineBasicBlock *BB) {
-    VASTSlot *&Slot = Slots[SlotNum];
-    if(Slot == 0) {
-      Slot = Allocator.Allocate<VASTSlot>();
-      new (Slot) VASTSlot(SlotNum, BB, this);
-    }
-
-    return Slot;
-  }
-
-  VASTSlot *getOrCreateNextSlot(VASTSlot *S) {
-    // TODO: Check if the next slot out of bound.
-    return getOrCreateSlot(S->SlotNum + 1, S->getParentBB());
-  }
+  VASTSlot *getOrCreateSlot(unsigned SlotNum, MachineInstr *BundleStart);
 
   VASTSlot *getSlot(unsigned SlotNum) const {
     VASTSlot *S = Slots[SlotNum];
