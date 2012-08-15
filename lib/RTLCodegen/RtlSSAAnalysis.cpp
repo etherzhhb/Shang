@@ -273,6 +273,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     ValueAtSlot *PredOut = II->first;
     VASTRegister *R = PredOut->getValue();
 
+    // Are we only add live-ins with undefine timing?
     if (FromAlasSlot) {
       // The value of register propagates slot by slot, and never propagates
       // from alias slot.
@@ -282,17 +283,46 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
       // TODO: Other conditions?
     }
 
-    MachineBasicBlock *DefBB = PredOut->getSlot()->getParentBB();
+    VASTSlot *DefSlot = PredOut->getSlot();
+    MachineBasicBlock *DefBB = DefSlot->getParentBB();
     ValueAtSlot::LiveInInfo LI = II->second;
+
+    // If the FromSlot is bigger than the ToSlot, then we are looping back.
+    bool ToNewBB = DefBB != CurBB || From->getSlot() >= To->getSlot();
+    // Trace the propagation path.
+    LI.liveThroughOtherBB(ToNewBB);
+    // The register may be defined at the first slot of current BB, which slot
+    // is alias with the last slot of Current BB's predecessor.
+    bool AtDefSlot = LI.getCycles() == 0;
+
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
-
-    // Trace the propagation path.
-    LI.liveThroughOtherBB(DefBB != CurBB);
 
     Changed |= To->insertIn(PredOut, LI);
     // Do not let the killed VASs go out
     if (To->isVASKilled(PredOut)) continue;
+
+    // Check if the register is killed according MachineFunction level liveness
+    // information.
+    switch (R->getRegType()) {
+    case VASTRegister::Data: {
+      unsigned RegNum = R->getDataRegNum();
+      // Do not add live out if data register R not live in the new BB.
+      if (ToNewBB && RegNum) {
+        if (!CurBB->isLiveIn(RegNum) && !AtDefSlot)
+          continue;
+      }
+      break;
+    }
+    case VASTRegister::Slot:
+      // Ignore the assignment that reset the slot enable register, even the
+      // signal may take more than one cycles to propagation, the shortest path
+      // should be the path that propagating the "1" value of the enable
+      // register.
+      if (R != DefSlot->getRegister() && LI.getCycles() > 1) continue;
+      break;
+    default: break;
+    }
 
     // New out occur.
     Changed |= To->insertOut(PredOut, LI);
