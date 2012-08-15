@@ -88,4 +88,13 @@ module shang_ucmp#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
 	assign c[1] = (a != b) ? 1'b1 : 1'b0;
 	assign c[0] = 1'bx;
 endmodule
+
+module shang_sel#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0, D_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  input wire c,
+  output wire[D_WIDTH-1:0] d
+);
+	assign d = c ? a : b;
+endmodule
 ]=]
