@@ -23,6 +23,7 @@
 
 #include "llvm/Target/TargetData.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SetOperations.h"
@@ -291,9 +292,6 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     bool ToNewBB = DefBB != CurBB || From->getSlot() >= To->getSlot();
     // Trace the propagation path.
     LI.liveThroughOtherBB(ToNewBB);
-    // The register may be defined at the first slot of current BB, which slot
-    // is alias with the last slot of Current BB's predecessor.
-    bool AtDefSlot = LI.getCycles() == 0;
 
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
@@ -307,9 +305,25 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     switch (R->getRegType()) {
     case VASTRegister::Data: {
       unsigned RegNum = R->getDataRegNum();
+      MachineInstr *CtrlStart = DefSlot->getBundleStart();
       // Do not add live out if data register R not live in the new BB.
-      if (ToNewBB && RegNum) {
-        if (!CurBB->isLiveIn(RegNum) && !AtDefSlot)
+      if (ToNewBB && RegNum && CtrlStart) {
+        // The register may be defined at the first slot of current BB, which
+        // slot is alias with the last slot of Current BB's predecessor. In this
+        // case we should not believe the live-ins information of the BB.
+        // So if the register are not defined at the current slot (the last slot
+        // of current BB) then we can trust the live-ins information.
+        bool ShouldTrustBBLI = II->second.getCycles() > 0;
+
+        for(ConstMIBundleOperands OperI(CtrlStart); OperI.isValid(); ++OperI)
+          if (OperI->isReg() && OperI->isDef() && OperI->getReg() == RegNum) {
+            // The Reg is defined outside the current BB, so that we can kill
+            // the definition according to the live-ins information of the BB.
+            ShouldTrustBBLI = true;
+            break;
+          }
+
+        if (ShouldTrustBBLI && !CurBB->isLiveIn(RegNum))
           continue;
       }
       break;
