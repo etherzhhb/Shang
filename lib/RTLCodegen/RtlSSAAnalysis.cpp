@@ -263,20 +263,26 @@ void RtlSSAAnalysis::visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS){
   DepthFirstTraverseDepTree(DepTree, B);
 }
 
-bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
-                                bool OnlyUndefTiming) {
+bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
+{
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
   MachineBasicBlock *CurBB = To->getSlot()->getParentBB();
 
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
-    // Are we only add live-ins with undefine timing?
-    if (OnlyUndefTiming && ! PredOut->getValue()->isTimingUndef())
-      continue;
+    VASTRegister *R = PredOut->getValue();
+
+    if (FromAlasSlot) {
+      // The value of register propagates slot by slot, and never propagates
+      // from alias slot.
+      if (R->getRegType() == VASTRegister::Data && R->getDataRegNum())
+        continue;
+
+      // TODO: Other conditions?
+    }
 
     MachineBasicBlock *DefBB = PredOut->getSlot()->getParentBB();
-    
     ValueAtSlot::LiveInInfo LI = II->second;
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
@@ -307,7 +313,7 @@ bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To) {
 
     // From the view of signals with undefined timing, all alias slot is the
     // same slot.
-    Changed |= addLiveIns(PredSI, To, i > FromSlotNum);
+    Changed |= addLiveIns(PredSI, To, true);
   }
 
   return Changed;

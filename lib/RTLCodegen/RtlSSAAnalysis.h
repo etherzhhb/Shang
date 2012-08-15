@@ -316,7 +316,7 @@ public:
   // Traverse the dependent VASTValue *to get the registers.
   void visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS);
 
-  bool addLiveIns(SlotInfo *From, SlotInfo *To, bool OnlyUndefTiming);
+  bool addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot);
   bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To);
 
   // Using the reaching definition algorithm to sort out the ultimate
