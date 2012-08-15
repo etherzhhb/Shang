@@ -527,7 +527,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
   // DIRTY HACK: Positive offset is not supported now.
   MIOffset = std::min(MIOffset, 0);
   MachineBasicBlock *CurMBB = MI->getParent();
-  bool IsCtrl = A->isControl();
+  assert(A->isControl() && "Unexpected data-path operation!");
 
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -549,7 +549,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
 
       // If we are only adding cross basic block dependencies, do not add the
       // control dependencies from the entry of the same BB.
-      if (SrcBB != CurMBB && !CrossBBOnly && IsCtrl) {
+      if (SrcBB != CurMBB && !CrossBBOnly) {
         // Add the cross dependent edge from the BBEntry if SrcMI is from others
         // BB, because we may need to adjust its latency during scheduling.
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
@@ -567,7 +567,7 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
     if (SrcMI->getParent() != CurMBB) {
       // If we are only adding cross basic block dependencies, do not add the
       // control dependencies from the entry of the same BB.
-      if (!CrossBBOnly && IsCtrl) {
+      if (!CrossBBOnly) {
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
         // Add the cross dependent edge from the BBEntry if SrcMI is from others
         // BB, because we may need to adjust its latency during scheduling.
@@ -594,12 +594,10 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
       continue;
 
     // Get the minimal steps between MI and its dependency.
-    if (IsCtrl) {
-      unsigned MinCtrlDistance = G.getCtrlStepBetween<Type>(SrcMI, MI);
-      // The the latency must bigger than the minimal latency between two control
-      // operations.
-      Latency = std::max(int(MinCtrlDistance), Latency);
-    }
+    unsigned MinCtrlDistance = G.getCtrlStepBetween<Type>(SrcMI, MI);
+    // The the latency must bigger than the minimal latency between two control
+    // operations.
+    Latency = std::max(int(MinCtrlDistance), Latency);
 
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
@@ -610,6 +608,11 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
     Latency -= MIOffset;
     A->addDep<true>(SrcSU, VDEdge::CreateDep<Type>(Latency));
   }
+
+  // Make sure the current MI start after the entry of the CurMBB if there is
+  // no dependencies edge for current MI is added.
+  if (!CrossBBOnly && LatInfo.empty() && -MIOffset > 0)
+    A->addDep<true>(G.lookupSUnit(CurMBB), VDEdge::CreateCtrlDep(-MIOffset));
 }
 
 void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHIMove, VSchedGraph &G){
@@ -728,9 +731,7 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
 
 template<bool CrossBBOnly>
 void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
-  // Build the dependence edge.
-  typedef VSUnit::instr_iterator it;
-  bool IsCtrl = A->isControl();
+  assert(A->isControl() && "Unexpected data-path operations!");
 
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);    
@@ -741,7 +742,7 @@ void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
     addChainDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
-  if (!cp_empty(A) || !IsCtrl) return;
+  if (!cp_empty(A)) return;
 
   // Restrict the control-path operations within the BB boundaries.
   VSUnit *Entry = CrossBBOnly?G.getEntryRoot():G.lookupSUnit(A->getParentBB());
