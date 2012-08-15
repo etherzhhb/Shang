@@ -1038,7 +1038,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
       if (SrcVal->IsChainedWithFU)
         SrcVal = getValAtSlot(SrcVal, SrcVal->FinishSlot, true);
 
-      if (IsPipelined && InSameBB && !IsDangling
+      if (IsPipelined && InSameBB && !IsDangling && !IsPipeStage
           && LatestChainEnd - SrcVal->ChainStart > CurII
           && LatestChainEnd - ReadSlot < CurII)
         // Insert the copy to break the chain.
@@ -1174,6 +1174,7 @@ void ChainBreaker::visit(VSUnit *U) {
       Latency = std::max(1u, Latency);
       Def.FinishSlot = std::max(SchedSlot + Latency, Def.FinishSlot);
       assert((!IsPipelined || U->isDangling()
+              || MI->getOpcode() == VTM::VOpPipelineStage
               || Def.FinishSlot - Def.ChainStart <= CurII)
              && "Anti-dependencies broken!");
     }
