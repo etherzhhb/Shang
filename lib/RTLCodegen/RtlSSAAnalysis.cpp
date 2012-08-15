@@ -268,7 +268,8 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
 {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
-  MachineBasicBlock *CurBB = To->getSlot()->getParentBB();
+  MachineBasicBlock *ToBB = To->getSlot()->getParentBB();
+  MachineBasicBlock *FromBB = From->getSlot()->getParentBB();
 
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
@@ -284,28 +285,26 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
       // TODO: Other conditions?
     }
 
-    VASTSlot *DefSlot = PredOut->getSlot();
-    MachineBasicBlock *DefBB = DefSlot->getParentBB();
+    VASTSlot *PredSlot = PredOut->getSlot();
     ValueAtSlot::LiveInInfo LI = II->second;
 
     // If the FromSlot is bigger than the ToSlot, then we are looping back.
-    bool ToNewBB = DefBB != CurBB || From->getSlot() >= To->getSlot();
+    bool ToNewBB = FromBB != ToBB || From->getSlot() >= To->getSlot();
     // Trace the propagation path.
     LI.liveThroughOtherBB(ToNewBB);
 
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
 
-    Changed |= To->insertIn(PredOut, LI);
-    // Do not let the killed VASs go out
-    if (To->isVASKilled(PredOut)) continue;
+    bool LiveInToSlot = true;
+    bool LiveOutToSlot = !To->isVASKilled(PredOut);
 
     // Check if the register is killed according MachineFunction level liveness
     // information.
     switch (R->getRegType()) {
     case VASTRegister::Data: {
       unsigned RegNum = R->getDataRegNum();
-      MachineInstr *CtrlStart = DefSlot->getBundleStart();
+      MachineInstr *CtrlStart = PredSlot->getBundleStart();
       // Do not add live out if data register R not live in the new BB.
       if (ToNewBB && RegNum && CtrlStart) {
         // The register may be defined at the first slot of current BB, which
@@ -320,11 +319,21 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
             // The Reg is defined outside the current BB, so that we can kill
             // the definition according to the live-ins information of the BB.
             ShouldTrustBBLI = true;
+            const MachineInstr *DefMI = OperI->getParent();
+            if (DefMI->getOpcode() == VTM::VOpMvPhi
+                // The register is defined by the VOpMvPhi.
+                && II->second.getCycles() == 0
+                // However, the copy is not active when jumping to ToBB.
+                && DefMI->getOperand(2).getMBB() != ToBB)
+              // Then this define is even not live-in ToSlot.
+              LiveInToSlot = LiveOutToSlot =false;
+
             break;
           }
 
-        if (ShouldTrustBBLI && !CurBB->isLiveIn(RegNum))
-          continue;
+        if ((ShouldTrustBBLI && !ToBB->isLiveIn(RegNum))) {
+          LiveOutToSlot = false;
+        }
       }
       break;
     }
@@ -333,13 +342,14 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
       // signal may take more than one cycles to propagation, the shortest path
       // should be the path that propagating the "1" value of the enable
       // register.
-      if (R != DefSlot->getRegister() && LI.getCycles() > 1) continue;
+      if (R != PredSlot->getRegister() && LI.getCycles() > 1)
+        LiveOutToSlot = false;
       break;
     default: break;
     }
 
-    // New out occur.
-    Changed |= To->insertOut(PredOut, LI);
+    if (LiveInToSlot) Changed |= To->insertIn(PredOut, LI);
+    if (LiveOutToSlot) Changed |= To->insertOut(PredOut, LI);
   }
 
   return Changed;
