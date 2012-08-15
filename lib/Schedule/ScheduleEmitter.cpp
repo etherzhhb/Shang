@@ -197,7 +197,6 @@ struct BundleBuilder {
   BundleBuilder(const BundleBuilder&);     // DO NOT IMPLEMENT
   void operator=(const BundleBuilder&); // DO NOT IMPLEMENT
 
-  VSchedGraph &State;
   MachineBasicBlock &MBB;
   const unsigned ScheduleStartSlot, ScheduleLoopOpSlot, ScheduleEndSlot, II,
                  StartSlot;
@@ -235,10 +234,10 @@ struct BundleBuilder {
   typedef std::map<unsigned, std::pair<SimpleValDef*, unsigned> > PHIDefMapType;
   PHIDefMapType PHIDefs;
 
-  BundleBuilder(VSchedGraph &S, MachineBasicBlock *MBB, unsigned StartSlot)
-  : State(S), MBB(*MBB), ScheduleStartSlot(S.getStartSlot(MBB)),
-    ScheduleLoopOpSlot(S.getLoopOpSlot(MBB)), ScheduleEndSlot(S.getEndSlot(MBB)),
-    II(S.getII(MBB)), StartSlot(StartSlot), isMBBPipelined(S.isPipelined(MBB)),
+  BundleBuilder(VSchedGraph &G, MachineBasicBlock *MBB, unsigned StartSlot)
+  : MBB(*MBB), ScheduleStartSlot(G.getStartSlot(MBB)),
+    ScheduleLoopOpSlot(G.getLoopOpSlot(MBB)), ScheduleEndSlot(G.getEndSlot(MBB)),
+    II(G.getII(MBB)), StartSlot(StartSlot), isMBBPipelined(G.isPipelined(MBB)),
     InsertPos(MBB->end()), MRI(MBB->getParent()->getRegInfo()),
     VFI(*MBB->getParent()->getInfo<VFInfo>())
   {
