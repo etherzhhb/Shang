@@ -53,10 +53,11 @@ namespace VFUs {
     MemoryBus = 5,
     BRam = 6,
     Mux = 7,
+    Sel = 8,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
     LastBitLevelChainingFUType = Mult,
-    LastPostBindFUType = ICmp,
+    LastPostBindFUType = Sel,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
     LastCommonFUType = Mux,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
@@ -90,7 +91,8 @@ namespace VFUs {
   unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
                              SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
-  extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64];
+  extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64],
+                  SelCost[64];
 
   extern unsigned LUTCost;
   extern unsigned RegCost;
@@ -293,6 +295,7 @@ typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 typedef VSimpleFUDesc<VFUs::ICmp>    VFUICmp;
+typedef VSimpleFUDesc<VFUs::Sel>     VFUSel;
 
 class VFUBRAM : public  VFUDesc {
   unsigned DataWidth;
