@@ -17,6 +17,7 @@ ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
 SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
 MULT_ChainingThreshold = @MULT_ChainingThreshold@
 ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
+SEL_ChainingThreshold = -1
 POINTER_SIZE_IN_BITS = @POINTER_SIZE_IN_BITS@
 
 -- load platform information script
