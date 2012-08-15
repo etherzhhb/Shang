@@ -1113,7 +1113,15 @@ void ChainBreaker::visit(VSUnit *U) {
 
   // Try to break the chain aggressively, to preserve the anti-dependencies in
   // pipelined block.
-  unsigned LatestChainEnd = U->getFinSlot();
+  // The chain end when the value provided by wire is copied to register.
+  // For control-path operations, the operand value are copied to operand
+  // register when the operation start.
+  // For data-path operations, only the result may be copied to register.
+  // Please note that the result of data-path operation can be copied at least 1
+  // slot after the operation start.
+  unsigned LatestChainEnd
+    = U->isControl() ? U->getSlot() : std::max(U->getFinSlot(), U->getSlot() + 1);
+
   if (IsPipelined && U->isDatapath() && !U->isDangling()) {
     typedef VSUnit::use_iterator use_it;
     for (use_it I = duse_begin(U), E = duse_end(U); I != E; ++I) {
@@ -1165,6 +1173,9 @@ void ChainBreaker::visit(VSUnit *U) {
       // operation start.
       Latency = std::max(1u, Latency);
       Def.FinishSlot = std::max(SchedSlot + Latency, Def.FinishSlot);
+      assert((!IsPipelined || U->isDangling()
+              || Def.FinishSlot - Def.ChainStart <= CurII)
+             && "Anti-dependencies broken!");
     }
 
     ChainValDef *NewDef = new (Allocator.Allocate()) ChainValDef(Def);
