@@ -50,10 +50,10 @@ namespace VFUs {
     Shift = 2,
     Mult = 3,
     ICmp = 4,
-    MemoryBus = 5,
-    BRam = 6,
-    Mux = 7,
-    Sel = 8,
+    Sel = 5,
+    MemoryBus = 6,
+    BRam = 7,
+    Mux = 8,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
     LastBitLevelChainingFUType = Mult,
@@ -65,7 +65,7 @@ namespace VFUs {
     // Special function unit.
     // RTL module corresponding to callee functions of function corresponding to
     // current RTL module.
-    CalleeFN = 8,
+    CalleeFN = 9,
     LastFUType = CalleeFN,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
@@ -102,7 +102,7 @@ namespace VFUs {
 
   // Latency tables
   extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-                ShiftLatencies[4];
+                ShiftLatencies[4],SelLatencies[4];
 
   float getMuxLatency(unsigned Size);
   float getReductionLatency(unsigned Size);

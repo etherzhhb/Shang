@@ -978,7 +978,8 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
 
   // Can be fitted into LUT.
-  case VTM::VOpSel:         return VFUs::LutLatency;
+  case VTM::VOpSel:
+    return LookupLatency<0>(VFUs::SelLatencies, MI);
 
   // Ignore the trivial logic operation latency at the moment.
   case VTM::VOpLUT:

@@ -713,6 +713,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   CompRegEdgeWeight RegWeight(this, &VFUs::RegCost);
   CompBinOpEdgeWeight<VTM::VOpAdd, 1> AddWeight(this, VFUs::AddCost);
   CompICmpEdgeWeight ICmpWeight(this, VFUs::ICmpCost);
+  //CompSelEdgeWeight SelWeight(this, VFUs::SelCost);
   CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
   CompBinOpEdgeWeight<VTM::VOpMultLoHi, 1> MulLHWeiht(this, VFUs::MulCost);
   CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);

@@ -55,7 +55,7 @@ void VFUDesc::print(raw_ostream &OS) const {
 namespace llvm {
   namespace VFUs {
     const char *VFUNames[] = {
-      "Trivial", "AddSub", "Shift", "Mult", "ICmp", "MemoryBus", "BRam",
+      "Trivial", "AddSub", "Shift", "Mult", "ICmp", "Sel", "MemoryBus", "BRam",
       "Mux", "CalleeFN"
     };
 
@@ -68,6 +68,7 @@ namespace llvm {
     unsigned MulCost[64] ;
     unsigned ShiftCost[64] ;
     unsigned ICmpCost[64] ;
+    unsigned SelCost[64] ;
     //////////////////////////////////
     //FIX ME: This can be initialized the MuxCost from lua.
     unsigned MaxLutSize = 4;
@@ -79,6 +80,7 @@ namespace llvm {
     float CmpLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
     float MultLatencies[]      = { 1.0f,  1.0f,  1.0f, 1.0f };
     float ShiftLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float SelLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
     float MemBusLatency = 1.0f;
     float BRamLatency = 1.0f;
     float LutLatency = 0.0f;

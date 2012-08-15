@@ -447,6 +447,11 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
     return SelectSimpleNode(N, Opcode);
   }
 
+  //case VTMISD::Sel:{
+  //  unsigned Opcode = SelectOpCode<VFUs::Sel, VTM::VOpSel_c, VTM::VOpSel>(N);
+  //  return SelectSimpleNode(N, Opcode);
+  //}
+
   case ISD::MUL:{
     unsigned Opcode = SelectOpCode<VFUs::Mult, VTM::VOpMult_c, VTM::VOpMult>(N);
     return SelectBinary(N, Opcode);

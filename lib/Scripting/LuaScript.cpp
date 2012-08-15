@@ -179,6 +179,8 @@ void LuaScript::updateFUs() {
 
   initSimpleFU(VFUs::ICmp, FUs, VFUs::ICmpCost, VFUs::CmpLatencies);
 
+  initSimpleFU(VFUs::Sel, FUs, VFUs::SelCost, VFUs::SelLatencies);
+
   // Read other parameters.
 #define READPARAMETER(PARAMETER, T) \
   if (boost::optional<T> PARAMETER \

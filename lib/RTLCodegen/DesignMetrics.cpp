@@ -234,6 +234,9 @@ uint64_t DesignMetricsImpl::getFUCost(VASTValue *V) const {
 
   case VASTExpr::dpAdd: return VFUs::AddCost[ValueSize];
   case VASTExpr::dpMul: return VFUs::MulCost[ValueSize];
+  case VASTExpr::dpSCmp:
+  case VASTExpr::dpUCmp: return VFUs::ICmpCost[ValueSize];
+  case VASTExpr::dpSel: return VFUs::SelCost[ValueSize];
   case VASTExpr::dpShl:
   case VASTExpr::dpSRA:
   case VASTExpr::dpSRL: return VFUs::ShiftCost[ValueSize];
