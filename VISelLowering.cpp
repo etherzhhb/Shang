@@ -189,9 +189,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setOperationAction(ISD::BR_CC,  MVT::Other, Expand);
 
   // Try to perform bit level optimization on these nodes:
-  setTargetDAGCombine(ISD::SHL);
-  setTargetDAGCombine(ISD::SRA);
-  setTargetDAGCombine(ISD::SRL);
   setTargetDAGCombine(ISD::ROTL);
   setTargetDAGCombine(ISD::ROTR);
 
