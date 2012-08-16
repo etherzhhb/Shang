@@ -18,3 +18,6 @@ FUs.ICmp   = { Latencies = { 1.909 / PERIOD, 2.752 / PERIOD, 4.669 / PERIOD, 7.3
 FUs.Sel    = { Latencies = { 0.835 / PERIOD, 1.026 / PERIOD, 1.209 / PERIOD, 2.769 / PERIOD },
                Costs = {64, 512, 1024, 2048, 4096}, StartInterval=1,
 			         ChainingThreshold = SEL_ChainingThreshold}
+FUs.Reduction    = { Latencies = { 1.587 / PERIOD, 1.749 / PERIOD, 2.318 / PERIOD, 2.655 / PERIOD },
+               Costs = {0, 192, 320, 704, 1344}, StartInterval=1,
+			         ChainingThreshold = REDUCTION_ChainingThreshold}
