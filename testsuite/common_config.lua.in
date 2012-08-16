@@ -97,4 +97,11 @@ module shang_sel#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0, D_WIDTH = 0) 
 );
 	assign d = c ? a : b;
 endmodule
+
+module shang_reduction#(parameter A_WIDTH = 0, B_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  output wire b
+);
+	assign b = &a;
+endmodule
 ]=]
