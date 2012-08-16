@@ -27,6 +27,7 @@ SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
 MULT_ChainingThreshold = @MULT_ChainingThreshold@
 ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
 SEL_ChainingThreshold = -1
+REDUCTION_ChainingThreshold = -1
 
 -- load platform information script
 dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
