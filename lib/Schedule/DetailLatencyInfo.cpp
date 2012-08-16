@@ -82,7 +82,7 @@ static LatInfoTy getMSB2LSBLatency(float SrcMSBLatency, float SrcLSBLatency,
 static LatInfoTy getCmpLatency(float SrcMSBLatency, float SrcLSBLatency,
                                float TotalLatency, float PerBitLatency) {
   LatInfoTy LatInfo = getMSB2LSBLatency(SrcMSBLatency, SrcLSBLatency,
-    TotalLatency, PerBitLatency);
+                                        TotalLatency, PerBitLatency);
   // We need to get the worst delay because the cmps only have 1 bit output.
   float WorstLat = std::max(LatInfo.first, LatInfo.second);
   return std::make_pair(WorstLat, WorstLat);
@@ -278,14 +278,14 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
     else
       accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-      PerBitLatency, getWorstLatency);
+                                PerBitLatency, getWorstLatency);
     break;
     // Result bits are computed from LSB to MSB.
   case VTM::VOpAdd_c:
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-      PerBitLatency, getLSB2MSBLatency);
+                              PerBitLatency, getLSB2MSBLatency);
     break;
   case VTM::VOpAdd:
   case VTM::VOpMult:
@@ -300,15 +300,15 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpNot:
   case VTM::VOpBitCat:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-      PerBitLatency, getParallelLatency);
+                              PerBitLatency, getParallelLatency);
     break;
   case VTM::VOpBitSlice:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-      PerBitLatency, BitSliceLatencyFN(SrcMI));
+                              PerBitLatency, BitSliceLatencyFN(SrcMI));
     break;
   case VTM::VOpICmp_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-      PerBitLatency, getCmpLatency);
+                              PerBitLatency, getCmpLatency);
     break;
   case VTM::VOpICmp:
     // Result bits are computed from MSB to LSB.
