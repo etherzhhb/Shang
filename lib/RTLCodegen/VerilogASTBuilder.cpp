@@ -1082,7 +1082,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
   VASTRegister *R = getAsLValue<VASTRegister>(Dst);
-  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds, *Builder, true, MI);
 }
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,

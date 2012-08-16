@@ -810,6 +810,12 @@ public:
     return SignalData;
   }
 
+  MachineInstr *getDefMI() const {
+    assert(getWireType() == VASTWire::AssignCond &&
+           "Call getDefMI on bad wire type!");
+    return Contents.BundleStart;
+  }
+
   // Print the logic to the output stream.
   void printAssignment(raw_ostream &OS) const;
 
@@ -1358,9 +1364,11 @@ public:
 
   void addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTValPtr> &Cnds,
-                     VASTExprBuilder &Builder, bool AddSlotActive = true);
+                     VASTExprBuilder &Builder, bool AddSlotActive = true,
+                     MachineInstr *DefMI = 0);
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValPtr> &Cnds,
-                           VASTExprBuilder &Builder, bool AddSlotActive = true);
+                           VASTExprBuilder &Builder, bool AddSlotActive = true,
+                           MachineInstr *DefMI = 0);
 
   VASTWire *assign(VASTWire *W, VASTValPtr V,
                    VASTWire::Type T = VASTWire::Common);

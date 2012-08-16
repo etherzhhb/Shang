@@ -975,12 +975,14 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      SmallVectorImpl<VASTValPtr> &Cnds,
                                      VASTExprBuilder &Builder,
-                                     bool AddSlotActive) {
+                                     bool AddSlotActive,
+                                     MachineInstr *DefMI) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand(false));
   VASTValPtr AssignAtSlot = Builder.buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
+  new (Wire) VASTWire(reinterpret_cast<const char*>(DefMI),
+                      AssignAtSlot->getBitWidth(), "");
   assign(Wire, AssignAtSlot, VASTWire::AssignCond)->setSlot(Slot->SlotNum);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
@@ -990,9 +992,10 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
 
 void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTValPtr> &Cnds,
-                               VASTExprBuilder &Builder, bool AddSlotActive) {
+                               VASTExprBuilder &Builder, bool AddSlotActive,
+                               MachineInstr *DefMI) {
   if (Src) {
-    VASTWire *Cnd = buildAssignCnd(Slot, Cnds, Builder, AddSlotActive);
+    VASTWire *Cnd = buildAssignCnd(Slot, Cnds, Builder, AddSlotActive, DefMI);
     Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
   }
 }

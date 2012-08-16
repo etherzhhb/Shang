@@ -1035,7 +1035,8 @@ static bool printBinFU(raw_ostream &OS, const VASTWire *W) {
 
 void VASTWire::printAsOperandImpl(raw_ostream &OS, unsigned UB,
                                   unsigned LB) const {
-  if (getName())
+  // For the AssignCond, the name is invalid.
+  if (getWireType() != AssignCond && getName())
     VASTNamedValue::printAsOperandImpl(OS, UB, LB);
   else {
     VASTValPtr V = getAssigningValue();
