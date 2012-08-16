@@ -88,6 +88,8 @@ void ValueAtSlot::print(raw_ostream &OS) const {
     OS << I->first->getName() << '[' << I->second.getCycles() << ']' << ',';
 
   OS << "}\n";
+
+  if (DefMI) OS.indent(2) << *DefMI << '\n';
 }
 
 void ValueAtSlot::verify() const {
@@ -212,9 +214,9 @@ void RtlSSAAnalysis::buildAllVAS() {
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
       VASTSlot *S = VM->getSlot(I->first->getSlotNum());
-
+      MachineInstr *DefMI = I->first->getDefMI();
       // Create the origin VAS.
-      ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
+      ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S, DefMI);
       UniqueVASs.insert(std::make_pair(std::make_pair(Reg, S), VAS));
     }
   }
@@ -301,36 +303,27 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     switch (R->getRegType()) {
     case VASTRegister::Data: {
       unsigned RegNum = R->getDataRegNum();
-      MachineInstr *CtrlStart = DefSlot->getBundleStart();
+      const MachineInstr *DefMI = PredOut->getDefMI();
       // Do not add live out if data register R not live in the new BB.
-      if (ToNewBB && RegNum && CtrlStart) {
+      if (ToNewBB && RegNum && DefMI) {
         // The register may be defined at the first slot of current BB, which
         // slot is alias with the last slot of Current BB's predecessor. In this
         // case we should not believe the live-ins information of the BB.
-        // So if the register are not defined at the current slot (the last slot
-        // of current BB) then we can trust the live-ins information.
-        bool ShouldTrustBBLI = II->second.getCycles() > 0;
+        // And if the register are not defined at the current slot (the last
+        // slot of current BB) then we can trust the live-ins information.
+        bool ShouldTrustBBLI = II->second.getCycles() > 0
+                               || DefMI->getParent() == FromBB;
 
-        for(ConstMIBundleOperands OperI(CtrlStart); OperI.isValid(); ++OperI)
-          if (OperI->isReg() && OperI->isDef() && OperI->getReg() == RegNum) {
-            // The Reg is defined outside the current BB, so that we can kill
-            // the definition according to the live-ins information of the BB.
-            ShouldTrustBBLI = true;
-            const MachineInstr *DefMI = OperI->getParent();
-            if (DefMI->getOpcode() == VTM::VOpMvPhi
-                // The register is defined by the VOpMvPhi.
-                && II->second.getCycles() == 0
-                // However, the copy is not active when jumping to ToBB.
-                && DefMI->getOperand(2).getMBB() != ToBB)
-              // Then this define is even not live-in ToSlot.
-              LiveInToSlot = LiveOutToSlot =false;
+        if (DefMI->getOpcode() == VTM::VOpMvPhi
+            // The register is defined by the VOpMvPhi.
+            && II->second.getCycles() == 0
+            // However, the copy maybe disabled when jumping to ToBB.
+            && DefMI->getOperand(2).getMBB() != ToBB)
+          // Then this define is even not live-in ToSlot.
+          LiveInToSlot = LiveOutToSlot =false;
 
-            break;
-          }
-
-        if ((ShouldTrustBBLI && !ToBB->isLiveIn(RegNum))) {
+        if ((ShouldTrustBBLI && !ToBB->isLiveIn(RegNum)))
           LiveOutToSlot = false;
-        }
       }
       break;
     }
