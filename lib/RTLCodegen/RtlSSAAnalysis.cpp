@@ -284,7 +284,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
       // TODO: Other conditions?
     }
 
-    VASTSlot *PredSlot = PredOut->getSlot();
+    VASTSlot *DefSlot = PredOut->getSlot();
     ValueAtSlot::LiveInInfo LI = II->second;
 
     // If the FromSlot is bigger than the ToSlot, then we are looping back.
@@ -301,7 +301,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     switch (R->getRegType()) {
     case VASTRegister::Data: {
       unsigned RegNum = R->getDataRegNum();
-      MachineInstr *CtrlStart = PredSlot->getBundleStart();
+      MachineInstr *CtrlStart = DefSlot->getBundleStart();
       // Do not add live out if data register R not live in the new BB.
       if (ToNewBB && RegNum && CtrlStart) {
         // The register may be defined at the first slot of current BB, which
@@ -339,7 +339,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
       // signal may take more than one cycles to propagation, the shortest path
       // should be the path that propagating the "1" value of the enable
       // register.
-      if (R != PredSlot->getRegister() && LI.getCycles() > 1)
+      if (R->getSlotNum() == DefSlot->SlotNum && LI.getCycles() > 1)
         LiveOutToSlot = false;
       break;
     default: break;
