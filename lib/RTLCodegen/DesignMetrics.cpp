@@ -240,6 +240,7 @@ uint64_t DesignMetricsImpl::getFUCost(VASTValue *V) const {
   case VASTExpr::dpShl:
   case VASTExpr::dpSRA:
   case VASTExpr::dpSRL: return VFUs::ShiftCost[ValueSize];
+  case VASTExpr::dpRAnd: return VFUs::ReductionCost[ValueSize];
   }
 
   return 0;

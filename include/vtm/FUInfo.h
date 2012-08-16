@@ -51,13 +51,14 @@ namespace VFUs {
     Mult = 3,
     ICmp = 4,
     Sel = 5,
-    MemoryBus = 6,
-    BRam = 7,
-    Mux = 8,
+    Reduction = 6,
+    MemoryBus = 7,
+    BRam = 8,
+    Mux = 9,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
     LastBitLevelChainingFUType = Mult,
-    LastPostBindFUType = Sel,
+    LastPostBindFUType = Reduction,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
     LastCommonFUType = Mux,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
@@ -65,7 +66,7 @@ namespace VFUs {
     // Special function unit.
     // RTL module corresponding to callee functions of function corresponding to
     // current RTL module.
-    CalleeFN = 9,
+    CalleeFN = 10,
     LastFUType = CalleeFN,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
@@ -92,7 +93,7 @@ namespace VFUs {
                              SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
   extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64],
-                  SelCost[64];
+                  SelCost[64], ReductionCost[64];
 
   extern unsigned LUTCost;
   extern unsigned RegCost;
@@ -102,7 +103,7 @@ namespace VFUs {
 
   // Latency tables
   extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-                ShiftLatencies[4],SelLatencies[4];
+                ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
 
   float getMuxLatency(unsigned Size);
   float getReductionLatency(unsigned Size);
@@ -296,6 +297,7 @@ typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 typedef VSimpleFUDesc<VFUs::ICmp>    VFUICmp;
 typedef VSimpleFUDesc<VFUs::Sel>     VFUSel;
+typedef VSimpleFUDesc<VFUs::Reduction>     VFUReduction;
 
 class VFUBRAM : public  VFUDesc {
   unsigned DataWidth;

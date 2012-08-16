@@ -990,6 +990,7 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
   case VTM::VOpROr:
   case VTM::VOpRAnd:
+    return LookupLatency<1>(VFUs::ReductionLatencies, MI);
   case VTM::VOpRXor:{
     unsigned size = VInstrInfo::getBitWidth(MI->getOperand(1));
     return VFUs::getReductionLatency(size);
