@@ -36,25 +36,13 @@ class SlotInfo;
 // ValueAtSlot, represent the value that is defined at a specific slot.
 class ValueAtSlot {
   struct LiveInInfo {
-    union {
-      struct {
-        uint32_t Cycles : 31;
-        uint32_t FromOtherBB : 1;
-      } I;
+    uint32_t Cycles;
 
-      uint32_t D;
-    } U;
+    LiveInInfo() : Cycles(0) {}
 
-    LiveInInfo() { U.D = 0; }
+    uint32_t getCycles() const { return Cycles; }
 
-    uint32_t getCycles() const { return U.I.Cycles; }
-    bool isFromOtherBB() const { return U.I.FromOtherBB; }
-    uint32_t getData() const { return U.D; }
-
-    void incCycles(int Inc = 1) { U.I.Cycles += Inc; }
-    void liveThroughOtherBB(bool IsOtherBB) {
-      U.I.FromOtherBB |= IsOtherBB;
-    }
+    void incCycles(int Inc = 1) { Cycles += Inc; }
   };
 
   VASTRegister *const V;
@@ -100,10 +88,6 @@ public:
 
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
     return getDepInfo(VAS).getCycles();
-  }
-
-  bool isFromOtherBB(ValueAtSlot *VAS) const {
-    return getDepInfo(VAS).isFromOtherBB();
   }
 
   void verify() const;
@@ -160,17 +144,15 @@ class SlotInfo {
   static bool updateLiveIn(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI,
                            VASCycMapTy &S) {
     assert(NewLI.getCycles() && "It takes at least a cycle to live in!");
-
     ValueAtSlot::LiveInInfo &Info = S[VAS];
 
-    unsigned OldInfo = Info.getData();
-
-    if (Info.U.I.Cycles == 0 || Info.U.I.Cycles > NewLI.getCycles())
+    if (Info.Cycles == 0 || Info.Cycles > NewLI.Cycles) {
       // Try to take the shortest path.
       Info = NewLI;
+      return true;
+    }
 
-    // Updated?
-    return OldInfo != Info.getData();
+    return false;
   }
 
   ValueAtSlot::LiveInInfo getLiveIn(ValueAtSlot *VAS) const {
@@ -217,10 +199,6 @@ public:
   // Get the distance (in cycles) from the define slot of the VAS to this slot.
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
     return getLiveIn(VAS).getCycles();
-  }
-
-  unsigned isFromOtherBB(ValueAtSlot *VAS) const {
-    return getLiveIn(VAS).isFromOtherBB();
   }
 
   // Get Slot pointer.

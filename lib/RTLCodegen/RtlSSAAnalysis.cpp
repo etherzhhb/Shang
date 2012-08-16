@@ -97,8 +97,7 @@ void ValueAtSlot::verify() const {
     VASTSlot *DefSlot = I->first->getSlot();
     LiveInInfo LI = I->second;
     if (DefSlot->getParentBB() == UseSlot->getParentBB() &&
-        UseSlot->hasAliasSlot() && !LI.isFromOtherBB() &&
-        LI.getCycles() > DefSlot->alias_ii())
+        UseSlot->hasAliasSlot() && LI.getCycles() > DefSlot->alias_ii())
       llvm_unreachable("Broken RTL dependence!");
   }
 }
@@ -290,8 +289,6 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
 
     // If the FromSlot is bigger than the ToSlot, then we are looping back.
     bool ToNewBB = FromBB != ToBB || From->getSlot() >= To->getSlot();
-    // Trace the propagation path.
-    LI.liveThroughOtherBB(ToNewBB);
 
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
