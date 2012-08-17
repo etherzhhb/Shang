@@ -264,9 +264,8 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   switch (Opcode) {
   default:
-    if (isCtrl)
-      updateLatency(CurLatInfo, SrcMI, SrcLatency);
-    else
+    updateLatency(CurLatInfo, SrcMI, SrcLatency);
+    if (!isCtrl)
       accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                                 getWorstLatency);
     return;
@@ -276,7 +275,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpMult_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getLSB2MSBLatency);
-    return;
+    /* FALL THOUGH */
   case VTM::VOpAdd:
   case VTM::VOpMult:
   case VTM::VOpMultLoHi:
@@ -294,6 +293,11 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       // and the lower bound of the bitslice.
       UB = SrcMI->getOperand(2).getImm();
       LB = SrcMI->getOperand(3).getImm();
+      // Create the entry for the bitslice, the latency of the bitslice is the
+      // same as the scaled BitSliceSrc.
+      SrcLatency = getLatencyToDst<IsCtrlDep>(BitSliceSrc, DstOpcode, UB, LB);
+      updateLatency(CurLatInfo, SrcMI, SrcLatency);
+
       buildDepLatInfo<IsCtrlDep>(BitSliceSrc, CurLatInfo, UB, LB, DstOpcode);
       return;
     }
@@ -307,11 +311,12 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpBitCat:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getParallelLatency);
+    updateLatency(CurLatInfo, SrcMI, SrcLatency);
     return;
   case VTM::VOpICmp_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getCmpLatency);
-    return;
+    /* FALL THOUGH */
   case VTM::VOpICmp:
     // Result bits are computed from MSB to LSB.
     updateLatency(CurLatInfo, SrcMI, SrcLatency);
@@ -340,7 +345,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
     assert(SrcMI && "Virtual register use without define!");
 
     // Do we ignore phi as dependence? Also ignore self loop.
-    if (SrcMI == MI) continue;
+    assert(SrcMI != MI && "Unexpected self-loop!");
+
     unsigned OpSize = VInstrInfo::getBitWidth(MO);
 
     if (Opcode == VTM::VOpBitSlice) {
@@ -364,9 +370,9 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
 
   // We will not get any latency information if a datapath operation do not
   // depends any control operation in the same BB.
-  if (CurLatInfo.empty() && !IsControl) {
-    float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
-    CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(latency, latency)));
+  if (CurLatInfo.empty() && (!IsControl || MI->isPHI())) {
+    Latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
+    CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(Latency, Latency)));
   }
 
   return CurLatInfo;

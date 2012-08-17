@@ -115,11 +115,11 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
 
   template<bool CrossBBOnly>
-  void addChainDepForSU(VSUnit *A, VSchedGraph &G);
+  void addControlPathDepForSU(VSUnit *A, VSchedGraph &G);
 
   typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<VDEdge::Types Type, bool CrossBBOnly>
-  void addChainDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
+  void addControlPathDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
                         VSchedGraph &G, const DepLatInfoTy &LatInfo);
   // Add the dependence from the incoming value of PHI to PHI.
   void addIncomingDepForPHI(VSUnit *PN, VSchedGraph &G);
@@ -520,7 +520,7 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
 
 //===----------------------------------------------------------------------===//
 template<VDEdge::Types Type, bool CrossBBOnly>
-void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
+void VPreRegAllocSched::addControlPathDepForMI(MachineInstr *MI, int MIOffset,
                                          VSUnit *A, VSchedGraph &G,
                                          const DepLatInfoTy &LatInfo) {
   assert(MI && "Unexpected entry root!");
@@ -562,6 +562,8 @@ void VPreRegAllocSched::addChainDepForMI(MachineInstr *MI, int MIOffset,
     }
 
     MachineInstr *SrcMI = Src.get_mi();
+    if (VInstrInfo::isDatapath(SrcMI->getOpcode())) continue;
+
     VSUnit *SrcSU = G.lookupSUnit(SrcMI);
 
     if (SrcMI->getParent() != CurMBB) {
@@ -640,7 +642,7 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
   if (A->getRepresentativePtr().isMBB()) return;
 
   typedef VSUnit::instr_iterator it;
-  bool isCtrl = A->isControl();
+  bool IsCtrl = A->isControl();
   unsigned NumValDep = 0;
   MachineBasicBlock *ParentBB = A->getParentBB();
 
@@ -649,88 +651,64 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
   // not capture here.
   for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
     MachineInstr *MI = A->getPtrAt(I);
+    assert(MI && "Unexpected entry root!");
     int IntraSULatency = A->getLatencyAt(I);
     // Prevent the data-path dependency from scheduling to the same slot with
     // the MI with the Control SU.
-    if (IntraSULatency < 0 && isCtrl)
+    if (IntraSULatency < 0 && IsCtrl)
       IntraSULatency -= DetialLatencyInfo::DeltaLatency;
 
-    assert(MI && "Unexpected entry root!");
-    for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-      MachineInstr *DepSrc = 0;
-      const MachineOperand &MO = MI->getOperand(i);
-      VSUnit *Dep = getDefSU(MO, G, DepSrc);
-      // Avoid self-edge, and edge from control-path operation, which will be
-      // taken care by later code.
-      if (Dep == 0 || Dep->getIdx() == A->getIdx() || Dep->isControl())
-        continue;
+    const DepLatInfoTy *DepLats = G.getDepLatInfo(MI);
+    for (src_it I = DepLats->begin(), E = DepLats->end(); I != E; ++I) {
+      VSUnit *SrcSU = G.lookupSUnit(I->first);
+      assert(SrcSU && "Bad source scheduling unit!");
+      bool IsSrcCtrl = SrcSU->isControl();
+      // No need to add control-path to control-path dependencies into the
+      // data-path dependencies graph.
+      if (IsSrcCtrl && IsCtrl) continue;
 
-      // Prevent the data-path SU from being scheduled to the same slot with A.
-      // FIXME: Also provide the lower bound of the latency between data-path
-      // operations.
-      int Latency = isCtrl ? std::max(Dep->getLatency(), 1u) : 0;
+      // Initialize the Latency to data-path to data-path dependencies. Setting
+      // it to 0 means their can chain together.
+      int Latency = 0;
+
+      // Get the minimal latency from the control-path dependencies to current
+      // MI, when bit-level chaining is enabled, they are in fact the latencies
+      // from the control-path dependencies to the first started bit of current
+      // MI.
+      if (IsSrcCtrl)
+        Latency = floor(DetialLatencyInfo::getMinLatency(*I));
+      // Get the maximal latency from the data-path dependencies to control-path
+      // operations, because the control-path operations read their operand
+      // value right before it start, hence we need to get the maximal latency
+      // to ensure the data-path operation had already finished when its result
+      // is read.
+      else if (IsCtrl)
+        Latency = std::max<int>(ceil(DetialLatencyInfo::getMaxLatency(*I)), 1);
+      else {//if(!IsCtrl && !IsSrcCtrl)
+        MachineInstr *SrcMI = I->first;
+        // Only create the edge if MI is actually reading the result of SrcMI.
+        if (!SrcMI || !MI->readsVirtualRegister(SrcMI->getOperand(0).getReg()))
+          continue;
+      }
 
       Latency -= IntraSULatency;
-      Latency = Dep->getLatencyFrom(DepSrc, Latency);
-
+      Latency = SrcSU->getLatencyFrom(I->first, Latency);
       // There is non back-edge in data-path dependency graph.
-      assert(Dep->getIdx()<=A->getIdx()&&"Unexpected back-edge in data-path!");
+      assert(SrcSU->getIdx() < A->getIdx()
+             &&"Unexpected back-edge or loop in data-path!");
 
-      A->addDep<false>(Dep, VDEdge::CreateValDep(Latency));
+      A->addDep<false>(SrcSU, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
 
-      // Constraint the schedule unit by the entry of the parent BB.
-      if (Dep->getParentBB() == ParentBB) ++NumValDep;
+      if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
     }
   }
 
-  if (isCtrl) {
-    typedef df_iterator<VSUnit*, std::set<VSUnit*>, false,
-                        VSUnitDepGraphTraits<false> >
-            dep_tree_iterator;
-    // Make sure the value of data-path operation is copied to register before
-    // its control-path user start.
-    // Inserting the dependencies will change the dependencies tree, hence we
-    // need to store the whole dependencies tree to somewhere else first.
-    // In addition, we also need to skip A itself by skipping the first node in
-    // depth-first order.
-    std::vector<VSUnit*> DepChildren(llvm::next(dep_tree_iterator::begin(A)),
-                                     dep_tree_iterator::end(A));
-    typedef std::vector<VSUnit*>::iterator iterator;
-    for (iterator I = DepChildren.begin(), E = DepChildren.end(); I != E; ++I) {
-      VSUnit *U = *I;
-
-      if (U->isControl()) continue;
-
-      unsigned Latency = std::max(U->getLatency(), 1u);
-      A->addDep<false>(U, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
-    }
-
-    return;
-  }
-
-  assert(A->num_instrs() == 1 && "Unexpected multiple MI in data-path operation!");
-  MachineInstr *MI = A->getRepresentativePtr();
-  const DepLatInfoTy *DepLats = G.getDepLatInfo(MI);
-  for (src_it I = DepLats->begin(), E = DepLats->end(); I != E; ++I) {
-    VSUnit *SrcSU = G.lookupSUnit(I->first);
-    assert(SrcSU && SrcSU->isControl() && "Bad source scheduling unit!");
-    // Get the minimal latency from the control-path dependencies to current
-    // MI, when bit-level chaining is enabled, they are in fact the latencies
-    // from the control-path dependencies to the first started bit of current
-    // MI.
-    int Latency = floor(DetialLatencyInfo::getMinLatency(*I));
-
-    A->addDep<false>(SrcSU, VDEdge::CreateDep<VDEdge::ChainSupporting>(Latency));
-
-    if (SrcSU->getParentBB() == ParentBB) ++NumValDep;
-  }
-
-  assert(NumValDep && "Expect at least 1 dependency in the same MBB!");
+  assert((NumValDep || IsCtrl) && "Expect at least 1 dependency in the same MBB!");
   (void) NumValDep;
 }
 
 template<bool CrossBBOnly>
-void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
+void VPreRegAllocSched::addControlPathDepForSU(VSUnit *A, VSchedGraph &G) {
   assert(A->isControl() && "Unexpected data-path operations!");
 
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
@@ -739,7 +717,7 @@ void VPreRegAllocSched::addChainDepForSU(VSUnit *A, VSchedGraph &G) {
     const DetialLatencyInfo::DepLatInfoTy *Deps = G.getDepLatInfo(MI);
     assert(Deps && "Operand latency information not available!");
     int MIOffset = A->getLatencyAt(I);
-    addChainDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
+    addControlPathDepForMI<VDEdge::ValDep, CrossBBOnly>(MI, MIOffset, A, G, *Deps);
   }
 
   if (!cp_empty(A)) return;
@@ -979,7 +957,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     // Build the schedule unit for loop back operation.
     if (G.isLoopOp(I)) {
       VSUnit *LoopOp = G.createVSUnit(MI);
-      addChainDepForSU<false>(LoopOp, G);
+      addControlPathDepForSU<false>(LoopOp, G);
       VSUnit *BBEntry = G.lookupSUnit(MBB);
       // Schedule the LoopOp II slots after the entry SU.
       LoopOp->addDep<true>(BBEntry, VDEdge::CreateMemDep(0, -1));
@@ -1031,10 +1009,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
   }
 
   // Add the control dependence edge edges to wait all operation finish.
-  addChainDepForMI<VDEdge::CtrlDep, false>(ExitSU->getRepresentativePtr(),
+  addControlPathDepForMI<VDEdge::CtrlDep, false>(ExitSU->getRepresentativePtr(),
                                            0/*Offset*/, ExitSU, G, ExitDeps);
   // Add the dependence of exit root.
-  addChainDepForSU<false>(ExitSU, G);
+  addControlPathDepForSU<false>(ExitSU, G);
 
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so dangling node
@@ -1103,7 +1081,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
 
     if (VSUnit *U = buildSUnit(MI, G)) {
       NewSUs.push_back(U);
-      if (U->isControl()) addChainDepForSU<false>(U, G);
+      if (U->isControl()) addControlPathDepForSU<false>(U, G);
     }
   }
 
@@ -1115,7 +1093,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
     VSUnit *PHIMove = buildSUnit(I, G);
     NewSUs.push_back(PHIMove);
     addIncomingDepForPHI(PHIMove, G);
-    addChainDepForSU<false>(PHIMove, G);
+    addControlPathDepForSU<false>(PHIMove, G);
   }
 
   // Create the exit node, now BI points to the first terminator.
@@ -1150,7 +1128,7 @@ bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB
 
   typedef VSchedGraph::iterator it;
   for (it I = G.mergeSUsInSubGraph(LocalG), E = cp_end(&G); I != E; ++I)
-    addChainDepForSU<true>(*I, G);
+    addControlPathDepForSU<true>(*I, G);
 
   buildDataPathGraph(G, NewSUs);
   addDepsForBBEntry(G, CurEntry);
