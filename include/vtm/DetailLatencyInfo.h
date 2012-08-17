@@ -124,8 +124,8 @@ private:
   LatencyMapTy LatencyMap;
   // Add the latency information from SrcMI to CurLatInfo.
   template<bool IsCtrlDep>
-  bool buildDepLatInfo(const MachineInstr *SrcMI, DepLatInfoTy &CurLatInfo,
-                       unsigned OperandWidth, float OperandDelay,
+  void buildDepLatInfo(const MachineInstr *SrcMI, DepLatInfoTy &CurLatInfo,
+                       unsigned UB, unsigned LB,
                        unsigned DstOpcode = VTM::INSTRUCTION_LIST_END);
 
   template<bool IsCtrlDep>
@@ -178,7 +178,7 @@ public:
 
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
-  float getChainingLatency(const MachineInstr *SrcInstr,
+  float getChainedLatency(const MachineInstr *SrcInstr,
                            const MachineInstr *DstInstr) const;
 
   static unsigned getStepsFromEntry(const MachineInstr *DstInstr) {
@@ -191,7 +191,7 @@ public:
                               const MachineInstr *DstInstr) {
     if (!SrcInstr) return getStepsFromEntry(DstInstr);
 
-    if (IsValDep) return ceil(getChainingLatency(SrcInstr, DstInstr));
+    if (IsValDep) return ceil(getChainedLatency(SrcInstr, DstInstr));
 
     return getStepsToFinish(SrcInstr);
   }

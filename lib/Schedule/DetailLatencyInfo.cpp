@@ -53,7 +53,8 @@ typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
 typedef DepLatInfoTy::mapped_type LatInfoTy;
 
 static void updateLatency(DepLatInfoTy &CurLatInfo, InstPtrTy Src,
-                          float MSBLatency, float LSBLatency) {
+                          LatInfoTy Latency) {
+  float MSBLatency = Latency.first, LSBLatency = Latency.second;
   // Latency from a control operation is simply the latency of the control
   // operation.
   // We may have dependency like:
@@ -71,44 +72,69 @@ static void updateLatency(DepLatInfoTy &CurLatInfo, InstPtrTy Src,
   OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
-static LatInfoTy getMSB2LSBLatency(float SrcMSBLatency, float SrcLSBLatency,
-                                   float TotalLatency, float PerBitLatency) {
-  float MSBLatency = PerBitLatency + SrcMSBLatency;
-  float LSBLatency = std::max(PerBitLatency + SrcLSBLatency,
-                              TotalLatency + SrcMSBLatency);
+static
+LatInfoTy getMSB2LSBLatency(LatInfoTy SrcLatency, LatInfoTy Inc, float BitInc) {
+  float SrcMSBLatency = SrcLatency.first,
+        SrcLSBLatency = SrcLatency.second;
+  float MSBInc = Inc.first, LSBInc = Inc.second;
+
+  float MSBLatency = MSBInc + SrcMSBLatency;
+  float LSBLatency = std::max(BitInc + SrcLSBLatency,
+                              LSBInc + SrcMSBLatency);
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
-static LatInfoTy getCmpLatency(float SrcMSBLatency, float SrcLSBLatency,
-                               float TotalLatency, float PerBitLatency) {
-  LatInfoTy LatInfo = getMSB2LSBLatency(SrcMSBLatency, SrcLSBLatency,
-                                        TotalLatency, PerBitLatency);
+static
+LatInfoTy getCmpLatency(LatInfoTy SrcLatency, LatInfoTy Inc, float BitInc) {
+  LatInfoTy LatInfo = getMSB2LSBLatency(SrcLatency, Inc, BitInc);
   // We need to get the worst delay because the cmps only have 1 bit output.
   float WorstLat = std::max(LatInfo.first, LatInfo.second);
   return std::make_pair(WorstLat, WorstLat);
 }
 
-static LatInfoTy getLSB2MSBLatency(float SrcMSBLatency, float SrcLSBLatency,
-                                   float TotalLatency, float PerBitLatency) {
-  float MSBLatency = std::max(TotalLatency + SrcLSBLatency,
-                              PerBitLatency + SrcMSBLatency);
-  float LSBLatency = PerBitLatency + SrcLSBLatency;
+static
+LatInfoTy getLSB2MSBLatency(LatInfoTy SrcLatency, LatInfoTy Inc, float BitInc) {
+  float SrcMSBLatency = SrcLatency.first,
+        SrcLSBLatency = SrcLatency.second;
+  float MSBInc = Inc.first, LSBInc = Inc.second;
+
+  float MSBLatency = std::max(MSBInc + SrcLSBLatency,
+                              BitInc + SrcMSBLatency);
+  float LSBLatency = LSBInc + SrcLSBLatency;
+  return std::make_pair(MSBLatency, LSBLatency);
+}
+
+static
+LatInfoTy getWorstLatency(LatInfoTy SrcLatency, LatInfoTy Inc, float /*BitInc*/) {
+  float SrcMSBLatency = SrcLatency.first,
+        SrcLSBLatency = SrcLatency.second;
+  float MSBInc = Inc.first, LSBInc = Inc.second;
+
+  float MSBLatency = MSBInc + SrcMSBLatency;
+  float LSBLatency = LSBInc + SrcLSBLatency;
+  float WorstLatency = std::max(MSBLatency, LSBLatency);
+  return std::make_pair(WorstLatency, WorstLatency);
+}
+
+static
+LatInfoTy getParallelLatency(LatInfoTy SrcLatency, LatInfoTy Inc, float /*BitInc*/) {
+  float SrcMSBLatency = SrcLatency.first,
+        SrcLSBLatency = SrcLatency.second;
+  float MSBInc = Inc.first, LSBInc = Inc.second;
+  float MSBLatency = MSBInc + SrcMSBLatency;
+  float LSBLatency = LSBInc + SrcLSBLatency;
+
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
 template<typename FuncTy>
 static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
                                       const DepLatInfoTy *SrcLatInfo,
-                                      float SrcMSBLatency, float PerBitLatency,
-                                      FuncTy F) {
+                                      LatInfoTy Inc, float BitInc, FuncTy F) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Compute minimal delay for all possible pathes.
-  for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I) {
-    float MSBLatency, LSBLatency;
-    tie(MSBLatency, LSBLatency) = F(I->second.first, I->second.second,
-                                    SrcMSBLatency, PerBitLatency);
-    updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
-  }
+  for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
+    updateLatency(CurLatInfo, I->first, F(I->second, Inc, BitInc));
 }
 
 static bool NeedExtraStepToLatchResult(const MachineInstr *MI,
@@ -124,77 +150,21 @@ static bool NeedExtraStepToLatchResult(const MachineInstr *MI,
          && !MRI.use_empty(MO.getReg());
 }
 
-namespace {
-struct BitSliceLatencyFN {
-  unsigned OperandSize, UB, LB;
-
-  BitSliceLatencyFN(const MachineInstr *BitSliceOp)
-    : OperandSize(VInstrInfo::getBitWidth(BitSliceOp->getOperand(1))),
-    UB(BitSliceOp->getOperand(2).getImm()),
-    LB(BitSliceOp->getOperand(3).getImm()) {
-      assert(BitSliceOp->getOpcode() == VTM::VOpBitSlice && "Not a bitslice!");
-  }
-
-  BitSliceLatencyFN(unsigned operandSize, unsigned ub)
-    : OperandSize(operandSize), UB(ub), LB(0) {}
-
-  LatInfoTy operator()(float SrcMSBLatency, float SrcLSBLatency,
-                       float /*TotalLatency*/, float /*PerBitLatency*/) {
-      return getBitSliceLatency(OperandSize, UB, LB, SrcMSBLatency, 
-                                SrcLSBLatency);
-  }
-
-  static
-  LatInfoTy getBitSliceLatency(unsigned OperandSize, unsigned UB, unsigned LB,
-                               float SrcMSBLatency, float SrcLSBLatency) {
-    assert(OperandSize && "Unexpected zero size operand!");
-    // Time difference between MSB and LSB.
-    float MSB2LSBDelta = SrcMSBLatency - SrcLSBLatency;
-    float DeltaPerBit = MSB2LSBDelta / OperandSize;
-    // Compute the latency of LSB/MSB by assuming the latency is increasing linear
-    float MSBLatency = SrcLSBLatency + UB * DeltaPerBit,
-          LSBLatency = SrcLSBLatency + LB * DeltaPerBit;
-    return std::make_pair(MSBLatency, LSBLatency);
-  }
-
-  static float getBitSliceLatency(unsigned OperandSize, unsigned UB,
-                                  float SrcMSBLatency) {
-    assert(OperandSize && "Unexpected zero size operand!");
-    // Compute the latency of MSB by assuming the latency is increasing linear
-    float DeltaPerBit = SrcMSBLatency / OperandSize;
-    return UB * DeltaPerBit;
-  }
-};
-}
-
 static LatInfoTy getBitSliceLatency(unsigned OperandSize,
                                     unsigned UB, unsigned LB,
-                                    float SrcMSBLatency, float SrcLSBLatency) {
-  return BitSliceLatencyFN::getBitSliceLatency(OperandSize, UB, LB,
-                                               SrcMSBLatency, SrcLSBLatency);
-}
-
-static LatInfoTy getMSBAndLSBLatency(float SrcMSBLatency, float SrcLSBLatency,
-                                     float MSBInc, float LSBInc) {
-  return std::make_pair(SrcMSBLatency + MSBInc, SrcLSBLatency + LSBInc);
-}
-
-static LatInfoTy getWorstLatency(float SrcMSBLatency, float SrcLSBLatency,
-                                 float TotalLatency, float /*PerBitLatency*/) {
-  float MSBLatency = TotalLatency + SrcMSBLatency;
-  float LSBLatency = TotalLatency + SrcLSBLatency;
-  float WorstLatency = std::max(MSBLatency, LSBLatency);
-  return std::make_pair(WorstLatency, WorstLatency);
-}
-
-static LatInfoTy getParallelLatency(float SrcMSBLatency, float SrcLSBLatency,
-                                    float TotalLatency, float /*PerBitLatency*/) {
-  float MSBLatency = TotalLatency + SrcMSBLatency;
-  float LSBLatency = TotalLatency + SrcLSBLatency;
+                                    LatInfoTy SrcLatency) {
+  float SrcMSBLatency = SrcLatency.first, SrcLSBLatency = SrcLatency.second;
+  assert(OperandSize && "Unexpected zero size operand!");
+  // Time difference between MSB and LSB.
+  float MSB2LSBDelta = SrcMSBLatency - SrcLSBLatency;
+  float DeltaPerBit = MSB2LSBDelta / OperandSize;
+  // Compute the latency of LSB/MSB by assuming the latency is increasing linear
+  float MSBLatency = SrcLSBLatency + UB * DeltaPerBit,
+        LSBLatency = SrcLSBLatency + LB * DeltaPerBit;
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
-static float adjustChainingLatency(float Latency, unsigned SrcOpcode,
+static float adjustChainedLatency(float Latency, unsigned SrcOpcode,
                                    unsigned DstOpcode) {
   bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpcode);
   bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpcode);
@@ -249,11 +219,9 @@ template<bool IsCtrlDep>
 LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
                                              unsigned DstOpcode,
                                              unsigned UB, unsigned LB) {
-  float SrcMSBLatency = getCachedLatencyResult(SrcMI);
-  float SrcLSBLatency = SrcMSBLatency;
-  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, SrcMSBLatency)) {
-    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI->getOpcode(),
-      DstOpcode);
+  float MaxLatency = getCachedLatencyResult(SrcMI);
+  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, MaxLatency)) {
+    MaxLatency = adjustChainedLatency(MaxLatency, SrcMI->getOpcode(), DstOpcode);
     // If we are only reading the lower part of the result of SrcMI, and the
     // LSB of the result of SrcMI are available before SrcMI completely finish,
     // we can read the subword before SrcMI finish.
@@ -262,37 +230,33 @@ LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
       // DirtyHack: Ignore the invert flag.
       if (SrcSize != 1 && UB != 3) {
         assert(UB <= SrcSize && UB > LB  && "Bad bitslice!");
-        SrcLSBLatency = std::max(SrcMSBLatency / SrcSize, VFUs::LutLatency);
-        tie(SrcMSBLatency, SrcLSBLatency) =
-          getBitSliceLatency(SrcSize, UB, LB, SrcMSBLatency, SrcLSBLatency);
+        float SrcBitLatency = std::max(MaxLatency / SrcSize, VFUs::LutLatency);
+        return getBitSliceLatency(SrcSize, UB, LB, LatInfoTy(MaxLatency, SrcBitLatency));
       }
     }
   } else {
     // IsCtrlDep
-    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
-    SrcLSBLatency = SrcMSBLatency;
+    MaxLatency = std::max(0.0f, MaxLatency - DetialLatencyInfo::DeltaLatency);
   }
 
-  return std::make_pair(SrcMSBLatency, SrcLSBLatency);
+  return std::make_pair(MaxLatency, MaxLatency);
 }
 
 template<bool IsCtrlDep>
-bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
+void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         DepLatInfoTy &CurLatInfo,
-                                        unsigned OperandWidth,
-                                        float OperandDelay, unsigned DstOpcode){
+                                        unsigned UB, unsigned LB,
+                                        unsigned DstOpcode){
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
-  // Latency information not available, the SrcMI maybe in others BB, no need
-  // to compute cross BB latency.
-  if (SrcLatInfo == 0) return false;
+  assert(SrcLatInfo && "SrcMI not visited yet?");
 
-  float SrcMSBLatency
-    = getLatencyToDst<IsCtrlDep>(SrcMI, DstOpcode, OperandWidth, 0).first;
+  LatInfoTy SrcLatency = getLatencyToDst<IsCtrlDep>(SrcMI, DstOpcode, UB, LB);
 
   // Try to compute the per-bit latency.
-  float PerBitLatency = 0.0f;
-  if (OperandWidth)
-    PerBitLatency = std::max(SrcMSBLatency / OperandWidth, VFUs::LutLatency);
+  float BitLatency = 0.0f;
+  if (unsigned Size = UB - LB)
+    BitLatency = std::max(SrcLatency.first - SrcLatency.second / Size,
+                          VFUs::LutLatency);
 
   unsigned Opcode = VTM::INSTRUCTION_LIST_END;
   bool isCtrl = VInstrInfo::isControl(SrcMI->getOpcode());
@@ -301,78 +265,66 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   switch (Opcode) {
   default:
     if (isCtrl)
-      updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
+      updateLatency(CurLatInfo, SrcMI, SrcLatency);
     else
-      accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                                PerBitLatency, getWorstLatency);
-    break;
+      accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
+                                getWorstLatency);
+    return;
     // Result bits are computed from LSB to MSB.
   case VTM::VOpAdd_c:
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, getLSB2MSBLatency);
-    break;
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
+                              getLSB2MSBLatency);
+    return;
   case VTM::VOpAdd:
   case VTM::VOpMult:
   case VTM::VOpMultLoHi:
-    updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, PerBitLatency);
-    break;
-    // Each bits are compute independently.
+    updateLatency(CurLatInfo, SrcMI, SrcLatency);
+    return;
+  case VTM::VOpBitSlice:
+    // Forward the latency from the source of the bitslice, and increase the
+    // MSBLatency and LSBLatency according to the upper bound and lowerbound
+    // of the bitslice.
+    if (SrcMI->getOperand(1).isReg()) {
+      unsigned SrcReg = SrcMI->getOperand(1).getReg();
+      MachineInstr *BitSliceSrc = MRI->getVRegDef(SrcReg);
+      assert(BitSliceSrc && "The source MachineInstr for BitSlice not found!");
+      // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
+      // and the lower bound of the bitslice.
+      UB = SrcMI->getOperand(2).getImm();
+      LB = SrcMI->getOperand(3).getImm();
+      buildDepLatInfo<IsCtrlDep>(BitSliceSrc, CurLatInfo, UB, LB, DstOpcode);
+      return;
+    }
+    /* FALL THOUGH */
+  // Each bits are compute independently.
   case VTM::VOpLUT:
   case VTM::VOpAnd:
   case VTM::VOpOr:
   case VTM::VOpXor:
   case VTM::VOpNot:
   case VTM::VOpBitCat:
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, getParallelLatency);
-    break;
-  case VTM::VOpBitSlice: {
-    // Forward the latency from the source of the bitslice, and increase the
-    // MSBLatency and LSBLatency according to the upper bound and lowerbound
-    // of the bitslice.
-    float SrcLSBLatency = SrcMSBLatency;
-    if (SrcMI->getOperand(1).isReg()) {
-      MachineInstr *BitSliceSrc = MRI->getVRegDef(SrcMI->getOperand(1).getReg());
-      assert(BitSliceSrc && "The source MachineInstr for BitSlice not found!");
-      const DepLatInfoTy *BitSliceSrcLatInfo = getDepLatInfo(BitSliceSrc);
-      if (BitSliceSrcLatInfo) {
-        // Forward the SrcLatInfo of the source of the bitslice.
-        SrcLatInfo = BitSliceSrcLatInfo;
-        // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
-        // and the lower bound of the bitslice.
-        unsigned BitSliceUB = SrcMI->getOperand(2).getImm(),
-                 BitSliceLB = SrcMI->getOperand(3).getImm();
-        tie(SrcMSBLatency, SrcLSBLatency)
-          = getLatencyToDst<IsCtrlDep>(BitSliceSrc, DstOpcode,
-                                       BitSliceUB, BitSliceLB);
-      }
-    }
-
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              SrcLSBLatency, getMSBAndLSBLatency);
-    break;
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
+                              getParallelLatency);
+    return;
   case VTM::VOpICmp_c:
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, getCmpLatency);
-    break;
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
+                              getCmpLatency);
+    return;
   case VTM::VOpICmp:
     // Result bits are computed from MSB to LSB.
-    updateLatency(CurLatInfo, SrcMI, PerBitLatency, SrcMSBLatency);
-    break;
+    updateLatency(CurLatInfo, SrcMI, SrcLatency);
+    return;
   }
-
-  return true;
 }
 
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
                                     DepLatInfoTy &CurLatInfo) {
   const MachineBasicBlock *CurMBB = MI->getParent();
-
-  const MCInstrDesc &TID = MI->getDesc();
-  bool IsControl = VInstrInfo::isControl(TID.getOpcode());
+  unsigned Opcode = MI->getOpcode();
+  bool IsControl = VInstrInfo::isControl(Opcode);
 
   // Iterate from use to define, ignore the the incoming value of PHINodes.
   // Because the incoming value may be not visited yet.
@@ -391,19 +343,20 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
     if (SrcMI == MI) continue;
     unsigned OpSize = VInstrInfo::getBitWidth(MO);
 
-    float OpDelay = 0.0f;
-    if (i < TID.getNumOperands() && TID.OpInfo[i].isPredicate()) {
-      OpDelay = VFUs::ClkEnSelLatency;
-    } else
-      OpDelay = VInstrInfo::getOperandLatency(MI, i);
-
-    if (!buildDepLatInfo<false>(SrcMI, CurLatInfo, OpSize, OpDelay,
-                                MI->getOpcode()))
+    if (Opcode == VTM::VOpBitSlice) {
+      // Directly copy the dependencies latency information, because when
+      // calculating latency, we treat it as the alias of SrcMI, exepct the
+      // latencies are scaled according to the lower bound and upper bound of
+      // the bitslice.
+      CurLatInfo = *getDepLatInfo(SrcMI);
+      // The latency of SrcMI is included into the latency of the bitslice.
+      // Hence we need to set the latency of SrcMI to 0.0f to avoid accumulating
+      // it more than once.
+      CurLatInfo[SrcMI] = LatInfoTy(0.0f, 0.0f);
       continue;
+    }
 
-    // If we build the Latency Info for SrcMI successfully, that means SrcMI
-    // have user now.
-    if (CurMBB != SrcMI->getParent()) continue;
+    buildDepLatInfo<false>(SrcMI, CurLatInfo, OpSize, 0, Opcode);
   }
 
   // Compute the latency of MI.
@@ -432,12 +385,12 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
     buildDepLatInfo<false>(*I, Info, 0, 0.0, ExitMI->getOpcode());
 }
 
-float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
+float DetialLatencyInfo::getChainedLatency(const MachineInstr *SrcInstr,
                                             const MachineInstr *DstInstr) const{
   // Compute the latency correspond to detail slot.
   float latency = getMaxLatency(SrcInstr);
-  return adjustChainingLatency(latency, SrcInstr->getOpcode(),
-                               DstInstr->getOpcode());
+  return adjustChainedLatency(latency, SrcInstr->getOpcode(),
+                              DstInstr->getOpcode());
 }
 
 bool DetialLatencyInfo::runOnMachineFunction(MachineFunction &MF) {
