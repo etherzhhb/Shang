@@ -167,6 +167,18 @@ struct BitSliceLatencyFN {
 };
 }
 
+static LatInfoTy getBitSliceLatency(unsigned OperandSize,
+                                    unsigned UB, unsigned LB,
+                                    float SrcMSBLatency, float SrcLSBLatency) {
+  return BitSliceLatencyFN::getBitSliceLatency(OperandSize, UB, LB,
+                                               SrcMSBLatency, SrcLSBLatency);
+}
+
+static LatInfoTy getMSBAndLSBLatency(float SrcMSBLatency, float SrcLSBLatency,
+                                     float MSBInc, float LSBInc) {
+  return std::make_pair(SrcMSBLatency + MSBInc, SrcLSBLatency + LSBInc);
+}
+
 static LatInfoTy getWorstLatency(float SrcMSBLatency, float SrcLSBLatency,
                                  float TotalLatency, float /*PerBitLatency*/) {
   float MSBLatency = TotalLatency + SrcMSBLatency;
@@ -234,6 +246,37 @@ bool DetialLatencyInfo::propagateFromLSB2MSB(unsigned Opcode) {
 }
 
 template<bool IsCtrlDep>
+LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
+                                             unsigned DstOpcode,
+                                             unsigned UB, unsigned LB) {
+  float SrcMSBLatency = getCachedLatencyResult(SrcMI);
+  float SrcLSBLatency = SrcMSBLatency;
+  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, SrcMSBLatency)) {
+    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI->getOpcode(),
+      DstOpcode);
+    // If we are only reading the lower part of the result of SrcMI, and the
+    // LSB of the result of SrcMI are available before SrcMI completely finish,
+    // we can read the subword before SrcMI finish.
+    if (UB && propagateFromLSB2MSB(SrcMI->getOpcode())) {
+      unsigned SrcSize = VInstrInfo::getBitWidth(SrcMI->getOperand(0));
+      // DirtyHack: Ignore the invert flag.
+      if (SrcSize != 1 && UB != 3) {
+        assert(UB <= SrcSize && UB > LB  && "Bad bitslice!");
+        SrcLSBLatency = std::max(SrcMSBLatency / SrcSize, VFUs::LutLatency);
+        tie(SrcMSBLatency, SrcLSBLatency) =
+          getBitSliceLatency(SrcSize, UB, LB, SrcMSBLatency, SrcLSBLatency);
+      }
+    }
+  } else {
+    // IsCtrlDep
+    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
+    SrcLSBLatency = SrcMSBLatency;
+  }
+
+  return std::make_pair(SrcMSBLatency, SrcLSBLatency);
+}
+
+template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         DepLatInfoTy &CurLatInfo,
                                         unsigned OperandWidth,
@@ -243,25 +286,8 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
-  float SrcMSBLatency = getCachedLatencyResult(SrcMI);
-  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, SrcMSBLatency)) {
-    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI->getOpcode(),
-                                          DstOpcode);
-    // If we are only reading the lower part of the result of SrcMI, and the
-    // LSB of the result of SrcMI are available before SrcMI completely finish,
-    // we can read the subword before SrcMI finish.
-    if (OperandWidth && propagateFromLSB2MSB(SrcMI->getOpcode())) {
-      unsigned SrcSize = VInstrInfo::getBitWidth(SrcMI->getOperand(0));
-      // DirtyHack: Ignore the invert flag.
-      if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
-        assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
-        SrcMSBLatency =
-          BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth,
-                                                SrcMSBLatency);
-      }
-    }
-  } else // IsCtrlDep
-    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
+  float SrcMSBLatency
+    = getLatencyToDst<IsCtrlDep>(SrcMI, DstOpcode, OperandWidth, 0).first;
 
   // Try to compute the per-bit latency.
   float PerBitLatency = 0.0f;
@@ -302,9 +328,30 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
                               PerBitLatency, getParallelLatency);
     break;
-  case VTM::VOpBitSlice:
+  case VTM::VOpBitSlice: {
+    // Forward the latency from the source of the bitslice, and increase the
+    // MSBLatency and LSBLatency according to the upper bound and lowerbound
+    // of the bitslice.
+    float SrcLSBLatency = SrcMSBLatency;
+    if (SrcMI->getOperand(1).isReg()) {
+      MachineInstr *BitSliceSrc = MRI->getVRegDef(SrcMI->getOperand(1).getReg());
+      assert(BitSliceSrc && "The source MachineInstr for BitSlice not found!");
+      const DepLatInfoTy *BitSliceSrcLatInfo = getDepLatInfo(BitSliceSrc);
+      if (BitSliceSrcLatInfo) {
+        // Forward the SrcLatInfo of the source of the bitslice.
+        SrcLatInfo = BitSliceSrcLatInfo;
+        // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
+        // and the lower bound of the bitslice.
+        unsigned BitSliceUB = SrcMI->getOperand(2).getImm(),
+                 BitSliceLB = SrcMI->getOperand(3).getImm();
+        tie(SrcMSBLatency, SrcLSBLatency)
+          = getLatencyToDst<IsCtrlDep>(BitSliceSrc, DstOpcode,
+                                       BitSliceUB, BitSliceLB);
+      }
+    }
+
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, BitSliceLatencyFN(SrcMI));
+                              SrcLSBLatency, getMSBAndLSBLatency);
     break;
   case VTM::VOpICmp_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,

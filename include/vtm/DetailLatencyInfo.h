@@ -128,6 +128,10 @@ private:
                        unsigned OperandWidth, float OperandDelay,
                        unsigned DstOpcode = VTM::INSTRUCTION_LIST_END);
 
+  template<bool IsCtrlDep>
+  DepLatInfoTy::mapped_type getLatencyToDst(const MachineInstr *SrcMI,
+                                            unsigned DstOpcode,
+                                            unsigned UB, unsigned LB);
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        DepLatInfoTy &CurLatInfo);
