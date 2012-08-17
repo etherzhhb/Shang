@@ -411,7 +411,7 @@ struct BundleBuilder {
 
       MachineBasicBlock::iterator IP = PredBB->getFirstTerminator();
       // Insert the imp_def before the PHI incoming copies.
-      while (llvm::prior(IP)->getOpcode() == VTM::VOpMvPhi)
+      while (IP != PredBB->begin() && llvm::prior(IP)->getOpcode() == VTM::VOpMvPhi)
         --IP;
 
       BuildMI(*PredBB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::IMPLICIT_DEF))
