@@ -709,11 +709,6 @@ public:
     DLInfo.buildLatenciesToCopy(MI, Info);
   }
 
-  float getChainingLatency(const MachineInstr *SrcInstr,
-                           const MachineInstr *DstInstr) const {
-    return DLInfo.getChainingLatency(SrcInstr, DstInstr);
-  }
-
   void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info,
                        const std::set<const MachineInstr*> &MIsToWait,
                        const std::set<const MachineInstr*> &MIsToRead) {
