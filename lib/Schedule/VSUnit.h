@@ -1011,12 +1011,12 @@ VSchedGraph::getCtrlStepBetween<VDEdge::MemDep>(const MachineInstr *SrcInstr,
 // graph.
 template<bool IsCtrlPath>
 struct VSchedGraphWrapper {
-  const VSchedGraph *G;
   std::vector<const VSUnit*> SUs;
 
   /*implicit*/ inline VSchedGraphWrapper(const VSchedGraph *G);
 
-  const VSchedGraph *operator->() const { return G; }
+  template<typename Iterator>
+  VSchedGraphWrapper(Iterator I, Iterator E) : SUs(I, E) {}
 
   typedef std::vector<const VSUnit*>::const_iterator const_iterator;
   const_iterator begin() const { return SUs.begin(); }
@@ -1027,11 +1027,11 @@ struct VSchedGraphWrapper {
 
 template<>
 inline VSchedGraphWrapper<true>::VSchedGraphWrapper(const VSchedGraph *G)
-  : G(G), SUs(cp_begin(G), cp_end(G)) {}
+  : SUs(cp_begin(G), cp_end(G)) {}
 
 template<>
 inline VSchedGraphWrapper<false>::VSchedGraphWrapper(const VSchedGraph *G)
-  : G(G), SUs(dp_begin(G), dp_end(G))
+  : SUs(dp_begin(G), dp_end(G))
 {
   // The control-path scheduling units are also in the data-path
   // dependencies graph.
@@ -1044,9 +1044,9 @@ struct GraphTraits<VSchedGraphWrapper<IsCtrlPath> >{
   typedef const VSUnit NodeType;
   typedef VSUnit::const_use_iterator ChildIteratorType;
 
-  static NodeType *getEntryNode(const GraphType &G) {
-    return G->getEntryRoot();
-  }
+  //static NodeType *getEntryNode(const GraphType &G) {
+  //  return G->getEntryRoot();
+  //}
 
   static ChildIteratorType child_begin(NodeType *N) {
     return N->use_begin<IsCtrlPath>();

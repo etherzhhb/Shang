@@ -33,7 +33,7 @@ struct DOTGraphTraits<VSchedGraphWrapper<IsCtrlPath> >
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
   static std::string getGraphName(const GraphType &G) {
-    return G->getEntryBB()->getName();
+    return "Dependency Graph";
   }
 
   /// If you want to override the dot attributes printed for a particular
