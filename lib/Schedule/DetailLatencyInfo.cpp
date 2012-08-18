@@ -303,6 +303,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     }
     /* FALL THOUGH */
   // Each bits are compute independently.
+  case VTM::VOpSel:
   case VTM::VOpLUT:
   case VTM::VOpAnd:
   case VTM::VOpOr:
@@ -314,6 +315,8 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     updateLatency(CurLatInfo, SrcMI, SrcLatency);
     return;
   case VTM::VOpICmp_c:
+    // The result of ICmp is propagating from MSB to LSB.
+    SrcLatency.first = BitLatency;
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getCmpLatency);
     /* FALL THOUGH */
