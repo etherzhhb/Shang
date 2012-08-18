@@ -100,7 +100,14 @@ void ValueAtSlot::verify() const {
     LiveInInfo LI = I->second;
     if (DefSlot->getParentBB() == UseSlot->getParentBB() &&
         UseSlot->hasAliasSlot() && LI.getCycles() > DefSlot->alias_ii()) {
-      ;//llvm_unreachable("Broken RTL dependence!");
+      if (const MachineInstr *MI = I->first->getDefMI()) {
+        // The value comes from others BB, it is loop-invariant.
+        if (MI->getOpcode() == VTM::VOpMvPhi
+            && MI->getOperand(2).getMBB() != MI->getParent())
+          continue;
+      }
+
+      llvm_unreachable("Broken RTL dependence!");
     }
   }
 }
