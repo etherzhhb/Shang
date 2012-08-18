@@ -158,6 +158,7 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
 static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
                                 ValueAtSlot *Dst) {
   unsigned PathDelay = 10000;
+  SlotInfo *DstSI = A.RtlSSA->getSlotInfo(Dst->getSlot());
 
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
@@ -166,7 +167,7 @@ static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
     ValueAtSlot *SrcVAS = A.RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
-    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS)) {
+    if (unsigned Distance = DstSI->getCyclesFromDef(SrcVAS)) {
       assert(Distance < 10000 && "Distance too large!");
       PathDelay = std::min(PathDelay, Distance);
     }
@@ -299,8 +300,8 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
     dbgs() << "Timing path masked: Root is";
     Root->printAsOperand(dbgs(), false);
     dbgs() << " end node is " << I->first->getName()
-            << " masked delay: " << I->second
-            << " actual delay: " << ActualDelayAt->second << '\n';
+           << " masked delay: " << I->second
+           << " actual delay: " << ActualDelayAt->second << '\n';
     DelayMasked = true;
   }
 

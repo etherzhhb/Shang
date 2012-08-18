@@ -190,12 +190,7 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
 
   ComputeReachingDefinition();
 
-  // Build the VAS dependence graph with reaching define information.
-  buildVASGraph();
-
   DEBUG(viewGraph());
-
-  verifyRTLDependences();
 
   return false;
 }

@@ -87,10 +87,6 @@ public:
 
   std::string getName() const;
 
-  unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
-    return getDepInfo(VAS).getCycles();
-  }
-
   void verify() const;
 
   void print(raw_ostream &OS, unsigned Ind = 0) const;
