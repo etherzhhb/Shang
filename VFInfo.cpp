@@ -68,7 +68,7 @@ void VFInfo::allocateBRAM(uint16_t ID, unsigned NumElem,
 
 VFInfo::VFInfo(MachineFunction &MF)
   : Info(getSynSetting(MF.getFunction()->getName())),
-    Mod(new VASTModule(Info->getModName())),
+    Mod(new VASTModule(Info->getModName(), 0)),
     BitWidthAnnotated(true) {}
 
 VFInfo::~VFInfo() { delete Mod; }

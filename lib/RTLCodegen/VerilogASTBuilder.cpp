@@ -479,6 +479,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
   Builder.reset(new DatapathBuilder(*this, *MRI));
+  VM->setBuilder(Builder.get());
 
   emitFunctionSignature(F.getFunction());
 
@@ -1058,11 +1059,11 @@ void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
   VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, MI);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(1));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(2));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, MI);
 }
 
 void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
@@ -1070,9 +1071,9 @@ void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
   VASTWirePtr Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, MI);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(1));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
 }
 
 void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
@@ -1082,7 +1083,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
   VASTRegister *R = getAsLValue<VASTRegister>(Dst);
-  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds, *Builder, true, MI);
+  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds, MI, true);
 }
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
@@ -1124,7 +1125,7 @@ void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
   // Dirty Hack: Do not trust the bitwidth information of the operand
   // representing the return port.
   VM->addAssignment(R, lookupSignal(MI->getOperand(1).getReg()), Slot,
-                    Cnds, *Builder);
+                    Cnds, MI);
 }
 
 void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
@@ -1149,7 +1150,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
       VASTRegister *R =
         VM->getSymbol<VASTRegister>(getSubModulePortName(FNNum, ArgIt->getName()));
       VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot,
-                        Cnds, *Builder);
+                        Cnds, MI);
       ++ArgIt;
     }
     return;
@@ -1162,7 +1163,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
       for (unsigned i = 0, e = Expr->NumOps; i < e; ++i) {
         VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
         VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds,
-                          *Builder);
+                          MI);
       }
       return;
     }
@@ -1241,7 +1242,7 @@ void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
   unsigned retChannel = MI->getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
   VM->addAssignment(&RetReg, getAsOperand(MI->getOperand(0)), Slot,
-                    Cnds, *Builder);
+                    Cnds, MI);
 }
 
 void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
@@ -1251,19 +1252,19 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   // Emit Address.
   std::string RegName = VFUMemBus::getAddrBusName(FUNum) + "_r";
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds, MI);
   // Assign store data.
   RegName = VFUMemBus::getOutDataBusName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
   // And write enable.
   RegName = VFUMemBus::getCmdName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, MI);
   // The byte enable.
   RegName = VFUMemBus::getByteEnableName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(4)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(4)), Slot, Cnds, MI);
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
@@ -1283,15 +1284,15 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
   VASTValPtr Addr = getAsOperand(MI->getOperand(1));
   Addr = Builder->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
-  VM->addAssignment(R, Addr, Slot, Cnds, *Builder);
+  VM->addAssignment(R, Addr, Slot, Cnds, MI);
   // Assign store data.
   RegName = VFUBRAM::getInDataBusName(FUNum);
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
   // And write enable.
   RegName = VFUBRAM::getWriteEnableName(FUNum);
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, *Builder);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, MI);
   // The byte enable.
   //RegName = VFUBRAM::getByteEnableName(FUNum) + "_r";
   //R = VM->getSymbol<VASTRegister>(RegName);

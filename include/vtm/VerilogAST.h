@@ -749,6 +749,13 @@ private:
     SignalData = 0;
   }
 
+  VASTWire(unsigned SlotNum, MachineInstr *DefMI)
+         : VASTSignal(vastWire, 0, 1, ""), U(0, 0) {
+    SignalType = AssignCond;
+    SignalData = SlotNum;
+    Contents.BundleStart = DefMI;
+  } 
+
   void setAsInput(VASTRegister *VReg);
 
   void setSlot(uint16_t slotNum) {
@@ -1161,6 +1168,7 @@ private:
 
   // The Name of the Design.
   std::string Name;
+  VASTExprBuilder *Builder;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
@@ -1182,17 +1190,22 @@ public:
     RetPort // Port for function return value.
   };
 
-  VASTModule(const std::string &Name) : VASTNode(vastModule),
+  VASTModule(const std::string &Name, VASTExprBuilder *Builder)
+    : VASTNode(vastModule),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     LangControlBlock(ControlBlock),
-    Name(Name),
+    Name(Name), Builder(Builder),
     FUPortOffsets(VFUs::NumCommonFUs),
     NumArgPorts(0) {
     Ports.append(NumSpecialPort, 0);
   }
 
   ~VASTModule();
+
+  void setBuilder(VASTExprBuilder *Builder) {
+    this->Builder = Builder;
+  }
 
   void reset();
 
@@ -1362,13 +1375,13 @@ public:
   slot_iterator slot_begin() { return Slots.begin(); }
   slot_iterator slot_end() { return Slots.end(); }
 
+  VASTWire *createAssignPred(VASTSlot *Slot, MachineInstr *DefMI);
+
   void addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
-                     SmallVectorImpl<VASTValPtr> &Cnds,
-                     VASTExprBuilder &Builder, bool AddSlotActive = true,
-                     MachineInstr *DefMI = 0);
-  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValPtr> &Cnds,
-                           VASTExprBuilder &Builder, bool AddSlotActive = true,
-                           MachineInstr *DefMI = 0);
+                     SmallVectorImpl<VASTValPtr> &Cnds, MachineInstr *DefMI = 0,
+                     bool AddSlotActive = true);
+  VASTWire *addPredExpr(VASTWire *CndWire, SmallVectorImpl<VASTValPtr> &Cnds,
+                        bool AddSlotActive = true);
 
   VASTWire *assign(VASTWire *W, VASTValPtr V,
                    VASTWire::Type T = VASTWire::Common);

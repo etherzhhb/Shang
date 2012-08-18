@@ -15,7 +15,6 @@
 // common Verilog HDL writing task.
 //
 //===----------------------------------------------------------------------===//
-
 #include "vtm/VerilogAST.h"
 #include "vtm/Utilities.h"
 
@@ -518,6 +517,21 @@ VASTWire *VASTModule::assign(VASTWire *W, VASTValPtr V, VASTWire::Type T) {
   if (W->getExpr() != V) W->assign(V, T);
 
   return W;
+}
+
+VASTWire *VASTModule::createAssignPred(VASTSlot *Slot, MachineInstr *DefMI) {
+  return new (Allocator) VASTWire(Slot->SlotNum, DefMI);
+}
+
+void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
+                               SmallVectorImpl<VASTValPtr> &Cnds,
+                               MachineInstr *DefMI,
+                               bool AddSlotActive) {
+  if (Src) {
+    VASTWire *Cnd = createAssignPred(Slot, DefMI);
+    Cnd = addPredExpr(Cnd, Cnds, AddSlotActive);
+    Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
+  }
 }
 
 VASTWire *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,

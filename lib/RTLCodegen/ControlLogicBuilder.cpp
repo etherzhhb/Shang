@@ -134,7 +134,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
         I != E; ++I) {
     hasSelfLoop |= I->first->SlotNum == SlotNum;
     VASTRegister *NextSlotReg = I->first->getRegister();
-    Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd, Builder);
+    Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd);
   }
 
   assert(!(hasSelfLoop && PredAliasSlots)
@@ -148,7 +148,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
 
     // Disable the current slot.
     Mod.addAssignment(getRegister(), Mod.getBoolImmediate(false), this,
-                      EmptySlotEnCnd, Builder);
+                      EmptySlotEnCnd);
   }
 
   if (!ReadyPresented) {
@@ -182,7 +182,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
                                             getReady()->getAsInlineOperand(false),
                                             I->second->getAsInlineOperand(), 1);
     Mod.addAssignment(cast<VASTRegister>(I->first), ReadyCnd, this,
-                      EmptySlotEnCnd, Builder, false);
+                      EmptySlotEnCnd, 0, false);
   }
 
   SmallVector<VASTValPtr, 4> DisableAndCnds;
@@ -219,7 +219,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
 
       VASTRegister *En = cast<VASTRegister>(I->first);
       Mod.addAssignment(En, Mod.getBoolImmediate(false), this,
-                        DisableAndCnds, Builder, false);
+                        DisableAndCnds, 0, false);
       DisableAndCnds.clear();
     }
   }
