@@ -437,6 +437,11 @@ void RtlSSAAnalysis::ComputeGenAndKill() {
 
     unsigned CurSlotNum = S->SlotNum;
     VASTRegister *V = VAS->getValue();
+    bool IsLoopingBackPHIMove = false;
+    if (const MachineInstr *MI = VAS->getDefMI())
+      IsLoopingBackPHIMove = MI->getOpcode() == VTM::VOpMvPhi
+                             && MI->getOperand(2).getMBB() == MI->getParent();
+
     for (unsigned i = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
          i < e; i += ii) {
        if (i == CurSlotNum) continue;
@@ -447,6 +452,16 @@ void RtlSSAAnalysis::ComputeGenAndKill() {
        // same slot, otherwise, the signal is only overwritten by its following
        // alias slot.
        if (i > CurSlotNum || V->isTimingUndef()) AliasSlot->insertOvewritten(V);
+
+       if (i == CurSlotNum - ii && IsLoopingBackPHIMove) {
+         // The definition of PHIMove can reach its previous alias slot with
+         // distance II.
+         AliasSlot->insertIn(VAS, ValueAtSlot::LiveInInfo(ii));
+         // The definition is actually for the previous stage.
+         AliasSlot->insertGen(VAS);
+         // The definition of looping-back PHIMove is not for the current stage.
+         SI->SlotGen.erase(VAS);
+       }
     }
   }
 
