@@ -38,7 +38,7 @@ class ValueAtSlot {
   struct LiveInInfo {
     uint32_t Cycles;
 
-    LiveInInfo() : Cycles(0) {}
+    LiveInInfo(uint32_t Cycles = 0) : Cycles(Cycles) {}
 
     uint32_t getCycles() const { return Cycles; }
 
@@ -85,10 +85,7 @@ public:
   VASTSlot *getSlot() const { return Slot; }
   const MachineInstr *getDefMI() const { return DefMI; }
 
-  std::string getName() const {
-    return std::string(getValue()->getName()) + "@"
-           + utostr_32(getSlot()->SlotNum);
-  }
+  std::string getName() const;
 
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
     return getDepInfo(VAS).getCycles();
@@ -96,7 +93,7 @@ public:
 
   void verify() const;
 
-  void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS, unsigned Ind = 0) const;
 
   void dump() const;
 

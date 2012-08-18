@@ -79,17 +79,33 @@ struct VASDepBuilder {
   }
 };
 
-void ValueAtSlot::print(raw_ostream &OS) const {
-  OS << getValue()->getName() << '@' << getSlot()->SlotNum
-     << "\t <= {";
+std::string ValueAtSlot::getName() const {
+  std::string Name = std::string(getValue()->getName())
+                     + "@" + utostr_32(getSlot()->SlotNum);
+
+  if (MachineBasicBlock *ParentBB = getSlot()->getParentBB())
+    Name += "#" + utostr_32(ParentBB->getNumber());
+
+  return Name;
+}
+
+void ValueAtSlot::print(raw_ostream &OS, unsigned Ind) const {
+  OS.indent(Ind) << getName() << "\t <= {";
 
   typedef VASCycMapTy::const_iterator it;
-  for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I)
-    OS << I->first->getName() << '[' << I->second.getCycles() << ']' << ',';
+  for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I) {
+    OS.indent(Ind + 2) << '[' << I->second.getCycles() << ']';
+    if (Ind > 2) OS << I->first->getName() << ',';
+    else {
+      OS  << "{\n";
+      I->first->print(OS, Ind + 4);
+      OS.indent(Ind + 2) << "}\n";
+    }
+  }
 
-  OS << "}\n";
+  OS.indent(Ind) << "}\n";
 
-  if (DefMI) OS.indent(2) << *DefMI << '\n';
+  if (DefMI) OS.indent(Ind + 2) << *DefMI << '\n';
 }
 
 void ValueAtSlot::verify() const {
