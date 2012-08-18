@@ -188,7 +188,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
       CurUB = CurLB;
     }
 
-    // Trival case: Only 1 bitslice in range.
+    // Trivial case: Only 1 bitslice in range.
     if (Ops.size() == 1)
       return buildBitSliceExpr(Ops.back(), LeadingBitsToLeft, TailingBitsToTrim);
 
@@ -202,10 +202,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
   if (Expr->getOpcode() == VASTExpr::dpBitRepeat) {
     VASTValPtr Pattern = Expr.getOperand(0);
     // Simply repeat the pattern by the correct number.
-    if (Pattern->getBitWidth() == 1) {
-      VASTValPtr Ops[] = { Pattern, getOrCreateImmediate(UB - LB, 64) };
-      return buildExpr(VASTExpr::dpBitRepeat, Ops, UB - LB);
-    }
+    if (Pattern->getBitWidth() == 1) return buildBitRepeat(Pattern, UB - LB);
     // TODO: Build the correct pattern.
   }
 
@@ -368,6 +365,13 @@ VASTExprBuilder::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                              unsigned BitWidth) {
   std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
   return Context.createExpr(Opc, Ops, BitWidth, 0);
+}
+
+VASTValPtr VASTExprBuilder::buildBitRepeat(VASTValPtr Op, unsigned RepeatTimes){
+  if (RepeatTimes == 1) return Op;
+
+  return buildExpr(VASTExpr::dpBitRepeat, Op, getOrCreateImmediate(RepeatTimes, 8),
+                   RepeatTimes * Op->getBitWidth());
 }
 
 VASTValPtr VASTExprBuilder::buildSelExpr(VASTValPtr Cnd, VASTValPtr TrueV,
@@ -938,30 +942,29 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
   }
 
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(RHS)) {
-    uint8_t ImmVal = Imm.getUnsignedValue();
+    uint8_t ShiftAmount = Imm.getUnsignedValue();
 
     // If we not shift at all, simply return the operand.
-    if (ImmVal == 0) return LHS;
+    if (ShiftAmount == 0) return LHS;
 
     switch(Opc) {
     case VASTExpr::dpShl:{
-      VASTValPtr PaddingBits = getOrCreateImmediate(0, ImmVal);
-      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth() - ImmVal, 0);
+      VASTValPtr PaddingBits = getOrCreateImmediate(0, ShiftAmount);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth() - ShiftAmount, 0);
       VASTValPtr Ops[] = { LHS, PaddingBits }; 
       return buildBitCatExpr(Ops, BitWidth);
     }
     case VASTExpr::dpSRL:{
-      VASTValPtr PaddingBits = getOrCreateImmediate(0, ImmVal);
-      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ImmVal);
+      VASTValPtr PaddingBits = getOrCreateImmediate(0, ShiftAmount);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ShiftAmount);
       VASTValPtr Ops[] = { PaddingBits, LHS }; 
       return buildBitCatExpr(Ops, BitWidth);
     }
     case VASTExpr::dpSRA:{ 
       VASTValPtr SignBitOps[] = { getSignBit(LHS),
-                                  getOrCreateImmediate(ImmVal, 8) };
-      VASTValPtr SignBits = buildExpr(VASTExpr::dpBitRepeat, SignBitOps, 
-                                      ImmVal);
-      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ImmVal);
+                                  getOrCreateImmediate(ShiftAmount, 8) };
+      VASTValPtr SignBits = buildBitRepeat(getSignBit(LHS), ShiftAmount);
+      LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ShiftAmount);
       VASTValPtr Ops[] = { SignBits, LHS }; 
       return buildBitCatExpr(Ops, BitWidth);   
     }
