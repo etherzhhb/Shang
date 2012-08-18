@@ -289,37 +289,30 @@ void RtlSSAAnalysis::visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS){
   DepthFirstTraverseDepTree(DepTree, B);
 }
 
-bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
-{
+bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
+                                bool FromAliasSlot) {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
+  // Store the slot numbers in signed integer, we will perform subtraction on
+  // them and may produce negative result.
+  int FromSlotNum = From->getSlot()->SlotNum,
+      ToSlotNum = To->getSlot()->SlotNum;
   MachineBasicBlock *ToBB = To->getSlot()->getParentBB();
   MachineBasicBlock *FromBB = From->getSlot()->getParentBB();
+  bool FromLaterAliasSlot = FromAliasSlot && FromSlotNum > ToSlotNum;
 
-  for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
-    ValueAtSlot *PredOut = II->first;
+  for (it I = From->out_begin(), E = From->out_end(); I != E; ++I) {
+    ValueAtSlot *PredOut = I->first;
     VASTRegister *R = PredOut->getValue();
 
-    // Are we only add live-ins with undefine timing?
-    if (FromAlasSlot) {
-      // The value of register propagates slot by slot, and never propagates
-      // from alias slot.
-      if (R->getRegType() == VASTRegister::Data && R->getDataRegNum())
-        continue;
-
-      // TODO: Other conditions?
-    }
-
     VASTSlot *DefSlot = PredOut->getSlot();
-    ValueAtSlot::LiveInInfo LI = II->second;
+    ValueAtSlot::LiveInInfo LI = I->second;
 
-    // If the FromSlot is bigger than the ToSlot, then we are looping back.
-    bool ToNewBB = FromBB != ToBB || From->getSlot() >= To->getSlot();
-
+    bool IsDefSlot = LI.getCycles() == 0;
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
 
-    bool LiveInToSlot = true;
+    bool LiveInToSlot = !FromLaterAliasSlot || R->isTimingUndef();
     bool LiveOutToSlot = !To->isVASKilled(PredOut);
 
     // Check if the register is killed according MachineFunction level liveness
@@ -327,26 +320,33 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     switch (R->getRegType()) {
     case VASTRegister::Data: {
       unsigned RegNum = R->getDataRegNum();
+      // The registers are not propagate from the slot to its alias slot.
+      if (RegNum && FromAliasSlot) LiveInToSlot = false;
+
       const MachineInstr *DefMI = PredOut->getDefMI();
       // Do not add live out if data register R not live in the new BB.
-      if (ToNewBB && RegNum && DefMI) {
+      if (RegNum && DefMI) {
+        if (DefMI->getOpcode() == VTM::VOpMvPhi && IsDefSlot) {
+          // The register is defined by the VOpMvPhi at FromSlot.
+          // However, the copy maybe disabled when jumping to ToBB.
+          // Then this define is even not live-in ToSlot, we can simply skip the
+          // rest of the code.
+          if (DefMI->getOperand(2).getMBB() != ToBB)
+            continue;
+        }
+
+        // If the FromSlot is bigger than the ToSlot, then we are looping back.
+        bool ToNewBB = FromBB != ToBB || FromSlotNum >= ToSlotNum;
+
         // The register may be defined at the first slot of current BB, which
         // slot is alias with the last slot of Current BB's predecessor. In this
         // case we should not believe the live-ins information of the BB.
         // And if the register are not defined at the current slot (the last
         // slot of current BB) then we can trust the live-ins information.
-        bool ShouldTrustBBLI = II->second.getCycles() > 0
-                               || DefMI->getParent() == FromBB;
+        bool ShouldTrustBBLI = ToNewBB
+                               && (!IsDefSlot || DefMI->getParent() == FromBB);
 
-        if (DefMI->getOpcode() == VTM::VOpMvPhi
-            // The register is defined by the VOpMvPhi.
-            && II->second.getCycles() == 0
-            // However, the copy maybe disabled when jumping to ToBB.
-            && DefMI->getOperand(2).getMBB() != ToBB)
-          // Then this define is even not live-in ToSlot.
-          LiveInToSlot = LiveOutToSlot =false;
-
-        if ((ShouldTrustBBLI && !ToBB->isLiveIn(RegNum)))
+        if (ShouldTrustBBLI && !ToBB->isLiveIn(RegNum))
           LiveOutToSlot = false;
       }
       break;
@@ -362,8 +362,13 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To, bool FromAlasSlot)
     default: break;
     }
 
-    if (LiveInToSlot) Changed |= To->insertIn(PredOut, LI);
-    if (LiveOutToSlot) Changed |= To->insertOut(PredOut, LI);
+    if (!LiveInToSlot) continue;
+
+    Changed |= To->insertIn(PredOut, LI);
+
+    if (!LiveOutToSlot) continue;
+
+    Changed |= To->insertOut(PredOut, LI);
   }
 
   return Changed;
