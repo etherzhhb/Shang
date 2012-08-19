@@ -207,7 +207,7 @@ void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
          && "Expect wire for assign condition!");
   bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
   assert(inserted &&  "Assignment condition conflict detected!");
-  Src->setUser(this);
+  if (Src) Src->setUser(this);
 }
 
 //VASTUse VASTRegister::getConstantValue() const {
@@ -543,6 +543,14 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot
     Cnd = addPredExpr(Cnd, Cnds, AddSlotActive);
     Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
   }
+}
+
+void VASTModule::addVitrualAssignment(VASTRegister *Dst, VASTSlot *Slot,
+                                      MachineInstr *DefMI) {
+  assert(Dst->getRegType() == VASTRegister::Virtual
+         && "Expected virtual register!");
+
+  Dst->addAssignment(0, createAssignPred(Slot, DefMI));
 }
 
 VASTWire *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,

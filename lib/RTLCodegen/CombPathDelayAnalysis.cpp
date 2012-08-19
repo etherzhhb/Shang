@@ -465,6 +465,9 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 }
 
 void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
+  // Virtual registers are not act as sink.
+  if (DstReg->getRegType() == VASTRegister::Virtual) return;
+
   DenseMap<VASTValue*, SmallVector<ValueAtSlot*, 8> > DatapathMap;
 
   typedef VASTRegister::assign_itertor assign_it;

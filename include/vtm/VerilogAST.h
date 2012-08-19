@@ -1374,7 +1374,9 @@ public:
   slot_iterator slot_end() { return Slots.end(); }
 
   VASTWire *createAssignPred(VASTSlot *Slot, MachineInstr *DefMI);
-
+ 
+  void addVitrualAssignment(VASTRegister *Dst, VASTSlot *Slot,
+                            MachineInstr *DefMI);
   void addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTValPtr> &Cnds, MachineInstr *DefMI = 0,
                      bool AddSlotActive = true);
