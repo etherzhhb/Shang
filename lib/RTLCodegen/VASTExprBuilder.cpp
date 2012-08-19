@@ -383,18 +383,10 @@ VASTValPtr VASTExprBuilder::buildSelExpr(VASTValPtr Cnd, VASTValPtr TrueV,
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(Cnd))
     return Imm.getUnsignedValue() ? TrueV : FalseV;
 
-  // A = B ? C : D <=> A = B & C | ~B & D
-  if (VASTImmPtr TrueImm = dyn_cast<VASTImmPtr>(TrueV))
-    if (VASTImmPtr FalseImm = dyn_cast<VASTImmPtr>(FalseV)) {
-      Cnd = buildBitRepeat(Cnd, BitWidth);
-      return buildOrExpr(buildExpr(VASTExpr::dpAnd, Cnd, TrueImm, BitWidth),
-                         buildExpr(VASTExpr::dpAnd, buildNotExpr(Cnd), FalseImm,
-                                   BitWidth),
-                         BitWidth);
-    }
-
-  VASTValPtr Ops[] = { Cnd, TrueV, FalseV };
-  return Context.createExpr(VASTExpr::dpSel, Ops, BitWidth, 0);
+  Cnd = buildBitRepeat(Cnd, BitWidth);
+  return buildOrExpr(buildAndExpr(Cnd, TrueV, BitWidth),
+                     buildAndExpr(buildNotExpr(Cnd), FalseV, BitWidth),
+                     BitWidth);
 }
 
 namespace llvm {
