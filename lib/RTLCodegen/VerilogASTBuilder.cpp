@@ -578,8 +578,6 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned IISlot = FInfo->getIISlotFor(&MBB);
   unsigned II = IISlot - startSlot;
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
-  // The alias slots of pipelined BB.
-  SmallVector<VASTSlot*, 8> AliasSlots;
   typedef MachineBasicBlock::instr_iterator instr_iterator;
   typedef MachineBasicBlock::iterator bundle_iterator;
   bundle_iterator I = MBB.getFirstNonPHI();
@@ -605,7 +603,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   // Emit the other bundles.
   while(!I->isTerminator()) {
     // We are assign the register at the previous slot of this slot, so the
-    // datapath op with same slot can read the register schedule to this slot.
+    // data-path op with same slot can read the register schedule to this slot.
     unsigned CurSlotNum = VInstrInfo::getBundleSlot(I) - 1;
 
     // Collect slot ready signals.
@@ -619,29 +617,29 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
       if (NextI->getOpcode() == VTM::VOpReadFU)
         addSlotReady(NextI, getInstrSlot(NextI));
 
-    // The control flow of the first slot is not staight-line, so does its
-    // alias slots.
+    // Build the straight-line control-flow. Note that when
+    // CurSlotNum == startSlot, slot[CurSlotNum - 1] is in other MBB, and the
+    // condition is not always true. Such control-flow is handled by function
+    // "emitOpBr".
     if (CurSlotNum != startSlot)
       addSuccSlot(VM->getSlot(CurSlotNum - 1), LeaderSlot,
                   VM->getBoolImmediate(true));
-    AliasSlots.push_back(LeaderSlot);
+
+    LeaderSlot->buildReadyLogic(*VM, *Builder);
+
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
       for (unsigned slot = CurSlotNum + II; slot < EndSlot; slot += II) {
         VASTSlot *S = VM->getSlot(slot);
         addSuccSlot(VM->getSlot(slot - 1), S, VM->getBoolImmediate(true));
-        AliasSlots.push_back(S);
+        S->buildReadyLogic(*VM, *Builder);
       }
     }
-
-    // Build the slot ready expression.
-    while (!AliasSlots.empty())
-      AliasSlots.pop_back_val()->buildReadyLogic(*VM, *Builder);
 
     // Emit the control operations.
     emitCtrlOp(instr_iterator(I), NextI, II, IISlot < EndSlot);
     I = bundle_iterator(llvm::next(NextI));
-    // Emit the datepath of current state.
+    // Emit the date-path of current state.
     I = emitDatapath(I);
   }
 }
