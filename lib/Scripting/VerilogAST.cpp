@@ -468,9 +468,15 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
 }
 
 void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
-  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
-       I != E; ++I)
-    (*I)->printAssignment(OS, this);
+  typedef RegisterVector::const_iterator iterator;
+
+  for (iterator I = Registers.begin(), E = Registers.end(); I != E; ++I) {
+    VASTRegister *R = *I;
+
+    if (R->getRegType() == VASTRegister::Virtual) continue;
+
+    R->printAssignment(OS, this);
+  }
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
@@ -499,7 +505,8 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
        I != E; ++I) {
     VASTRegister *R = *I;
     // The output register already declared in module signature.
-    if (R->getRegType() == VASTRegister::OutputPort) continue;
+    if (R->getRegType() == VASTRegister::OutputPort
+        || R->getRegType() == VASTRegister::Virtual) continue;
 
     R->printDecl(OS);
     OS << "\n";
@@ -509,7 +516,11 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 void VASTModule::printRegisterReset(raw_ostream &OS) {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I) {
-    if ((*I)->printReset(OS)) OS << "\n";
+    VASTRegister *R = *I;
+
+    if (R->getRegType() == VASTRegister::Virtual) continue;
+
+    if (R->printReset(OS)) OS << "\n";
   }
 }
 
@@ -1064,6 +1075,14 @@ void VASTWire::setAsInput(VASTRegister *VReg) {
   // Pin the signal to prevent it from being optimized away.
   Pin();
   setTimingUndef();
+}
+
+VASTRegister * llvm::VASTWire::getVirturalRegister() const {
+  if (VASTRegister *VReg = dyn_cast<VASTRegister>(U.unwrap()))
+    if (VReg->getRegType() == VASTRegister::Virtual)
+      return VReg;
+
+  return 0;
 }
 
 void VASTWire::printAssignment(raw_ostream &OS) const {

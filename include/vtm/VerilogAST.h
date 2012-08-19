@@ -797,9 +797,7 @@ public:
     return getWireType() == InputPort ? VASTValPtr(0) : U.unwrap();
   }
 
-  VASTRegister *getVirturalRegist() const {
-    return cast<VASTRegister>(U.unwrap());
-  }
+  VASTRegister *getVirturalRegister() const;
 
   VASTExprPtr getExpr() const {
     return getAssigningValue()? dyn_cast<VASTExprPtr>(getAssigningValue()) : 0;
