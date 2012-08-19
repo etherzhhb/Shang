@@ -106,7 +106,6 @@ namespace VFUs {
                 ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
 
   float getMuxLatency(unsigned Size);
-  float getReductionLatency(unsigned Size);
   float getMuxCost(unsigned Size);
 
   extern float BRamLatency, MemBusLatency, LutLatency,
@@ -116,7 +115,7 @@ namespace VFUs {
   void initLatencyTable(luabind::object LuaLatTable, float *LatTable,
                         unsigned Size);
   void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
-                        unsigned Size);
+                     unsigned Size);
 
   float lookupLatency(const float *Table, unsigned SizeInBits);
 }

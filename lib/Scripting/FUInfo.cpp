@@ -130,19 +130,10 @@ namespace llvm {
       float PerBitLatency =
         (RoundUpLatency - RoundDownLatency)
         / (SizeRoundUpToByteInBits - SizeRoundDownToByteInBits);
-      // Scale the latency accoriding to the actually width.
+      // Scale the latency according to the actually width.
       return
         RoundDownLatency
         + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
-    }
-
-    float getReductionLatency(unsigned Size) {
-      if (Size < 2) return 0;
-
-      unsigned Level = ceil(float(Log2_32_Ceil(Size))
-                            / float(Log2_32_Ceil(MaxLutSize)));
-
-      return Level * LutLatency;
     }
 
     float getMuxLatency(unsigned Size) {
