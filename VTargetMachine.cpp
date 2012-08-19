@@ -134,7 +134,6 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Fix the machine code to avoid unnecessary mux.
     PM->add(createFixMachineCodePass(true));
-    if (EnablePreSchedRTLOpt) PM->add(createPreSchedRTLOptPass());
     PM->add(createDataPathPromotionPass());
 
     //PM->add(createPrebindMuxBasePass());
@@ -155,6 +154,7 @@ struct VTMPassConfig : public TargetPassConfig {
     // Fix the machine code for schedule and function unit allocation.
     PM->add(createFixMachineCodePass(false));
 
+    if (EnablePreSchedRTLOpt) PM->add(createPreSchedRTLOptPass());
     // Perform logic synthesis.
     PM->add(createLogicSynthesisPass());
     printAndVerify("After logic synthesis.");
