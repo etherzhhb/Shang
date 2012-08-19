@@ -336,14 +336,15 @@ class VerilogASTBuilder : public MachineFunctionPass,
     OrCnd(S->allocateDisable(R, VM), Cnd);
   }
 
-  void addSlotReady(VASTSlot *S, VASTValue *V, VASTValPtr Cnd) {
-    OrCnd(S->allocateReady(V, VM), Cnd);
+  void addSlotReady(VASTSlot *Slot, VASTValue *V, VASTValPtr Cnd) {
+    OrCnd(Slot->allocateReady(V, VM), Cnd);
   }
 
   void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd) {
     OrCnd(S->allocateEnable(R, VM), Cnd);
   }
 
+  void addSlotReady(MachineInstr *MI, VASTSlot *Slot);
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
   void emitAllocatedFUs();
@@ -402,14 +403,12 @@ class VerilogASTBuilder : public MachineFunctionPass,
   void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTValueVecTy &Cnds);
   void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
-
-  void addSlotReady(MachineInstr *MI, VASTSlot *S);
-
   void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
+  void handlePipeStage(MachineInstr *MI);
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
     return "SubMod" + utostr(FNNum) + "_" + PortName;
@@ -644,7 +643,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   }
 }
 
-void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *S) {
+void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *Slot) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VASTValue *ReadyPort = 0;
 
@@ -662,7 +661,7 @@ void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *S) {
   default: return;
   }
   // TODO: Assert not in first slot.
-  addSlotReady(S, ReadyPort, Builder->createCnd(MI));
+  addSlotReady(Slot, ReadyPort, Builder->createCnd(MI));
 }
 
 void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
