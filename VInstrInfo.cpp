@@ -780,6 +780,15 @@ MachineInstr *VInstrInfo::getEdgeCndAndInsertPos(MachineBasicBlock *From,
   return From->getFirstInstrTerminator();
 }
 
+MachineInstr *VInstrInfo::getInsertPosBeforTerminator(MachineBasicBlock *MBB) {
+  MachineBasicBlock::iterator IP = MBB->getFirstTerminator();
+  // Insert the imp_def before the PHI incoming copies.
+  while (IP != MBB->begin() && llvm::prior(IP)->getOpcode() == VTM::VOpMvPhi)
+    --IP;
+
+  return IP;
+}
+
 bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::PHI

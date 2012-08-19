@@ -123,6 +123,7 @@ public:
   static MachineInstr *getEdgeCndAndInsertPos(MachineBasicBlock *From,
                                               MachineBasicBlock *To,
                                               MachineOperand &Pred);
+  static MachineInstr *getInsertPosBeforTerminator(MachineBasicBlock *MBB);
 
   static const MachineOperand *getPredOperand(const MachineInstr *MI);
   static MachineOperand *getPredOperand(MachineInstr *MI);

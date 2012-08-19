@@ -409,12 +409,8 @@ struct BundleBuilder {
       MachineOperand InitOp = MachineOperand::CreateReg(InitReg, true);
       VInstrInfo::setBitWidth(InitOp, SizeInBits);
 
-      MachineBasicBlock::iterator IP = PredBB->getFirstTerminator();
-      // Insert the imp_def before the PHI incoming copies.
-      while (IP != PredBB->begin() && llvm::prior(IP)->getOpcode() == VTM::VOpMvPhi)
-        --IP;
-
-      BuildMI(*PredBB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::IMPLICIT_DEF))
+      BuildMI(*PredBB, VInstrInfo::getInsertPosBeforTerminator(PredBB),
+              DebugLoc(), VInstrInfo::getDesc(VTM::IMPLICIT_DEF))
         .addOperand(InitOp);
 
       SSAUpdate.AddAvailableValue(PredBB, InitReg);
