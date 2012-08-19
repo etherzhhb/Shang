@@ -74,7 +74,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
   // The slot is activated when the slot is enable and all waiting signal is
   // ready.
   Mod.assign(cast<VASTWire>(getActive()),
-             Builder.buildExpr(VASTExpr::dpAnd, SlotReg, ReadyExpr, 1));
+             Builder.buildAndExpr(SlotReg, ReadyExpr, 1));
 }
 
 void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
@@ -178,9 +178,9 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
     // We may try to enable and disable the same port at the same slot.
     EmptySlotEnCnd.clear();
     EmptySlotEnCnd.push_back(getRegister());
-    VASTValPtr ReadyCnd = Builder.buildExpr(VASTExpr::dpAnd,
-                                            getReady()->getAsInlineOperand(false),
-                                            I->second->getAsInlineOperand(), 1);
+    VASTValPtr ReadyCnd
+      = Builder.buildAndExpr(getReady()->getAsInlineOperand(false),
+                             I->second->getAsInlineOperand(), 1);
     Mod.addAssignment(cast<VASTRegister>(I->first), ReadyCnd, this,
                       EmptySlotEnCnd, 0, false);
   }

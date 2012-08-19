@@ -922,9 +922,9 @@ VASTValPtr VASTExprBuilder::buildXorExpr(ArrayRef<VASTValPtr> Ops,
   assert (Ops.size() == 2 && "There should be more than one operand!!");
 
   // Build the Xor Expr with the And Inverter Graph (AIG).
-  return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
-                   buildNotExpr(buildAndExpr(Ops, BitWidth)),
-                   BitWidth);
+  return buildAndExpr(buildOrExpr(Ops, BitWidth),
+                      buildNotExpr(buildAndExpr(Ops, BitWidth)),
+                      BitWidth);
 }
 
 VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc, 
@@ -994,8 +994,7 @@ VASTWire *VASTModule::addPredExpr(VASTWire *CndWire,
     Cnds.push_back(Slot->getActive()->getAsInlineOperand(false));
   }
 
-  assign(CndWire, Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1),
-         VASTWire::AssignCond);
+  assign(CndWire, Builder->buildAndExpr(Cnds, 1), VASTWire::AssignCond);
 
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();

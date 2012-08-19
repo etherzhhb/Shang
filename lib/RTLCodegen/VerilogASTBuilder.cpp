@@ -1030,7 +1030,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
     MachineBasicBlock::iterator I = llvm::next(TargetBB->begin(), 2);
 
     VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, I);
-    VASTValPtr Cnd = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+    VASTValPtr Cnd = Builder->buildAndExpr(Cnds, 1);
     addSuccSlot(CurSlot, TargetSlot, Cnd);
   }
   Cnds.pop_back();
@@ -1113,7 +1113,7 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     break;
   }
 
-  VASTValPtr Pred = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
   addSlotDisable(Slot, cast<VASTRegister>(EnablePort), Pred);
 }
 
