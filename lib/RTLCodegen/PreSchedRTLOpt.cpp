@@ -331,10 +331,10 @@ void PreSchedRTLOpt::rewriteDatapath(MachineBasicBlock &MBB) {
   instr_iterator InsertPos = I;
   bool LastMIIsTerminator = false;
   while (I != E) {
-    // Do not insert the instruction between terminators.
+    // Do not insert the instruction between terminators and VOpMvPhi.
     if (!LastMIIsTerminator) InsertPos = I;
     MachineInstr *MI = I++;
-    LastMIIsTerminator |= MI->isTerminator();
+    LastMIIsTerminator |= MI->isTerminator() || MI->getOpcode() == VTM::VOpMvPhi;
 
     const MCInstrDesc &TID = MI->getDesc();
 
@@ -804,7 +804,7 @@ MachineInstr *PreSchedRTLOpt::calculateInsertPos(VASTExpr *Expr,
   MachineBasicBlock *MBB = calculateInsertMBB(Expr);
   if (MBB == CurIP->getParent()) return CurIP;
 
-  return MBB->getFirstInstrTerminator();
+  return VInstrInfo::getInsertPosBeforTerminator(MBB);
 }
 
 void PreSchedRTLOpt::verifyMBB(MachineBasicBlock &MBB) {
