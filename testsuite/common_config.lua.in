@@ -1,8 +1,7 @@
 FUs.MemoryBus = { Latency= 1.0, StartInterval=1, AddressWidth=@POINTER_SIZE_IN_BITS@, DataWidth=64 }
 FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Template=[=[
 // Block Ram $(num)
-reg   [$(datawidth - 1):0]   bram$(num)out_r;
-assign bram$(num)out = bram$(num)out_r;
+reg   [$(datawidth - 1):0]  bram$(num)out;
 reg   [$(datawidth - 1):0]  mem$(num)[0:$(2^addrwidth-1)];
 
 #if filename ~= [[]] then
@@ -15,7 +14,7 @@ always @ (posedge $(clk)) begin
     if (bram$(num)we)
       mem$(num)[bram$(num)addr] <= bram$(num)in;
 
-    bram$(num)out_r <= mem$(num)[bram$(num)addr];
+    bram$(num)out <= mem$(num)[bram$(num)addr];
   end
 end
 ]=]}

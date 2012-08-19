@@ -704,8 +704,9 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     VM->addRegister(VFUBRAM::getWriteEnableName(BramNum), 1);
     VM->addRegister(VFUBRAM::getInDataBusName(BramNum), DataWidth);
     VM->addRegister(VFUBRAM::getAddrBusName(BramNum), AddrWidth);
-    VASTWire *BRAMOut = VM->addWire(VFUBRAM::getOutDataBusName(BramNum),
-                                    DataWidth);
+    VASTRegister *BRAMOut = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
+                                            DataWidth, 0, VASTRegister::Virtual,
+                                            BramNum);
     // Used in template.
     BRAMOut->Pin();
     S << "// Addrspace: " << I->first;
