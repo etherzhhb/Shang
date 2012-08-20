@@ -925,7 +925,9 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
                                            unsigned BitWidth) {
   // Limit the shift amount so keep the behavior of the hardware the same as
   // the corresponding software.
-  RHS = buildBitSliceExpr(RHS, Log2_32_Ceil(LHS->getBitWidth()), 0);
+  unsigned RHSMaxSize = Log2_32_Ceil(LHS->getBitWidth());
+  if (RHS->getBitWidth() > RHSMaxSize)
+    RHS = buildBitSliceExpr(RHS, RHSMaxSize, 0);
 
   if (VASTExprPtr RHSExpr = dyn_cast<VASTExprPtr>(RHS)) {
     uint64_t KnownZeros, KnownOnes;
