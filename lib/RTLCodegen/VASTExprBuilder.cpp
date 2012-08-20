@@ -977,6 +977,14 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
     default: llvm_unreachable("Unexpected opcode!"); break;
     }
   }
+
+  // Optimize the 1-bit shift: A = B operator C (C is bool) =>
+  // A = C ? (B operator 1) : B.
+  if (RHS->getBitWidth() == 1) {
+    VASTValPtr ShiftBy1 = buildExpr(Opc, LHS, getBoolImmediate(true), BitWidth);
+    return buildSelExpr(RHS, ShiftBy1, LHS, BitWidth);
+  }
+
   VASTValPtr Ops[] = { LHS, RHS }; 
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
