@@ -95,6 +95,23 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   uint64_t ShiftVal = 0;
   DebugLoc dl = N->getDebugLoc();
 
+  unsigned MaxShiftAmtSize = Log2_32_Ceil(VTargetLowering::computeSizeInBits(Op));
+  unsigned ShiftAmtSize = VTargetLowering::computeSizeInBits(ShiftAmt);
+  // Limit the shift amount to the the width of operand.
+  if (ShiftAmtSize > MaxShiftAmtSize) {
+    ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
+                                            MaxShiftAmtSize, 0,
+                                            ShiftAmt.getValueSizeInBits());
+    DCI.AddToWorklist(ShiftAmt.getNode());
+    SDValue NewNode = DAG.getNode(N->getOpcode(), dl, N->getVTList(),
+                                  Op, ShiftAmt);
+    // Replace N by a new value shifted by the right amount, and do not try
+    // to combine the user of this node because there is nothing happen in
+    // fact.
+    DCI.CombineTo(N, NewNode, false);
+    return SDValue(N, 0);
+  }
+
   // Limit the shift amount.
   if (!ExtractConstant(ShiftAmt, ShiftVal)) return SDValue();
 
