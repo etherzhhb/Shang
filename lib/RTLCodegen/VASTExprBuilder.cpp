@@ -923,6 +923,10 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
                                            VASTValPtr LHS, 
                                            VASTValPtr RHS, 
                                            unsigned BitWidth) {
+  // Limit the shift amount so keep the behavior of the hardware the same as
+  // the corresponding software.
+  RHS = buildBitSliceExpr(RHS, Log2_32_Ceil(LHS->getBitWidth()), 0);
+
   if (VASTExprPtr RHSExpr = dyn_cast<VASTExprPtr>(RHS)) {
     uint64_t KnownZeros, KnownOnes;
     calculateBitCatBitMask(RHSExpr, KnownZeros, KnownOnes);
@@ -962,9 +966,7 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
       VASTValPtr Ops[] = { PaddingBits, LHS }; 
       return buildBitCatExpr(Ops, BitWidth);
     }
-    case VASTExpr::dpSRA:{ 
-      VASTValPtr SignBitOps[] = { getSignBit(LHS),
-                                  getOrCreateImmediate(ShiftAmount, 8) };
+    case VASTExpr::dpSRA:{
       VASTValPtr SignBits = buildBitRepeat(getSignBit(LHS), ShiftAmount);
       LHS = buildBitSliceExpr(LHS, LHS->getBitWidth(), ShiftAmount);
       VASTValPtr Ops[] = { SignBits, LHS }; 

@@ -401,7 +401,6 @@ class VerilogASTBuilder : public MachineFunctionPass,
   void emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpRetVal(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTValueVecTy &Cnds);
-  void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
@@ -937,7 +936,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpMoveArg:
     case VTM::VOpMove:
     case VTM::VOpMvPhi:
-    case VTM::VOpMvPipe:        emitOpCopy(MI, CurSlot, Cnds);            break;
+    case VTM::VOpMvPipe:        emitOpReadFU(MI, CurSlot, Cnds);          break;
     case VTM::VOpAdd:           emitOpAdd(MI, CurSlot, Cnds);             break;
     case VTM::VOpICmp:
     case VTM::VOpMultLoHi:
@@ -982,7 +981,7 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     case VTM::VOpMoveArg:
     case VTM::VOpMove:
     case VTM::VOpMvPhi:
-    case VTM::COPY:             emitOpCopy(MI, Slot, Cnds);   break;
+    case VTM::COPY:             emitOpReadFU(MI, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
     case VTM::VOpToState_nt:
       emitBr(MI, Slot, Cnds, DstBB, false);
@@ -1074,21 +1073,20 @@ void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
 }
 
-void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTValueVecTy &Cnds) {
-  MachineOperand &Dst = MI->getOperand(0), &Src = MI->getOperand(1);
-  // Ignore the identical copy.
-  if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
-
-  VASTRegister *R = getAsLValue<VASTRegister>(Dst);
-  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds, MI, true);
-}
-
-void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
+void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *Slot,
                                      VASTValueVecTy &Cnds) {
   // The dst operand of ReadFU change to immediate if it is dead.
-  if (MI->getOperand(0).isReg() && MI->getOperand(0).getReg())
-    emitOpCopy(MI, CurSlot, Cnds);
+  if (!MI->getOperand(0).isReg() || !MI->getOperand(0).getReg())
+    return;
+
+  MachineOperand &Dst = MI->getOperand(0), &Src = MI->getOperand(1);
+  VASTRegister *DstR = getAsLValue<VASTRegister>(Dst);
+  VASTValPtr SrcVal = getAsOperand(Src);
+
+  // Ignore the identical copy.
+  if (DstR == SrcVal) return;
+
+  VM->addAssignment(DstR, SrcVal, Slot, Cnds, MI, true);
 }
 
 void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
