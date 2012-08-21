@@ -134,9 +134,7 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Fix the machine code to avoid unnecessary mux.
     PM->add(createFixMachineCodePass(true));
-    PM->add(createDataPathPromotionPass());
-
-    //PM->add(createPrebindMuxBasePass());
+    if (EnablePreSchedRTLOpt) PM->add(createPreSchedRTLOptPass());
 
     // Optimize the CFG.
     PM->add(createHyperBlockFormationPass());
@@ -164,6 +162,7 @@ struct VTMPassConfig : public TargetPassConfig {
     // Clean up the MachineFunction.
     addPass(DeadMachineInstructionElimID);
     PM->add(createHoistDatapathPass());
+    PM->add(createDataPathPromotionPass());
   }
 
   virtual void addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
