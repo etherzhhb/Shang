@@ -42,6 +42,11 @@ STATISTIC(Unreachables,
   "Number of Unreachable inserted for machine basic block without sucessor");
 
 namespace llvm {
+void fixTerminators(MachineFunction &MF) {
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+    fixTerminators(I);
+}
+
 void fixTerminators(MachineBasicBlock *MBB) {
   SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
   MissedSuccs.insert(MBB->succ_begin(), MBB->succ_end());

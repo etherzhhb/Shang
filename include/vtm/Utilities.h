@@ -144,6 +144,7 @@ extractPointerAndOffset(const Value *V, int64_t Offset);
 class MachineBasicBlock;
 class TargetInstrInfo;
 void fixTerminators(MachineBasicBlock *MBB);
+void fixTerminators(MachineFunction &MF);
 
 class MachineDominatorTree;
 class MachineInstr;
