@@ -18,6 +18,7 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -90,6 +91,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
+    // Fix the terminators first.
+    fixTerminators(MBB);
 
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
          II != IE; /*++II*/) {

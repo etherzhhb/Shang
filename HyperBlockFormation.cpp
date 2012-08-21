@@ -326,9 +326,6 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   bool MakeChanged = false;
   AllTraces.clear();
-
-  // Sort the BBs according they frequency.
-  std::vector<MachineBasicBlock*> SortedBBs;
   CFGMap.clear();
 
   // Eliminate the empty blocks.
@@ -340,10 +337,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   if (MF.size() == 1) return MakeChanged;
 
   // Cache the original CFG.
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
-    SortedBBs.push_back(I);
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
     buildCFGForBB(I);
-  }
 
   // Need to compare I to MF.end() in every iteration, because we will delete
   // the merged MBB.
@@ -674,10 +669,6 @@ bool HyperBlockFormation::simplifyCFG(MachineFunction &MF) {
       changed = true;
       continue;
     }
-
-    // We need to fix the terminators so the eliminateEmptyBlock can work
-    // correctly.
-    fixTerminators(MBB);
   }
 
   // Try to eliminate the almost empty blocks.
