@@ -371,15 +371,6 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
 void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
   assert(BB.getFirstTerminator() == BB.end() && "Cannot insert jump table!");
 
-  // Insert the return operation
-  JT::iterator RetPredAt = Table.find(0);
-  if (RetPredAt != Table.end()) {
-    BuildMI(&BB, dl, getDesc(VTM::VOpRet))
-      .addOperand(RetPredAt->second).addOperand(VInstrInfo::CreateTrace());
-    Table.erase(RetPredAt);
-  }
-
-  assert(Table.size() == BB.succ_size()&&"Table size and succ_size not match!");
   // Dirty hack: We may not evaluate the predicate to always true at the moment.
   if (Table.size() == 1) {
     BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
@@ -389,6 +380,15 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
     return;
   }
 
+  // Insert the return operation
+  JT::iterator RetPredAt = Table.find(0);
+  if (RetPredAt != Table.end()) {
+    BuildMI(&BB, dl, getDesc(VTM::VOpRet))
+      .addOperand(RetPredAt->second).addOperand(VInstrInfo::CreateTrace());
+    Table.erase(RetPredAt);
+  }
+
+  assert(Table.size() == BB.succ_size()&&"Table size and succ_size not match!");
   for (JT::iterator I = Table.begin(), E = Table.end(); I != E; ++I) {
     I->second.setIsKill(false);
     BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
