@@ -106,7 +106,7 @@ namespace llvm {
 
     void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
                        unsigned Size) {
-        unsigned *CopyTable = new unsigned[Size];
+        SmallVector<unsigned, 8> CopyTable(Size);
         for (unsigned i = 0; i < Size; ++i)
           // Lua array starts from 1
           CopyTable[i] = getProperty<unsigned>(LuaCostTable, i + 1, CopyTable[i]);
