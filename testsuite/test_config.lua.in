@@ -19,6 +19,7 @@ MULT_ChainingThreshold = @MULT_ChainingThreshold@
 ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
 SEL_ChainingThreshold = -1
 REDUCTION_ChainingThreshold = -1
+MUX_ChainingThreshold = -1
 
 POINTER_SIZE_IN_BITS = @POINTER_SIZE_IN_BITS@
 
