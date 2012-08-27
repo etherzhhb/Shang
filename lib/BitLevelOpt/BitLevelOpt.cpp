@@ -92,10 +92,10 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
   SelectionDAG &DAG = DCI.DAG;
   SDValue Op = N->getOperand(0);
   SDValue ShiftAmt = N->getOperand(1);
-  uint64_t ShiftVal = 0;
   DebugLoc dl = N->getDebugLoc();
 
-  unsigned MaxShiftAmtSize = Log2_32_Ceil(VTargetLowering::computeSizeInBits(Op));
+  unsigned SrcSize = VTargetLowering::computeSizeInBits(Op);
+  unsigned MaxShiftAmtSize = Log2_32_Ceil(SrcSize);
   unsigned ShiftAmtSize = VTargetLowering::computeSizeInBits(ShiftAmt);
   // Limit the shift amount to the the width of operand.
   if (ShiftAmtSize > MaxShiftAmtSize) {
@@ -112,10 +112,9 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
     return SDValue(N, 0);
   }
 
-  // Limit the shift amount.
+  uint64_t ShiftVal = 0;
   if (!ExtractConstant(ShiftAmt, ShiftVal)) return SDValue();
 
-  unsigned SrcSize = VTargetLowering::computeSizeInBits(Op);
   EVT VT = N->getValueType(0);
   unsigned PaddingSize = ShiftVal;
   EVT PaddingVT = EVT::getIntegerVT(*DAG.getContext(), PaddingSize);
@@ -124,8 +123,7 @@ SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) 
 
   switch (N->getOpcode()) {
   default:
-    PaddingBits = DAG.getConstant(0, PaddingVT, true);
-    break;
+    return SDValue();
   case ISD::ROTL:
     PaddingBits = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, 
                                                SrcSize - PaddingSize);
@@ -1641,6 +1639,9 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::ICmp:
     if(EnableArithOpt)  return PerfromICmpCombine(N, DCI);
     break;
+  case ISD::SRA:
+  case ISD::SRL:
+  case ISD::SHL:
   case ISD::ROTL:
   case ISD::ROTR:
     return PerformShiftImmCombine(N, DCI);   

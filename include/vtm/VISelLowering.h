@@ -133,7 +133,9 @@ public:
 
   static SDValue getTruncate(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
                       unsigned DstSize) {
-    return getBitSlice(DAG, dl, SrcOp, DstSize, 0);
+    return getBitSlice(DAG, dl, SrcOp,
+                       std::min(DstSize, computeSizeInBits(SrcOp)), 0,
+                       DstSize);
   }
 
   static SDValue getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
