@@ -70,6 +70,7 @@ namespace llvm {
     unsigned ICmpCost[64] ;
     unsigned SelCost[64] ;
     unsigned ReductionCost[64] ;
+    unsigned MuxCost[31][64] ;
     //////////////////////////////////
     //FIX ME: This can be initialized the MuxCost from lua.
     unsigned MaxLutSize = 4;
@@ -82,7 +83,38 @@ namespace llvm {
     float MultLatencies[]      = { 1.0f,  1.0f,  1.0f, 1.0f };
     float ShiftLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
     float SelLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float ReductionLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float ReductionLatencies[] = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float MuxLatencies[31][4]  = {{ 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f },
+                                  { 1.0f,  1.0f,  1.0f, 1.0f }};
     float MemBusLatency = 1.0f;
     float BRamLatency = 1.0f;
     float LutLatency = 0.0f;
@@ -164,6 +196,18 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, f
   VFUs::initLatencyTable(LatTable, latencies, 4);
   luabind::object CostTable = FUTable["Costs"];
   VFUs::initCostTable(CostTable, costs, 5);
+}
+
+VFUMux::VFUMux(luabind::object FUTable,
+               unsigned (*MuxCost)[64], float (*MuxLatencies)[4])
+  : VFUDesc(VFUs::Mux, FUTable, *MuxCost, *MuxLatencies), 
+  MaxInputNum(32){
+    for (unsigned i = 0; i < MaxInputNum-1; i++) {
+      luabind::object LatTable = FUTable["Latencies"][i+1];
+      VFUs::initLatencyTable(LatTable, MuxLatencies[i], 4);
+      luabind::object CostTable = FUTable["Costs"][i+1];
+      VFUs::initCostTable(CostTable, MuxCost[i], 5);
+  }
 }
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)

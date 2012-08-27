@@ -95,6 +95,8 @@ namespace VFUs {
   extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64],
                   SelCost[64], ReductionCost[64];
 
+  extern unsigned MuxCost[31][64];
+
   extern unsigned LUTCost;
   extern unsigned RegCost;
   extern unsigned MaxLutSize;
@@ -104,6 +106,8 @@ namespace VFUs {
   // Latency tables
   extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
                 ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
+
+  extern float MuxLatencies[31][4];
 
   float getMuxLatency(unsigned Size);
   float getMuxCost(unsigned Size);
@@ -210,6 +214,13 @@ public:
   }
 
   virtual void print(raw_ostream &OS) const;
+};
+
+class VFUMux : public VFUDesc {
+  unsigned MaxInputNum;
+public:
+  VFUMux(luabind::object FUTable, unsigned (*MuxCost)[64],
+             float (*MuxLatencies)[4]);
 };
 
 class VFUMemBus : public VFUDesc {
