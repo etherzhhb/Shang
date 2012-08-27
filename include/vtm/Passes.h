@@ -36,6 +36,7 @@ FunctionPass *createVISelDag(VTargetMachine &TM);
 
 FunctionPass *createDesignMetricsPass();
 
+Pass *createVerilogModuleAnalysisPass();
 // Always inline function.
 Pass *createHLSInlinerPass();
 
@@ -87,7 +88,7 @@ Pass *createDataPathPromotionPass();
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
-
+void initializeVerilogModuleAnalysisPass(PassRegistry &Registry);
 void initializeMachineBasicBlockTopOrderPass(PassRegistry &Registry);
 void initializeDetialLatencyInfoPass(PassRegistry &Registry);
 void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
