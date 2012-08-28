@@ -20,6 +20,7 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/VFInfo.h"
 #include "vtm/Utilities.h"
+#include "vtm/VerilogModuleAnalysis.h"
 
 #include "llvm/Module.h"
 #include "llvm/Target/Mangler.h"
@@ -62,6 +63,7 @@ namespace {
 
     void getAnalysisUsage(AnalysisUsage &AU) const {
       MachineFunctionPass::getAnalysisUsage(AU);
+      AU.addRequired<VerilogModuleAnalysis>();
       AU.setPreservesAll();
     }
   };
@@ -76,14 +78,16 @@ Pass *llvm::createVerilogASTWriterPass(raw_ostream &O) {
 }
 
 INITIALIZE_PASS_BEGIN(VerilogASTWriter, "vtm-rtl-info",
-  "Build RTL Verilog module for synthesised function.",
-  false, true)
-  INITIALIZE_PASS_END(VerilogASTWriter, "vtm-rtl-info",
-  "Build RTL Verilog module for synthesised function.",
-  false, true)
+                      "Build RTL Verilog module for synthesised function.",
+                      false, true)
+  INITIALIZE_PASS_DEPENDENCY(VerilogModuleAnalysis);
+INITIALIZE_PASS_END(VerilogASTWriter, "vtm-rtl-info",
+                    "Build RTL Verilog module for synthesised function.",
+                    false, true)
 
-  VerilogASTWriter::VerilogASTWriter(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
-    initializeVerilogASTWriterPass(*PassRegistry::getPassRegistry());
+VerilogASTWriter::VerilogASTWriter(raw_ostream &O)
+                : MachineFunctionPass(ID), Out(O) {
+  initializeVerilogASTWriterPass(*PassRegistry::getPassRegistry());
 }
 
 bool VerilogASTWriter::doInitialization(Module &Mod) {
@@ -103,15 +107,13 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
 }
 
 bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
-  VFInfo *FInfo =F.getInfo<VFInfo>();
-
   if (EnalbeDumpIR) {
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
     F.print(Out);
     Out << "`endif\n";
   }
 
-  VASTModule *VM = FInfo->getRtlMod();
+  VASTModule *VM = getAnalysis<VerilogModuleAnalysis>().getModule();
 
   // Write buffers to output
   VM->printModuleDecl(Out);

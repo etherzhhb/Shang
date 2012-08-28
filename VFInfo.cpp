@@ -67,18 +67,13 @@ void VFInfo::allocateBRAM(uint16_t ID, unsigned NumElem,
 }
 
 VFInfo::VFInfo(MachineFunction &MF)
-  : Info(getSynSetting(MF.getFunction()->getName())),
-    Mod(new VASTModule(Info->getModName(), 0)),
+  : TotalSlot(0), Info(getSynSetting(MF.getFunction()->getName())),
     BitWidthAnnotated(true) {}
 
-VFInfo::~VFInfo() { delete Mod; }
+VFInfo::~VFInfo() { }
 
 void VFInfo::setTotalSlots(unsigned Slots) {
-  Mod->allocaSlots(Slots);
-}
-
-VASTModule *VFInfo::getRtlMod() const {
-  return Mod;
+  TotalSlot = Slots;
 }
 
 void VFInfo::remapCallee(StringRef FNName, unsigned NewFNNum) {

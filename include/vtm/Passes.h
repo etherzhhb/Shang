@@ -36,7 +36,6 @@ FunctionPass *createVISelDag(VTargetMachine &TM);
 
 FunctionPass *createDesignMetricsPass();
 
-Pass *createVerilogModuleAnalysisPass();
 // Always inline function.
 Pass *createHLSInlinerPass();
 

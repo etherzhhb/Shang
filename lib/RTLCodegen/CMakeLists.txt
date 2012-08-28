@@ -1,5 +1,6 @@
 add_llvm_library(VTMRTLCodegen
   RTLCodegenPrepare.cpp
+  VerilogModuleAnalysis.cpp
   VASTExprBuilder.cpp
   VerilogASTBuilder.cpp
   VerilogASTWriter.cpp

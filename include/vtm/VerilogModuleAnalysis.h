@@ -11,23 +11,32 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
-//
+// Define the VerilogModuleAnalysis pass, which is the container of the
+// VASTModule.
 //
 //===----------------------------------------------------------------------===//
-#include "vtm/Passes.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "VerilogAST.h"
+
 
 namespace llvm {
+class VASTModule;
+class VASTExprBuilder;
+
 class VerilogModuleAnalysis : public MachineFunctionPass {
-  VASTModule *VMPtr;
+  VASTModule *Module;
 public:
   static char ID;
 
   VerilogModuleAnalysis();
 
   bool runOnMachineFunction(MachineFunction &MF);
+  void releaseMemory();
+
+  VASTModule *createModule(const std::string &Name, VASTExprBuilder *Builder);
+  VASTModule *getModule() const {
+    assert(Module && "The module is not yet created!");
+    return Module;
+  }
 };
 }

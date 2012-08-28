@@ -20,6 +20,7 @@
 #include "RtlSSAAnalysis.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
+#include "vtm/VerilogModuleAnalysis.h"
 
 #include "llvm/Target/TargetData.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -167,8 +168,15 @@ RtlSSAAnalysis::RtlSSAAnalysis() : MachineFunctionPass(ID), VM(0) {
   initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
 }
 
+
+void RtlSSAAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
+  MachineFunctionPass::getAnalysisUsage(AU);
+  AU.addRequired<VerilogModuleAnalysis>();
+  AU.setPreservesAll();
+}
+
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
-  VM = MF.getInfo<VFInfo>()->getRtlMod();
+  VM = getAnalysis<VerilogModuleAnalysis>().getModule();
 
   // Push back all the slot into the SlotVec for the purpose of view graph.
   typedef VASTModule::slot_iterator slot_it;
@@ -477,6 +485,7 @@ void RtlSSAAnalysis::ComputeGenAndKill() {
 char RtlSSAAnalysis::ID = 0;
 INITIALIZE_PASS_BEGIN(RtlSSAAnalysis, "RtlSSAAnalysis",
                       "RtlSSAAnalysis", false, false)
+  INITIALIZE_PASS_DEPENDENCY(VerilogModuleAnalysis);
 INITIALIZE_PASS_END(RtlSSAAnalysis, "RtlSSAAnalysis",
                     "RtlSSAAnalysis", false, false)
 

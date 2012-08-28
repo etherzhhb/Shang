@@ -34,7 +34,6 @@
 namespace llvm {
 class MachineBasicBlock;
 class MachineInstr;
-class VASTModule;
 class GlobalValue;
 
 class VFInfo : public MachineFunctionInfo {
@@ -47,6 +46,7 @@ class VFInfo : public MachineFunctionInfo {
     unsigned IISlot    : 16;
   };
   std::map<const MachineBasicBlock*, StateSlots> StateSlotMap;
+  unsigned TotalSlot;
 
   // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
   typedef std::map<const MachineInstr*,
@@ -73,7 +73,6 @@ public:
   typedef BRamMapTy::const_iterator const_bram_iterator;
 
 private:
-
   BRamMapTy BRams;
 
   // Mapping Function unit number to callee function name.
@@ -81,8 +80,6 @@ private:
   typedef StringMapEntry<unsigned> FNEntryTy;
   FNMapTy UsedFNs;
   const SynSettings *Info;
-  // Rtl module.
-  VASTModule *Mod;
   // If bit width information annotated to the annotator?
   bool BitWidthAnnotated;
 public:
@@ -109,10 +106,6 @@ public:
 
   const SynSettings &getInfo() const { return *Info; }
 
-  void setTotalSlots(unsigned Slots);
-
-  /// Verilog module for the machine function.
-  VASTModule *getRtlMod() const;
 
   /// Slots information for machine basicblock.
   unsigned getStartSlotFor(const MachineBasicBlock* MBB) const;
@@ -129,6 +122,8 @@ public:
                          unsigned startSlot,
                          unsigned totalSlot,
                          unsigned IISlot);
+  void setTotalSlots(unsigned Slots);
+  unsigned getTotalSlots() const { return TotalSlot; }
 
   typedef FNMapTy::const_iterator const_fn_iterator;
   const_fn_iterator fn_begin() const { return UsedFNs.begin(); }

@@ -11,11 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
-//
+// Implement the VerilogModuleAnalysis pass, which is the container of the
+// VASTModule.
 //
 //===----------------------------------------------------------------------===//
+#include "vtm/Passes.h"
 #include "vtm/VerilogModuleAnalysis.h"
+#include "vtm/VerilogAST.h"
+#include "vtm/VerilogAST.h"
 
 using namespace llvm;
 
@@ -24,14 +27,25 @@ INITIALIZE_PASS(VerilogModuleAnalysis, "verilog-module-analysis",
 
 char VerilogModuleAnalysis::ID = 0;
 
-VerilogModuleAnalysis::VerilogModuleAnalysis() : MachineFunctionPass(ID) {
-    initializeVerilogModuleAnalysisPass(*PassRegistry::getPassRegistry());
+VerilogModuleAnalysis::VerilogModuleAnalysis():MachineFunctionPass(ID),Module(0)
+{
+  initializeVerilogModuleAnalysisPass(*PassRegistry::getPassRegistry());
 }
 
 bool VerilogModuleAnalysis::runOnMachineFunction(MachineFunction &MF){
   return false;
 }
 
-Pass *llvm::createVerilogModuleAnalysisPass() {
-  return new VerilogModuleAnalysis();
+VASTModule *VerilogModuleAnalysis::createModule(const std::string &Name,
+                                                VASTExprBuilder *Builder) {
+  assert(Module == 0 && "Module has been already created!");
+  Module = new VASTModule(Name, Builder);
+  return Module;
+}
+
+void VerilogModuleAnalysis::releaseMemory() {
+  if (Module == 0) return;
+
+  delete Module;
+  Module = 0;
 }

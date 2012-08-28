@@ -22,6 +22,7 @@
 #include "vtm/LangSteam.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/VerilogModuleAnalysis.h"
 #include "vtm/Utilities.h"
 
 #include "llvm/Constants.h"
@@ -428,6 +429,7 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.setPreservesAll();
+    AU.addRequired<VerilogModuleAnalysis>();
     AU.addRequiredID(MachineBasicBlockTopOrderID);
     MachineFunctionPass::getAnalysisUsage(AU);
   }
@@ -458,6 +460,7 @@ INITIALIZE_PASS_BEGIN(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                       "Build RTL Verilog module for synthesised function.",
                       false, true)
   INITIALIZE_PASS_DEPENDENCY(MachineBasicBlockTopOrder);
+  INITIALIZE_PASS_DEPENDENCY(VerilogModuleAnalysis);
 INITIALIZE_PASS_END(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
@@ -472,12 +475,14 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TD = getAnalysisIfAvailable<TargetData>();
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-  VM = FInfo->getRtlMod();
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
+
   Builder.reset(new DatapathBuilder(*this, *MRI));
-  VM->setBuilder(Builder.get());
+  VerilogModuleAnalysis &VMA = getAnalysis<VerilogModuleAnalysis>();
+  VM = VMA.createModule(FInfo->getInfo().getModName(), Builder.get());
+  VM->allocaSlots(FInfo->getTotalSlots());
 
   emitFunctionSignature(F.getFunction());
 

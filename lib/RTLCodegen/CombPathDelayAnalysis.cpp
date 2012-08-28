@@ -28,6 +28,8 @@
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
 #include "vtm/Utilities.h"
+#include "vtm/VerilogModuleAnalysis.h"
+
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Support/SourceMgr.h"
@@ -127,6 +129,7 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<TargetData>();
     AU.addRequired<RtlSSAAnalysis>();
+    AU.addRequired<VerilogModuleAnalysis>();
     AU.setPreservesAll();
   }
 
@@ -452,8 +455,9 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   // No need to write timing script at all.
   if (DisableTimingScriptGeneration) return false;
 
-  bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
-  VM = MF.getInfo<VFInfo>()->getRtlMod();
+  VM = getAnalysis<VerilogModuleAnalysis>().getModule();
+  bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>(), VM);
+
   RtlSSA = &getAnalysis<RtlSSAAnalysis>();
 
   //Write the timing constraints.
@@ -516,8 +520,10 @@ void CombPathDelayAnalysis::extractTimingPaths(PathDelayQueryCache &Cache,
 char CombPathDelayAnalysis::ID = 0;
 INITIALIZE_PASS_BEGIN(CombPathDelayAnalysis, "CombPathDelayAnalysis",
                       "CombPathDelayAnalysis", false, false)
+  INITIALIZE_PASS_DEPENDENCY(VerilogModuleAnalysis);
 INITIALIZE_PASS_END(CombPathDelayAnalysis, "CombPathDelayAnalysis",
                     "CombPathDelayAnalysis", false, false)
+
 Pass *llvm::createCombPathDelayAnalysisPass() {
   return new CombPathDelayAnalysis();
 }

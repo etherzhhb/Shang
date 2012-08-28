@@ -314,11 +314,7 @@ public:
     SlotInfos.clear();
   }
 
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.setPreservesAll();
-  }
-
+  void getAnalysisUsage(AnalysisUsage &AU) const;
   bool runOnMachineFunction(MachineFunction &MF);
 
   RtlSSAAnalysis();

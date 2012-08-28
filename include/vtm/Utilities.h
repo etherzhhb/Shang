@@ -105,7 +105,9 @@ bool runScriptOnGlobalVariables(Module &M, TargetData *TD,
                                 const std::string &Script,
                                 SMDiagnostic Err);
 class MachineFunction;
-void bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD);
+class VASTModule;
+void bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD,
+                                    VASTModule *Module);
 
 class VASTModule;
 // Bind VASTModule to script engine.

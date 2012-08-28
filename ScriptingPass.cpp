@@ -19,6 +19,7 @@
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/Utilities.h"
+#include "vtm/VerilogModuleAnalysis.h"
 
 #include "llvm/Module.h"
 #include "llvm/DerivedTypes.h"
@@ -41,7 +42,15 @@ struct ScriptingPass : public MachineFunctionPass {
 
   ScriptingPass(const char *Name, const char *FScript, const char *GScript)
     : MachineFunctionPass(ID), PassName(Name),
-      GlobalScript(GScript), FunctionScript(FScript), TD(0) {}
+      GlobalScript(GScript), FunctionScript(FScript), TD(0) {
+    initializeVerilogModuleAnalysisPass(*PassRegistry::getPassRegistry());
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.addRequired<VerilogModuleAnalysis>();
+    AU.setPreservesAll();
+  }
 
   const char *getPassName() const { return PassName.c_str(); }
 
@@ -177,7 +186,8 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
   return runScriptStr(ScriptToRun, Err);
 }
 
-void llvm::bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD) {
+void llvm::bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD,
+                                          VASTModule *Module) {
   SMDiagnostic Err;
   // Push the function information into the script engine.
   // FuncInfo {
@@ -221,7 +231,7 @@ void llvm::bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD) {
     llvm_unreachable("Cannot create function infomation!");
   Script.clear();
 
-  bindToScriptEngine("CurModule", MF.getInfo<VFInfo>()->getRtlMod());
+  bindToScriptEngine("CurModule", Module);
 }
 
 bool ScriptingPass::doInitialization(Module &M) {
@@ -241,7 +251,8 @@ bool ScriptingPass::doFinalization(Module &M) {
 }
 
 bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
-  bindFunctionInfoToScriptEngine(MF, *TD);
+  VASTModule *Module = getAnalysis<VerilogModuleAnalysis>().getModule();
+  bindFunctionInfoToScriptEngine(MF, *TD, Module);
 
   SMDiagnostic Err;
   if (!runScriptStr(FunctionScript, Err))
