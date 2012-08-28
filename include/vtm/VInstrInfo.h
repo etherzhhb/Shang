@@ -133,10 +133,6 @@ public:
                         MachineOperand &Res,
                         const SmallVectorImpl<MachineOperand> &Pred,
                         MachineOperand IfTrueVal);
-  // We need to identify the signals connect to clock enable network, which
-  // have big latency if connected to a multiplexer (this introduce by resource
-  // sharing algorithm) and likly become critical path.
-  static float getOperandLatency(const MachineInstr *MI, unsigned MOIdx);
 
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);

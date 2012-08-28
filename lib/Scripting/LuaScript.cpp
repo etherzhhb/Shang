@@ -167,12 +167,10 @@ void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
 
 void LuaScript::updateFUs() {
   luabind::object FUs = luabind::globals(State)["FUs"];
+  // Initialize the functional unit descriptions.
   FUSet[VFUs::MemoryBus]
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
   FUSet[VFUs::BRam] = new VFUBRAM(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
-
-  FUSet[VFUs::Mux] = new VFUMux(FUs[VFUDesc::getTypeName(VFUs::Mux)],
-                                    VFUs::MuxCost, VFUs::MuxLatencies);
 
   initSimpleFU(VFUs::AddSub, FUs, VFUs::AddCost, VFUs::AdderLatencies);
 
@@ -187,6 +185,8 @@ void LuaScript::updateFUs() {
   initSimpleFU(VFUs::Reduction, FUs, VFUs::ReductionCost, 
                VFUs::ReductionLatencies);
 
+  FUSet[VFUs::Mux] = new VFUMux(FUs[VFUDesc::getTypeName(VFUs::Mux)]);
+
   // Read other parameters.
 #define READPARAMETER(PARAMETER, T) \
   if (boost::optional<T> PARAMETER \
@@ -195,13 +195,9 @@ void LuaScript::updateFUs() {
 
   READPARAMETER(LUTCost, unsigned);
   READPARAMETER(RegCost, unsigned);
-  //READPARAMETER(MUXCost, unsigned);
-  //READPARAMETER(MuxSizeCost, unsigned);
 
   READPARAMETER(LutLatency, double);
   READPARAMETER(MaxLutSize, unsigned);
-  READPARAMETER(MaxMuxPerLut, unsigned);
-  READPARAMETER(MaxAllowedMuxSize, unsigned);
 }
 
 void LuaScript::updateStatus() {

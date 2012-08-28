@@ -265,9 +265,10 @@ struct FaninChecker {
 
   template<int N>
   int getSavedSrcMuxCost(int BitWidth){
-    return VFUs::getMuxCost(getSrcNum<N>(0), BitWidth)
-           + VFUs::getMuxCost(getSrcNum<N>(1), BitWidth)
-           - VFUs::getMuxCost(getMergedSrcMuxSize<N>(), BitWidth);
+    VFUMux *MUXDesc = getFUDesc<VFUMux>();
+    return MUXDesc->getMuxCost(getSrcNum<N>(0), BitWidth)
+           + MUXDesc->getMuxCost(getSrcNum<N>(1), BitWidth)
+           - MUXDesc->getMuxCost(getMergedSrcMuxSize<N>(), BitWidth);
   }
 
   int getExtraCost() const { return ExtraCost; }
@@ -336,8 +337,10 @@ struct FanoutChecker {
   }
 
   int getSavedFanoutsCost(int BitWidth) {
-    return VFUs::getMuxCost(NumFanouts, BitWidth)
-           - VFUs::getMuxCost(getNumMergedFanouts(), BitWidth);
+    VFUMux *MUXDesc = getFUDesc<VFUMux>();
+
+    return MUXDesc->getMuxCost(NumFanouts, BitWidth) -
+           MUXDesc->getMuxCost(getNumMergedFanouts(), BitWidth);
   }
 
 };
@@ -358,8 +361,9 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
   }
 
   int computeWeight(unsigned FanInWidth, unsigned FanOutWidth) {
+    VFUMux *MUXDesc = getFUDesc<VFUMux>();
     // Only merge the register if the mux size not exceed the max allowed size.
-    if (FaninChecker<NUMSRC>::getMaxMergedSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
+    if (FaninChecker<NUMSRC>::getMaxMergedSrcMuxSize() > int(MUXDesc->MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;

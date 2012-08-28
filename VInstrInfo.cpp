@@ -836,19 +836,6 @@ static float LookupLatency(const float *Table, const MachineInstr *MI){
   return VFUs::lookupLatency(Table, SizeInBits);
 }
 
-float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
-  unsigned OpCode = MI->getOpcode();
-
-  switch (OpCode) {
-  case VTM::VOpDstMux:
-    // Get the prebound mux size.
-    return VFUs::getMuxLatency(MI->getOperand(3).getImm(),
-                               getBitWidth(MI->getOperand(0)));
-  }
-
-  return 0.0f;
-}
-
 FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(MI->getOpcode()) {

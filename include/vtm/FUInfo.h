@@ -95,31 +95,17 @@ namespace VFUs {
   extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64],
                   SelCost[64], ReductionCost[64];
 
-  extern unsigned MuxCost[31][64];
-
   extern unsigned LUTCost;
   extern unsigned RegCost;
   extern unsigned MaxLutSize;
-  extern unsigned MaxMuxPerLut;
-  extern unsigned MaxAllowedMuxSize;
 
   // Latency tables
   extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-                ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
-
-  extern float MuxLatencies[31][4];
-
-  float getMuxLatency(unsigned Size, unsigned BitWidth);
-  float getMuxCost(unsigned Size, unsigned BitWidth);
+               ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
 
   extern float BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector
                 ClkEnSelLatency;
-
-  void initLatencyTable(luabind::object LuaLatTable, float *LatTable,
-                        unsigned Size);
-  void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
-                     unsigned Size);
 
   float lookupLatency(const float *Table, unsigned SizeInBits);
 }
@@ -217,10 +203,23 @@ public:
 };
 
 class VFUMux : public VFUDesc {
-  unsigned MaxInputNum;
+  unsigned MuxCost[31][64];
+  float MuxLatencies[31][4];
+
 public:
-  VFUMux(luabind::object FUTable, unsigned (*MuxCost)[64],
-             float (*MuxLatencies)[4]);
+  const unsigned MaxAllowedMuxSize;
+
+  VFUMux(luabind::object FUTable);
+
+  float getMuxLatency(unsigned Size, unsigned BitWidth);
+  unsigned getMuxCost(unsigned Size, unsigned BitWidth);
+
+  static VFUs::FUTypes getType() { return VFUs::Mux; };
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VFUMux *A) { return true; }
+  static inline bool classof(const VFUDesc *A) {
+    return A->getType() == VFUs::Mux;
+  }
 };
 
 class VFUMemBus : public VFUDesc {

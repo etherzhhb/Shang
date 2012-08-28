@@ -62,21 +62,15 @@ namespace llvm {
 
     // Default area cost parameter.
     unsigned LUTCost = 64;
-    unsigned RegCost;
-
-    ////////////////////////////////////
-    unsigned AddCost[64] ;
-    unsigned MulCost[64] ;
-    unsigned ShiftCost[64] ;
-    unsigned ICmpCost[64] ;
-    unsigned SelCost[64] ;
-    unsigned ReductionCost[64] ;
-    unsigned MuxCost[31][64] ;
-    //////////////////////////////////
-    //FIX ME: This can be initialized the MuxCost from lua.
+    unsigned RegCost = 4;
     unsigned MaxLutSize = 4;
-    unsigned MaxMuxPerLut = 4;
-    unsigned MaxAllowedMuxSize = 8;
+
+    unsigned AddCost[64];
+    unsigned MulCost[64];
+    unsigned ShiftCost[64];
+    unsigned ICmpCost[64];
+    unsigned SelCost[64];
+    unsigned ReductionCost[64];
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
     float AdderLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
@@ -85,37 +79,6 @@ namespace llvm {
     float ShiftLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
     float SelLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
     float ReductionLatencies[] = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float MuxLatencies[31][4]  = {{ 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f },
-                                  { 1.0f,  1.0f,  1.0f, 1.0f }};
     float MemBusLatency = 1.0f;
     float BRamLatency = 1.0f;
     float LutLatency = 0.0f;
@@ -168,36 +131,12 @@ namespace llvm {
         RoundDownLatency
         + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
     }
-
-    float getMuxLatency(unsigned Size, unsigned BitWidth) {
-      if (Size < 2) return 0;
-
-      unsigned Level = ceil(float(Log2_32_Ceil(Size))
-                            / float(Log2_32_Ceil(MaxMuxPerLut)));
-      if (Size > 32) {
-        return Level * LutLatency;
-      }
-      //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
-      return MuxLatencies[Size-2][BitWidth];
-    }
-
-    float getMuxCost(unsigned Size, unsigned BitWidth) {
-      if (Size < 2) return 0;
-
-      if (Size > 32) {
-      // Every MUX will eliminates inputs number by (MaxMuxPerLut - 1), how
-      // many MUX need to reduce the input number from Size to 1?
-            return (Size - 1) / (MaxMuxPerLut - 1) * LUTCost * BitWidth;
-      }
-      //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
-      return MuxCost[Size-2][BitWidth];
-    }
   }
 }
 
-VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, float *latencies)
-  : ResourceType(type),
-    StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
+VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs,
+                 float *latencies)
+  : ResourceType(type), StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
     Costs(costs), LatencyTable(latencies),
     ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
   luabind::object LatTable = FUTable["Latencies"];
@@ -206,16 +145,38 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, f
   VFUs::initCostTable(CostTable, costs, 5);
 }
 
-VFUMux::VFUMux(luabind::object FUTable,
-               unsigned (*MuxCost)[64], float (*MuxLatencies)[4])
-  : VFUDesc(VFUs::Mux, FUTable, *MuxCost, *MuxLatencies), 
-  MaxInputNum(32){
-    for (unsigned i = 0; i < MaxInputNum-1; i++) {
-      luabind::object LatTable = FUTable["Latencies"][i+1];
-      VFUs::initLatencyTable(LatTable, MuxLatencies[i], 4);
-      luabind::object CostTable = FUTable["Costs"][i+1];
-      VFUs::initCostTable(CostTable, MuxCost[i], 5);
+VFUMux::VFUMux(luabind::object FUTable)
+  : VFUDesc(VFUs::Mux, 1, 0, 0),
+    MaxAllowedMuxSize(getProperty<unsigned>(FUTable, "MaxAllowedMuxSize", 1)) {
+  for (unsigned i = 0; i < MaxAllowedMuxSize - 1; i++) {
+    luabind::object LatTable = FUTable["Latencies"][i+1];
+    VFUs::initLatencyTable(LatTable, MuxLatencies[i], 4);
+    luabind::object CostTable = FUTable["Costs"][i+1];
+    VFUs::initCostTable(CostTable, MuxCost[i], 5);
   }
+}
+
+float VFUMux::getMuxLatency(unsigned Size, unsigned BitWidth) {
+  if (Size < 2) return 0.0f;
+
+  float ratio = std::min(float(Size) / float(MaxAllowedMuxSize), 1.0f);
+  Size = std::min(Size, MaxAllowedMuxSize);
+
+  assert(BitWidth <= 64 && "Bad Mux Size!");
+
+  //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
+  return MuxLatencies[Size - 2][BitWidth] * ratio;
+}
+
+unsigned VFUMux::getMuxCost(unsigned Size, unsigned BitWidth) {
+  if (Size < 2) return 0.0f;
+
+  float ratio = std::min(float(Size) / float(MaxAllowedMuxSize), 1.0f);
+  Size = std::min(Size, MaxAllowedMuxSize);
+
+  assert(BitWidth <= 64 && "Bad Mux Size!");
+
+  return std::ceil(MuxCost[Size - 2][BitWidth] * ratio);
 }
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)

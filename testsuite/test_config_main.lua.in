@@ -20,7 +20,6 @@ TBFILE = [[@MAIN_TB_FILE@]]
 
 local FMAX = @FMAX@
 PERIOD = 1000.0 / FMAX
-FUs.MaxAllowedMuxSize = @MaxAllowedMuxSize@
 
 ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
 SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
