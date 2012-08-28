@@ -109,8 +109,8 @@ namespace VFUs {
 
   extern float MuxLatencies[31][4];
 
-  float getMuxLatency(unsigned Size);
-  float getMuxCost(unsigned Size);
+  float getMuxLatency(unsigned Size, unsigned BitWidth);
+  float getMuxCost(unsigned Size, unsigned BitWidth);
 
   extern float BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector

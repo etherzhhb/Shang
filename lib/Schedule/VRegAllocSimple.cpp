@@ -265,8 +265,9 @@ struct FaninChecker {
 
   template<int N>
   int getSavedSrcMuxCost(int BitWidth){
-    return (VFUs::getMuxCost(getSrcNum<N>(0)) + VFUs::getMuxCost(getSrcNum<N>(1))
-            - VFUs::getMuxCost(getMergedSrcMuxSize<N>())) *BitWidth;
+    return VFUs::getMuxCost(getSrcNum<N>(0), BitWidth)
+           + VFUs::getMuxCost(getSrcNum<N>(1), BitWidth)
+           - VFUs::getMuxCost(getMergedSrcMuxSize<N>(), BitWidth);
   }
 
   int getExtraCost() const { return ExtraCost; }
@@ -335,8 +336,8 @@ struct FanoutChecker {
   }
 
   int getSavedFanoutsCost(int BitWidth) {
-    return (VFUs::getMuxCost(NumFanouts) - VFUs::getMuxCost(getNumMergedFanouts()))
-            * BitWidth;
+    return VFUs::getMuxCost(NumFanouts, BitWidth)
+           - VFUs::getMuxCost(getNumMergedFanouts(), BitWidth);
   }
 
 };

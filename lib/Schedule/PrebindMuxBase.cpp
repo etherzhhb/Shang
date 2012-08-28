@@ -37,7 +37,7 @@ void PrebindMuxBase::getAnalysisUsage(AnalysisUsage &AU) const {
 bool PrebindMuxBase::doInitialization(Module &) {
   // Compute the proper mux size that fix within 1 cycle.
   while (MaxMuxSize < VFUs::MaxAllowedMuxSize)
-    if (VFUs::getMuxLatency(++MaxMuxSize) > 0.5)
+    if (VFUs::getMuxLatency(++MaxMuxSize,64) > 0.5)
       break;
   return false;
 }

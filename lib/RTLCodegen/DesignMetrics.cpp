@@ -299,8 +299,8 @@ uint64_t DesignMetricsImpl::getDatapathFUCost() const {
 
 uint64_t DesignMetricsImpl::getMemBusMuxCost() const {
   VFUMemBus *Bus = getFUDesc<VFUMemBus>();
-  return VFUs::getMuxCost(AddressBusFanins.size()) * Bus->getAddrWidth()
-         + VFUs::getMuxCost(DataBusFanins.size()) * Bus->getDataWidth();
+  return VFUs::getMuxCost(AddressBusFanins.size(), Bus->getAddrWidth())
+         + VFUs::getMuxCost(DataBusFanins.size(), Bus->getDataWidth());
 }
 
 DesignMetrics::DesignMetrics(TargetData *TD)

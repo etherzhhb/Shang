@@ -842,7 +842,8 @@ float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   switch (OpCode) {
   case VTM::VOpDstMux:
     // Get the prebound mux size.
-    return VFUs::getMuxLatency(MI->getOperand(3).getImm());
+    return VFUs::getMuxLatency(MI->getOperand(3).getImm(),
+                               getBitWidth(MI->getOperand(0)));
   }
 
   return 0.0f;

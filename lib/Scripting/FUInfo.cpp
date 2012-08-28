@@ -26,6 +26,7 @@
 #include "llvm/Support/SourceMgr.h"
 #define DEBUG_TYPE "vtm-fu-info"
 #include "llvm/Support/Debug.h"
+#include <assert.h>
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -168,21 +169,28 @@ namespace llvm {
         + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
     }
 
-    float getMuxLatency(unsigned Size) {
+    float getMuxLatency(unsigned Size, unsigned BitWidth) {
       if (Size < 2) return 0;
 
       unsigned Level = ceil(float(Log2_32_Ceil(Size))
                             / float(Log2_32_Ceil(MaxMuxPerLut)));
-
-      return Level * LutLatency;
+      if (Size > 32) {
+        return Level * LutLatency;
+      }
+      //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
+      return MuxLatencies[Size-2][BitWidth];
     }
 
-    float getMuxCost(unsigned Size) {
+    float getMuxCost(unsigned Size, unsigned BitWidth) {
       if (Size < 2) return 0;
 
+      if (Size > 32) {
       // Every MUX will eliminates inputs number by (MaxMuxPerLut - 1), how
       // many MUX need to reduce the input number from Size to 1?
-      return (Size - 1) / (MaxMuxPerLut - 1) * LUTCost;
+            return (Size - 1) / (MaxMuxPerLut - 1) * LUTCost * BitWidth;
+      }
+      //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
+      return MuxCost[Size-2][BitWidth];
     }
   }
 }
