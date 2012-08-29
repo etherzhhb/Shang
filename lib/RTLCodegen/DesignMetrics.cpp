@@ -153,17 +153,17 @@ VASTValPtr DesignMetricsImpl::getAsOperand(Value *Op, bool GetAsInlineOperand) {
 
 void DesignMetricsImpl::visitLoadInst(LoadInst &I) {
   Value *Address = I.getPointerOperand();
-  if (VASTValPtr V = Builder.lookupExpr(Address))
+  if (VASTValPtr V = getAsOperand(Address, true))
     AddressBusFanins.insert(V.get());
 }
 
 void DesignMetricsImpl::visitStoreInst(StoreInst &I) {
   Value *Address = I.getPointerOperand();
-  if (VASTValPtr V = Builder.lookupExpr(Address))
+  if (VASTValPtr V = getAsOperand(Address, true))
     AddressBusFanins.insert(V.get());
 
   Value *Data = I.getValueOperand();
-  if (VASTValPtr V = Builder.lookupExpr(Data))
+  if (VASTValPtr V = getAsOperand(Data, true))
     DataBusFanins.insert(V.get());
 }
 
