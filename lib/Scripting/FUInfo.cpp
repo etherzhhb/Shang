@@ -131,6 +131,12 @@ namespace llvm {
         RoundDownLatency
         + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
     }
+
+    unsigned lookupCost(const unsigned *Table, unsigned SizeInBits) {
+      assert(SizeInBits > 0 && SizeInBits <= 64 && "Bit Size is not appropriate");
+
+      return Table[SizeInBits - 1];
+    }
   }
 }
 

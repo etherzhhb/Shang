@@ -108,6 +108,7 @@ namespace VFUs {
                 ClkEnSelLatency;
 
   float lookupLatency(const float *Table, unsigned SizeInBits);
+  unsigned lookupCost(const unsigned *Table, unsigned SizeInBits);
 }
 
 class FuncUnitId {

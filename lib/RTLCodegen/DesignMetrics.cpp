@@ -245,15 +245,15 @@ uint64_t DesignMetricsImpl::getFUCost(VASTValue *V) const {
   switch (Expr->getOpcode()) {
   default: break;
 
-  case VASTExpr::dpAdd: return VFUs::AddCost[ValueSize];
-  case VASTExpr::dpMul: return VFUs::MulCost[ValueSize];
+  case VASTExpr::dpAdd: return VFUs::lookupCost(VFUs::AddCost,ValueSize);
+  case VASTExpr::dpMul: return VFUs::lookupCost(VFUs::MulCost,ValueSize);
   case VASTExpr::dpSCmp:
-  case VASTExpr::dpUCmp: return VFUs::ICmpCost[ValueSize];
-  case VASTExpr::dpSel: return VFUs::SelCost[ValueSize];
+  case VASTExpr::dpUCmp: return VFUs::lookupCost(VFUs::ICmpCost,ValueSize);
+  case VASTExpr::dpSel: return VFUs::lookupCost(VFUs::SelCost,ValueSize);
   case VASTExpr::dpShl:
   case VASTExpr::dpSRA:
-  case VASTExpr::dpSRL: return VFUs::ShiftCost[ValueSize];
-  case VASTExpr::dpRAnd: return VFUs::ReductionCost[ValueSize];
+  case VASTExpr::dpSRL: return VFUs::lookupCost(VFUs::ShiftCost,ValueSize);
+  case VASTExpr::dpRAnd: return VFUs::lookupCost(VFUs::ReductionCost,ValueSize);
   }
 
   return 0;

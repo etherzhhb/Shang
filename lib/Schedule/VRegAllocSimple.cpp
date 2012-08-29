@@ -369,7 +369,7 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
     int Weight = 0;
     // We can save some register if we merge these two registers.
     unsigned Index = std::min(FanInWidth, 64u);
-    Weight += /*FU Cost*/ Cost[Index];
+    Weight += /*FU Cost*/VFUs::lookupCost(Cost,Index);
     Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(FanInWidth);
     Weight += getSavedFanoutsCost(FanOutWidth);
     return Weight;
