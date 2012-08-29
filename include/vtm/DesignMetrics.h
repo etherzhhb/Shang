@@ -27,10 +27,29 @@ class Instruction;
 class BasicBlock;
 class Function;
 class TargetData;
+class raw_ostream;
 
 class DesignMetrics {
   DesignMetricsImpl *Impl;
 public:
+  class DesignCost {
+    uint64_t DatapathCost;
+    unsigned NumAddrBusFanin;
+    unsigned NumDataBusFanin;
+    unsigned NumNontrivialBB;
+  public:
+    DesignCost(uint64_t DatapathCost = 0, unsigned NumAddrBusFanin = 0,
+               unsigned NumDataBusFanin = 0, unsigned NumNontrivialBB = 0);
+
+    uint64_t getCostInc(unsigned Multiply) const;
+
+    operator bool() const { return DatapathCost; }
+
+    // Debugging Support
+    void print(raw_ostream &OS) const;
+    void dump() const;
+  };
+
   explicit DesignMetrics(TargetData *TD);
   ~DesignMetrics();
 
@@ -54,9 +73,18 @@ public:
   void reset();
 
   // Visit all data-path expression and compute the cost.
-  uint64_t getResourceCost() const;
+  DesignCost getCost() const;
   unsigned getNumCalls() const;
 };
+
+//===----------------------------------------------------------------------===//
+// Debugging Support
+
+inline raw_ostream& operator<<(raw_ostream &OS,
+                               const DesignMetrics::DesignCost &Cost) {
+  Cost.print(OS);
+  return OS;
+}
 }
 
 #endif

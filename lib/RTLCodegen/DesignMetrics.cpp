@@ -108,7 +108,9 @@ public:
 
   // Visit all data-path expression and compute the cost.
   uint64_t getDatapathFUCost() const;
-  uint64_t getMemBusMuxCost() const;
+  unsigned getNumAddrBusFanin() const { return AddressBusFanins.size(); }
+  unsigned getNumDataBusFanin() const { return DataBusFanins.size(); }
+  unsigned getNumNontrivialBB() const { return NontrivialBBs.size(); }
   unsigned getNumCalls() const { return NumCalls; }
 };
 
@@ -308,14 +310,6 @@ uint64_t DesignMetricsImpl::getDatapathFUCost() const {
   return Cost;
 }
 
-uint64_t DesignMetricsImpl::getMemBusMuxCost() const {
-  VFUMemBus *Bus = getFUDesc<VFUMemBus>();
-  VFUMux *MUX = getFUDesc<VFUMux>();
-
-  return MUX->getMuxCost(AddressBusFanins.size(), Bus->getAddrWidth()) +
-         MUX->getMuxCost(DataBusFanins.size(), Bus->getDataWidth());
-}
-
 DesignMetrics::DesignMetrics(TargetData *TD)
   : Impl(new DesignMetricsImpl(TD)) {}
 
@@ -335,11 +329,51 @@ void DesignMetrics::visit(Function &F) {
 
 unsigned DesignMetrics::getNumCalls() const { return Impl->getNumCalls(); }
 
-uint64_t DesignMetrics::getResourceCost() const {
-  return Impl->getDatapathFUCost() + Impl->getMemBusMuxCost();
+DesignMetrics::DesignCost::DesignCost(uint64_t DatapathCost,
+                                      unsigned NumAddrBusFanin,
+                                      unsigned NumDataBusFanin,
+                                      unsigned NumNontrivialBB)
+  : DatapathCost(DatapathCost),
+    NumAddrBusFanin(NumAddrBusFanin), NumDataBusFanin(NumDataBusFanin),
+    NumNontrivialBB(NumNontrivialBB) {}
+
+DesignMetrics::DesignCost DesignMetrics::getCost() const {
+  return DesignCost(std::max<uint64_t>(Impl->getDatapathFUCost(), 1),
+                    Impl->getNumAddrBusFanin(),
+                    Impl->getNumDataBusFanin(),
+                    Impl->getNumNontrivialBB());
 }
 
 void DesignMetrics::reset() { Impl->reset(); }
+
+uint64_t DesignMetrics::DesignCost::getCostInc(unsigned Multiply) const {
+  // FIXME: Read the cost from the Lua script.
+  uint64_t Alpha = 1, Beta = 8, Gama = 16;
+
+  VFUMux *MUX = getFUDesc<VFUMux>();
+  VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
+  unsigned AddrWidth = MemBus->getAddrWidth();
+  unsigned DataWidth = MemBus->getDataWidth();
+
+  return Alpha * (uint64_t(Multiply) - 1) * DatapathCost
+         + Beta * (MUX->getMuxCost(Multiply * NumAddrBusFanin, AddrWidth)
+                   - MUX->getMuxCost(NumAddrBusFanin, AddrWidth))
+         + Beta * (MUX->getMuxCost(Multiply * NumDataBusFanin, DataWidth)
+                   - MUX->getMuxCost(NumDataBusFanin, DataWidth))
+         + Gama * (uint64_t(Multiply) - 1) * NumNontrivialBB;
+}
+
+void DesignMetrics::DesignCost::print(raw_ostream &OS) const {
+  OS << "{ Data-path: " << DatapathCost
+     << ", ( AddrBusFI: " << NumAddrBusFanin
+     << ", DataBusFI: " << NumDataBusFanin
+     << " ), NontrivialBB: " << NumNontrivialBB << " }";
+}
+
+void DesignMetrics::DesignCost::dump() const {
+  print(dbgs());
+  dbgs() << '\n';
+}
 
 char DesignMetricsPass::ID = 0;
 
@@ -348,8 +382,8 @@ bool DesignMetricsPass::runOnFunction(Function &F) {
 
   Metrics.visit(F);
 
-  DEBUG(dbgs() << "Data-path cost of function " << F.getName() << ':'
-               << Metrics.getResourceCost() << '\n');
+  //DEBUG(dbgs() << "Data-path cost of function " << F.getName() << ':'
+  //             << Metrics.getResourceCost() << '\n');
   
   return false;
 }

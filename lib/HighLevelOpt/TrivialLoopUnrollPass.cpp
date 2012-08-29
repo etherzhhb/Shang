@@ -124,25 +124,38 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
 
   unsigned NumInlineCandidates = Metrics.getNumCalls();
 
-  uint64_t LoopSize = Metrics.getResourceCost() * Count;
-  DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
-
   if (NumInlineCandidates != 0) {
     DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
     return false;
   }
 
-  // Compute the unroll count according to the size of the loop.
-  uint64_t Size = (uint64_t)LoopSize * Count;
+  DesignMetrics::DesignCost Cost = Metrics.getCost();
+  DEBUG(dbgs() << "Body cost = " << Cost << "\n");
+
   // FIXME: Read the threshold from the constraints script.
   unsigned Threshold = VFUs::MulCost[63] * 8;
 
-  if (TripCount != 1 && Size > Threshold) {
+  if (TripCount != 1 && Cost.getCostInc(Count) > Threshold) {
     DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
-          << " because size: " << Size << ">" << Threshold << "\n");
+          << " because size: " << Cost.getCostInc(Count)
+          << ">" << Threshold << "\n");
     if (TripCount) {
+      // Search a feasible count by binary search.
+      unsigned MaxCount = Count, MinCount = 1;
+
+      while (MinCount <= MaxCount) {
+        unsigned MidCount = MinCount + (MaxCount - MinCount) / 2;
+
+        if (Cost.getCostInc(MidCount) <= Threshold) {
+          // MidCount is ok, try a bigger one.
+          Count = MidCount;
+          MinCount = MidCount + 1;
+        } else
+          // Else we had to try a smaller count.
+          MaxCount = MidCount - 1;
+      }
+
       // Reduce unroll count to be modulo of TripCount for partial unrolling
-      Count = Threshold / LoopSize;
       while (Count != 0 && TripCount % Count != 0)
         --Count;
     }

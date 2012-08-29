@@ -37,7 +37,7 @@ class HLSInliner : public Inliner {
   InlineCostAnalyzer CA;
   TargetData *TD;
   CallGraph *CG;
-  DenseMap<const Function*, uint64_t> CachedCost;
+  DenseMap<const Function*, DesignMetrics::DesignCost> CachedCost;
 public:
   // Use extremely low threshold.
   HLSInliner() : Inliner(ID), TD(0) {
@@ -46,8 +46,8 @@ public:
 
   static char ID; // Pass identification, replacement for typeid
 
-  uint64_t lookupOrComputeCost(Function *F) {
-    uint64_t &Cost = CachedCost[F];
+  DesignMetrics::DesignCost lookupOrComputeCost(Function *F) {
+    DesignMetrics::DesignCost &Cost = CachedCost[F];
 
     if (Cost) return Cost;
 
@@ -55,20 +55,16 @@ public:
     Metrics.visit(*F);
 
     // The cost increment after the function is inlined.
-    Cost = Metrics.getResourceCost();
+    Cost = Metrics.getCost();
     DEBUG(dbgs() << "Inline cost of function: " << F->getName() << ':'
                  << Cost << '\n' << "Number of CallSites: " << F->getNumUses()
                  << '\n');
-
-    Cost *= F->getNumUses() - 1;
-    // Make sure we have a no-zero cost.
-    Cost = std::max(UINT64_C(1), Cost);
 
     return Cost;
   }
 
   InlineCost getInlineCost(CallSite CS) {
-    Function *F = CS.getCalledFunction();
+    Function *F = CS.getCalledFunction(), *ParentF = CS.getCalledFunction();
     if (!F || F->isDeclaration() ||  F->hasFnAttr(Attribute::NoInline))
       return InlineCost::getNever();
 
@@ -76,16 +72,27 @@ public:
     // Only try to inline the leaves in call graph.
     if (!CGN->empty()) return InlineCost::getNever();
 
-    DEBUG(dbgs() << "Function: " << F->getName() << '\n');
-    uint64_t IncreasedCost = lookupOrComputeCost(F);
-    DEBUG(dbgs() << "Increased cost: " << IncreasedCost << ' '
-                 << "Threshold: " << VFUs::MulCost[63] * 8 << '\n');
+    unsigned NumUses = 0;
+    typedef Instruction::use_iterator use_iterator;
+    for (use_iterator I = F->use_begin(), E = F->use_end(); I != E; ++I) {
+      CallSite CS(*I);
+
+      if (CS.getInstruction() && CS.getCalledFunction() == ParentF) ++NumUses;
+    }
+
+    dbgs() << "Function: " << F->getName() << '\n';
+    DesignMetrics::DesignCost Cost = lookupOrComputeCost(F);
+    uint64_t IncreasedCost = Cost.getCostInc(NumUses);
+    dbgs() << "Cost: " << Cost << ' '
+           << "Increased cost: " << IncreasedCost << ' '
+           << "Threshold: " << VFUs::MulCost[63] * 3;
     // FIXME: Read the threshold from the constraints script.
     if (IncreasedCost < VFUs::MulCost[63] * 3) {
-      DEBUG(dbgs() << "...going to inline function\n");
+      dbgs() << "...going to inline function\n";
       return InlineCost::getAlways();
     }
 
+    dbgs() << "...not inline function\n";
     return InlineCost::getNever();
   }
 
