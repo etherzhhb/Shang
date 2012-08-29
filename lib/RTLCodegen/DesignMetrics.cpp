@@ -62,6 +62,7 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   ValSetTy LiveOutedVal;
 
   ValSetTy AddressBusFanins, DataBusFanins;
+  std::set<BasicBlock*> NontrivialBBs;
   unsigned NumCalls;
   // TODO: Model the control-path, in the control-path, we can focus on the MUX
   // in the control-path, note that the effect of FU allocation&binding
@@ -101,6 +102,7 @@ public:
     LiveOutedVal.clear();
     AddressBusFanins.clear();
     DataBusFanins.clear();
+    NontrivialBBs.clear();
     NumCalls = 0;
   }
 
@@ -192,6 +194,11 @@ void DesignMetricsImpl::visit(Instruction &Inst) {
            || Inst.getOpcode() == Instruction::SRem
            || Inst.getOpcode() == Instruction::URem)
     ++NumCalls;
+  else // Unknown trivial instructions.
+    return;
+
+  // Remember the BB that contains nontrivial control-path operation.
+  NontrivialBBs.insert(Inst.getParent());
 }
 
 void DesignMetricsImpl::visit(BasicBlock &BB) {
