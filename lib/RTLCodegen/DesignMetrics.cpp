@@ -186,7 +186,11 @@ void DesignMetricsImpl::visit(Instruction &Inst) {
     visitLoadInst(*LI);
   else if (StoreInst *SI = dyn_cast<StoreInst>(&Inst))
     visitStoreInst(*SI);
-  else if (isa<CallInst>(Inst))
+  else if (isa<CallInst>(Inst)
+           || Inst.getOpcode() == Instruction::SDiv
+           || Inst.getOpcode() == Instruction::UDiv
+           || Inst.getOpcode() == Instruction::SRem
+           || Inst.getOpcode() == Instruction::URem)
     ++NumCalls;
 }
 
