@@ -119,6 +119,9 @@ namespace llvm {
 
     float lookupLatency(const float *Table, unsigned SizeInBits) {
       int i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
+      // All latency table only contains 4 entries.
+      assert(i < 4 && "Bad" && "Bad index!");
+
       float RoundUpLatency   = Table[i],
             RoundDownLatency = i ? Table[i - 1] : 0.0f;
       unsigned SizeRoundUpToByteInBits = 8 << i;
@@ -170,8 +173,7 @@ float VFUMux::getMuxLatency(unsigned Size, unsigned BitWidth) {
 
   assert(BitWidth <= 64 && "Bad Mux Size!");
 
-  //assert(Size <= 32 && BitWidth <= 64 && "BitWidth or Size is too large!");
-  return MuxLatencies[Size - 2][BitWidth] * ratio;
+  return VFUs::lookupLatency(MuxLatencies[Size - 2], BitWidth) * ratio;
 }
 
 unsigned VFUMux::getMuxCost(unsigned Size, unsigned BitWidth) {
