@@ -36,8 +36,6 @@
 
 using namespace llvm;
 
-STATISTIC(ReductionSimplified, "Number of Reductions are simplified");
-STATISTIC(BitSliceSimplified, "Number of BitSlices are simplified");
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
