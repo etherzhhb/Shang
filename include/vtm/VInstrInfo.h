@@ -64,8 +64,7 @@ public:
 
   virtual MachineInstr *commuteInstruction(MachineInstr *MI,
                                            bool NewMI = false) const;
-  virtual bool FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
-                             unsigned Reg, MachineRegisterInfo *MRI) const;
+
   static void ChangeCopyToMove(MachineInstr *CopyMI);
 
   virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;

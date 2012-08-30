@@ -103,55 +103,6 @@ void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
   CopyMI->addOperand(VInstrInfo::CreateTrace());
 }
 
-bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
-                               unsigned Reg, MachineRegisterInfo *MRI) const {
-  // Simply change the machine operand in UseMI to imediate.
-  MachineOperand &ImmediateMO = DefMI->getOperand(1);
-  unsigned char ImmediateTFs = ImmediateMO.getTargetFlags();
-  
-  typedef MachineInstr::mop_iterator it;
-  if (ImmediateMO.isImm()) {
-    int64_t ImmediateValue = ImmediateMO.getImm();
-
-    typedef MachineInstr::mop_iterator it;
-    for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
-      MachineOperand &MO = *I;
-      if (MO.isReg() && MO.getReg() == Reg) {
-        assert(MO.getTargetFlags() <= ImmediateTFs
-          && "Folding immediate with different Bitwidth?");
-        MO.ChangeToImmediate(ImmediateValue);
-      }
-    }
-  } else {
-    // Else we need to rebuild the UserMI.
-    SmallVector<MachineOperand, 6> MOs;
-    for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
-      MachineOperand &MO = *I;
-      // Are we going to replace the operand?
-      if (MO.isReg() && MO.getReg() == Reg) {
-        assert(VInstrInfo::getBitWidth(MO) <= ImmediateTFs
-          && "Folding immediate with different Bitwidth?");
-        MOs.push_back(ImmediateMO);
-        // Keep the original flags, because the target flags of ImmediateMO may
-        // difference from MO after simplify bitslice.
-        MOs.back().setTargetFlags(MO.getTargetFlags());
-        continue;
-      }
-
-      MOs.push_back(MO);
-    }
-
-    while (UseMI->getNumOperands())
-      UseMI->RemoveOperand(UseMI->getNumOperands() - 1);
-    addOperandsToMI(UseMI, MOs);
-  }
-
-  // Are we fold a immediate into a copy?
-  if (UseMI->isCopy())  ChangeCopyToMove(UseMI);
-
-  return true;
-}
-
 bool VInstrInfo::shouldAvoidSinking(MachineInstr *MI) const {
   return MI->getOpcode() == VTM::VOpMoveArg || isDatapath(MI->getOpcode());
 }
