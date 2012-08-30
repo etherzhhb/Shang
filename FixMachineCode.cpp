@@ -65,15 +65,9 @@ struct FixMachineCode : public MachineFunctionPass {
   }
 
   void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
-  bool simplifyReduction(MachineInstr *MI);
-  bool simplifyBitSlice(MachineInstr *MI);
   bool handleImplicitDefs(MachineInstr *MI);
-  void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
 
   bool replaceCopyByMove(MachineInstr * Inst);
-  void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
-
-  bool canbeFold(MachineInstr *MI) const;
 
   const char *getPassName() const {
     return "Fix machine code for Verilog backend";
@@ -86,7 +80,7 @@ char FixMachineCode::ID = 0;
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   TII = MF.getTarget().getInstrInfo();
-  std::vector<MachineInstr*> InstrToFold, PNs;
+  std::vector<MachineInstr*> PNs;
 
   // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
@@ -125,19 +119,11 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
-      if (simplifyReduction(Inst)) continue;
-      if (simplifyBitSlice(Inst)) continue;
       if (handleImplicitDefs(Inst)) continue;
 
       // Replace Copy by Move, which can be predicated.
       if (Inst->isCopy() && replaceCopyByMove(Inst))
         continue;
-
-      // Try to eliminate unnecessary moves.
-      if (canbeFold(Inst)) {
-        InstrToFold.push_back(Inst);
-        continue;
-      }
 
       // No need to predicate the VOpMoveArg.
       if (Inst->getOpcode() == VTM::VOpMoveArg)
@@ -154,53 +140,6 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  FoldInstructions(InstrToFold);
-
-  return true;
-}
-
-bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
-  if (MI->getOpcode() != VTM::VOpBitSlice || !MI->getOperand(1).isReg())
-    return false;
-
-  // Only can simplify if lower bound is 0, which means the result simply
-  // use the lower part of the src register. We can simply replace the use
-  // of dst register by src register, with the original bitwidth information
-  // of the dst register, i.e. using the lower part of the src register.
-  if (MI->getOperand(3).getImm() != 0) {
-    unsigned UB = MI->getOperand(2).getImm();
-    // We can narrow the bitwidth of the operand to the upper bound.
-    VInstrInfo::setBitWidth(MI->getOperand(1), UB);
-    return false;
-  }
-
-  unsigned SrcReg = MI->getOperand(1).getReg();
-  unsigned DstReg = MI->getOperand(0).getReg();
-
-  MI->eraseFromParent();
-  MRI->replaceRegWith(DstReg, SrcReg);
-  MRI->clearKillFlags(SrcReg);
-  ++BitSliceSimplified;
-  return true;
-}
-
-bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
-  unsigned Opcode = MI->getOpcode();
-  if (Opcode != VTM::VOpROr && Opcode != VTM::VOpRAnd && Opcode != VTM::VOpRXor)
-    return false;
-
-  MachineOperand &Src = MI->getOperand(1);
-  if (VInstrInfo::getBitWidth(Src) != 1) return false;
-
-  // If the bitwidth of src operand is 1, the reduction is not necessary.
-  unsigned SrcReg = Src.getReg();
-  unsigned DstReg = MI->getOperand(0).getReg();
-
-  MI->eraseFromParent();
-  MRI->replaceRegWith(DstReg, SrcReg);
-  MRI->clearKillFlags(SrcReg);
-
-  ++ReductionSimplified;
   return true;
 }
 
@@ -238,12 +177,6 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
   // TODO: if all the incoming value of the PHI is ImpDef, erase the PN.
 }
 
-bool FixMachineCode::canbeFold(MachineInstr *MI) const {
-  if (MI->getOpcode() == VTM::VOpMove) return true;
-
-  return false;
-}
-
 bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
   if (!MI->isImplicitDef()) return false;
 
@@ -269,50 +202,6 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
 
   if (use_empty) MI->removeFromParent();
   return use_empty;
-}
-
-void FixMachineCode::FoldMove(MachineInstr *MI,
-                                   std::vector<MachineInstr*> &InstrToFold) {
-  unsigned DstReg = MI->getOperand(0).getReg();
-
-  std::set<MachineInstr*> FoldList;
-  for (MachineRegisterInfo::use_iterator I = MRI->use_begin(DstReg),
-       E = MRI->use_end(); I != E; /*++I*/) {
-    MachineInstr &UserMI = *I;
-    ++I;
-
-    // Only replace if user is not a PHINode.
-    if (UserMI.getOpcode() == VTM::PHI) continue;
-
-    // There maybe an instruction read the same register twice.
-    FoldList.insert(&UserMI);
-  }
-
-  // Replace the register operand by a immediate operand.
-  typedef std::set<MachineInstr*>::iterator it;
-  for (it I = FoldList.begin(), E = FoldList.end(); I != E; ++I) {
-    MachineInstr *UserMI = *I;
-    if (TII->FoldImmediate(UserMI, MI, DstReg, MRI) && canbeFold(UserMI))
-      InstrToFold.push_back(UserMI);
-  }
-
-  // Eliminate the instruction if it dead.
-  if (MRI->use_empty(DstReg)) MI->eraseFromParent();
-}
-
-void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
-  while (!InstrToFold.empty()) {
-    MachineInstr *MI = InstrToFold.back();
-    InstrToFold.pop_back();
-
-    switch (MI->getOpcode()) {
-    case VTM::VOpMove:
-      FoldMove(MI, InstrToFold);
-      break;
-    default:
-      llvm_unreachable("Trying to fold unexpected instruction!");
-    }
-  }
 }
 
 bool FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
