@@ -279,7 +279,12 @@ class VerilogASTBuilder : public MachineFunctionPass,
     ExprLHSMapTy::iterator at = ExprLHS.find(V);
     if (at != ExprLHS.end()) return at->second;
 
-    std::string Name = "e" + utohexstr(uint64_t(V.get())) + "w";
+    std::string Name = "e" + utohexstr(uint64_t(V.get()));
+
+    // Distinguish the temporary wire by its invert flag.
+    if (V.isInverted()) Name += "iw";
+    else                Name += "w";
+
     // Try to create the temporary wire for the bitslice.
     if (VASTValue *V = VM->lookupSymbol(Name)) return V;
 
