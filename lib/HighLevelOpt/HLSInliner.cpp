@@ -81,21 +81,21 @@ public:
       if (CS.getInstruction() && CS.getCalledFunction() == ParentF) ++NumUses;
     }
 
-    dbgs() << "Function: " << F->getName() << '\n';
+    DEBUG(dbgs() << "Function: " << F->getName() << '\n');
     DesignMetrics::DesignCost Cost = lookupOrComputeCost(F);
     uint64_t Threshold = VFUs::MulCost[63] * 4,
              IncreasedCost = Cost.getCostInc(NumUses);
 
-    dbgs() << "Cost: " << Cost << ' '
-           << "Increased cost: " << IncreasedCost << ' '
-           << "Threshold: " << Threshold;
+    DEBUG(dbgs() << "Cost: " << Cost << ' '
+                 << "Increased cost: " << IncreasedCost << ' '
+                 << "Threshold: " << Threshold);
     // FIXME: Read the threshold from the constraints script.
     if (IncreasedCost < Threshold) {
-      dbgs() << "...going to inline function\n";
+      DEBUG(dbgs() << "...going to inline function\n");
       return InlineCost::getAlways();
     }
 
-    dbgs() << "...not inline function\n";
+    DEBUG(dbgs() << "...not inline function\n");
     return InlineCost::getNever();
   }
 
