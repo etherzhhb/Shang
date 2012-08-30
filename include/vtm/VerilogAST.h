@@ -263,7 +263,9 @@ public:
 
   VASTValPtr operator->() const { return get(); }
   inline VASTValPtr getAsInlineOperand() const {
-    return get().getAsInlineOperand(); }
+    return get().getAsInlineOperand();
+  }
+
   inline void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
     get().printAsOperand(OS, UB, LB);
   }
