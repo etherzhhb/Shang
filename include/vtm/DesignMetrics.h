@@ -41,7 +41,8 @@ public:
     DesignCost(uint64_t DatapathCost = 0, unsigned NumAddrBusFanin = 0,
                unsigned NumDataBusFanin = 0, unsigned StepLB = 0);
 
-    uint64_t getCostInc(unsigned Multiply) const;
+    uint64_t getCostInc(unsigned Multiply, uint64_t Alpha = 1, uint64_t Beta = 8,
+                        uint64_t Gama = (2048 * 64)) const;
 
     operator bool() const { return DatapathCost; }
 

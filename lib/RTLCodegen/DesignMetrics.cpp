@@ -350,10 +350,8 @@ DesignMetrics::DesignCost DesignMetrics::getCost(unsigned BoundarySteps) const {
 
 void DesignMetrics::reset() { Impl->reset(); }
 
-uint64_t DesignMetrics::DesignCost::getCostInc(unsigned Multiply) const {
-  // FIXME: Read the cost from the Lua script.
-  uint64_t Alpha = 1, Beta = 8, Gama = (2048 * 64);
-
+uint64_t DesignMetrics::DesignCost::getCostInc(unsigned Multiply, uint64_t Alpha,
+                                               uint64_t Beta, uint64_t Gama) const {
   VFUMux *MUX = getFUDesc<VFUMux>();
   VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
   unsigned AddrWidth = MemBus->getAddrWidth();
