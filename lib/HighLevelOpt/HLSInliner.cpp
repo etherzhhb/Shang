@@ -55,7 +55,8 @@ public:
     Metrics.visit(*F);
 
     // The cost increment after the function is inlined.
-    Cost = Metrics.getCost();
+    // Ignore the 2 steps for submodule launching and returing.
+    Cost = Metrics.getCost(2);
     DEBUG(dbgs() << "Inline cost of function: " << F->getName() << ':'
                  << Cost << '\n' << "Number of CallSites: " << F->getNumUses()
                  << '\n');
@@ -82,12 +83,14 @@ public:
 
     dbgs() << "Function: " << F->getName() << '\n';
     DesignMetrics::DesignCost Cost = lookupOrComputeCost(F);
-    uint64_t IncreasedCost = Cost.getCostInc(NumUses);
+    uint64_t Threshold = VFUs::MulCost[63] * 4,
+             IncreasedCost = Cost.getCostInc(NumUses);
+
     dbgs() << "Cost: " << Cost << ' '
            << "Increased cost: " << IncreasedCost << ' '
-           << "Threshold: " << VFUs::MulCost[63] * 3;
+           << "Threshold: " << Threshold;
     // FIXME: Read the threshold from the constraints script.
-    if (IncreasedCost < VFUs::MulCost[63] * 3) {
+    if (IncreasedCost < Threshold) {
       dbgs() << "...going to inline function\n";
       return InlineCost::getAlways();
     }
