@@ -426,8 +426,16 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
       .addOperand(VInstrInfo::CreatePredicate())
       .addOperand(VInstrInfo::CreateTrace());
 
-    // Update the result register.
-    MRI->replaceRegWith(HigherReg, NewHigherReg);
+    // Update the users of the original register.
+    typedef MachineRegisterInfo::use_iterator use_iterator;
+    for (use_iterator RI = MRI->use_begin(HigherReg), RE = MRI->use_end();
+         RI != RE; /*++RI*/) {
+      MachineOperand &O = RI.getOperand();
+      ++RI;
+      O.setReg(NewHigherReg);
+      VInstrInfo::setBitWidth(O, HigherRegSizeInBits);
+    }
+
     To->getOperand(0).ChangeToRegister(LowerReg, true);
   }
   
