@@ -117,7 +117,10 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     return E->isInlinable();
   }
 
-  PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0) {
+  bool enableLUTMapping;
+  PreSchedRTLOpt(bool enableLUTMapping) : MachineFunctionPass(ID), MRI(0),
+                                          DT(0), Entry(0),
+                                          enableLUTMapping(enableLUTMapping) {
     initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
     initializeMachineBasicBlockTopOrderPass(*PassRegistry::getPassRegistry());
   }
@@ -251,8 +254,8 @@ inline static T *check(T *Ptr) {
   return Ptr;
 }
 
-Pass *llvm::createPreSchedRTLOptPass() {
-  return new PreSchedRTLOpt();
+Pass *llvm::createPreSchedRTLOptPass(bool enableLUTMapping) {
+  return new PreSchedRTLOpt(enableLUTMapping);
 }
 
 char PreSchedRTLOpt::ID = 0;
@@ -272,6 +275,9 @@ bool PreSchedRTLOpt::runOnMachineFunction(MachineFunction &F) {
   }
 
   // Perform optimizations.
+  if (enableLUTMapping) {
+    // Ask ABC for LUT mapping.
+  }
 
   // Rewrite the operations in data-path.
   for (iterator I = F.begin(), E = F.end(); I != E; ++I) {
