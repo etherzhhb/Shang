@@ -133,7 +133,7 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   DEBUG(dbgs() << "Body cost = " << Cost << "\n");
 
   // FIXME: Read the threshold from the constraints script.
-  unsigned Threshold = VFUs::MulCost[63] * 8;
+  unsigned Threshold = VFUs::MulCost[63] * 4;
 
   if (TripCount != 1 && Cost.getCostInc(Count) > Threshold) {
     DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
