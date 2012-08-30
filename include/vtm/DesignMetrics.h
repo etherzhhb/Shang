@@ -36,10 +36,10 @@ public:
     uint64_t DatapathCost;
     unsigned NumAddrBusFanin;
     unsigned NumDataBusFanin;
-    unsigned NumNontrivialBB;
+    unsigned StepLB;
   public:
     DesignCost(uint64_t DatapathCost = 0, unsigned NumAddrBusFanin = 0,
-               unsigned NumDataBusFanin = 0, unsigned NumNontrivialBB = 0);
+               unsigned NumDataBusFanin = 0, unsigned StepLB = 0);
 
     uint64_t getCostInc(unsigned Multiply) const;
 
@@ -73,7 +73,7 @@ public:
   void reset();
 
   // Visit all data-path expression and compute the cost.
-  DesignCost getCost() const;
+  DesignCost getCost(unsigned BoundarySteps = 0) const;
   unsigned getNumCalls() const;
 };
 

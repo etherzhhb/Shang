@@ -62,7 +62,8 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   ValSetTy LiveOutedVal;
 
   ValSetTy AddressBusFanins, DataBusFanins;
-  std::set<BasicBlock*> NontrivialBBs;
+  // The lower bound of the total control-steps.
+  unsigned StepLB;
   unsigned NumCalls;
   // TODO: Model the control-path, in the control-path, we can focus on the MUX
   // in the control-path, note that the effect of FU allocation&binding
@@ -91,7 +92,8 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
   void visitLoadInst(LoadInst &I);
   void visitStoreInst(StoreInst &I);
 public:
-  explicit DesignMetricsImpl(TargetData *TD) : Builder(*this, TD), NumCalls(0){}
+  explicit DesignMetricsImpl(TargetData *TD)
+    : Builder(*this, TD), StepLB(0), NumCalls(0){}
 
   void visit(Instruction &Inst);
   void visit(BasicBlock &BB);
@@ -102,7 +104,7 @@ public:
     LiveOutedVal.clear();
     AddressBusFanins.clear();
     DataBusFanins.clear();
-    NontrivialBBs.clear();
+    StepLB = 0;
     NumCalls = 0;
   }
 
@@ -110,7 +112,7 @@ public:
   uint64_t getDatapathFUCost() const;
   unsigned getNumAddrBusFanin() const { return AddressBusFanins.size(); }
   unsigned getNumDataBusFanin() const { return DataBusFanins.size(); }
-  unsigned getNumNontrivialBB() const { return NontrivialBBs.size(); }
+  unsigned getStepsLowerBound() const { return StepLB; }
   unsigned getNumCalls() const { return NumCalls; }
 };
 
@@ -199,8 +201,8 @@ void DesignMetricsImpl::visit(Instruction &Inst) {
   else // Unknown trivial instructions.
     return;
 
-  // Remember the BB that contains nontrivial control-path operation.
-  NontrivialBBs.insert(Inst.getParent());
+  // These control-path operations must be scheduled to its own step.
+  ++StepLB;
 }
 
 void DesignMetricsImpl::visit(BasicBlock &BB) {
@@ -332,23 +334,25 @@ unsigned DesignMetrics::getNumCalls() const { return Impl->getNumCalls(); }
 DesignMetrics::DesignCost::DesignCost(uint64_t DatapathCost,
                                       unsigned NumAddrBusFanin,
                                       unsigned NumDataBusFanin,
-                                      unsigned NumNontrivialBB)
+                                      unsigned StepLB)
   : DatapathCost(DatapathCost),
     NumAddrBusFanin(NumAddrBusFanin), NumDataBusFanin(NumDataBusFanin),
-    NumNontrivialBB(NumNontrivialBB) {}
+    StepLB(StepLB) {}
 
-DesignMetrics::DesignCost DesignMetrics::getCost() const {
+DesignMetrics::DesignCost DesignMetrics::getCost(unsigned BoundarySteps) const {
   return DesignCost(std::max<uint64_t>(Impl->getDatapathFUCost(), 1),
                     Impl->getNumAddrBusFanin(),
                     Impl->getNumDataBusFanin(),
-                    Impl->getNumNontrivialBB());
+                    // Ignore the steps spend on control boundaries.
+                    std::max<int>(int(Impl->getStepsLowerBound() - BoundarySteps),
+                                      0));
 }
 
 void DesignMetrics::reset() { Impl->reset(); }
 
 uint64_t DesignMetrics::DesignCost::getCostInc(unsigned Multiply) const {
   // FIXME: Read the cost from the Lua script.
-  uint64_t Alpha = 1, Beta = 8, Gama = 16;
+  uint64_t Alpha = 1, Beta = 8, Gama = (2048 * 64);
 
   VFUMux *MUX = getFUDesc<VFUMux>();
   VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
@@ -360,14 +364,14 @@ uint64_t DesignMetrics::DesignCost::getCostInc(unsigned Multiply) const {
                    - MUX->getMuxCost(NumAddrBusFanin, AddrWidth))
          + Beta * (MUX->getMuxCost(Multiply * NumDataBusFanin, DataWidth)
                    - MUX->getMuxCost(NumDataBusFanin, DataWidth))
-         + Gama * (uint64_t(Multiply) - 1) * NumNontrivialBB;
+         + Gama * (uint64_t(Multiply) - 1) * StepLB;
 }
 
 void DesignMetrics::DesignCost::print(raw_ostream &OS) const {
   OS << "{ Data-path: " << DatapathCost
      << ", ( AddrBusFI: " << NumAddrBusFanin
      << ", DataBusFI: " << NumDataBusFanin
-     << " ), NontrivialBB: " << NumNontrivialBB << " }";
+     << " ), StepLB: " << StepLB << " }";
 }
 
 void DesignMetrics::DesignCost::dump() const {
