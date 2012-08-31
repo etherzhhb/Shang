@@ -70,8 +70,6 @@ public:
       return InlineCost::getNever();
 
     CallGraphNode *CGN = (*CG)[F];
-    // Only try to inline the leaves in call graph.
-    if (!CGN->empty()) return InlineCost::getNever();
 
     unsigned NumUses = 0;
     typedef Instruction::use_iterator use_iterator;
@@ -92,6 +90,8 @@ public:
     // FIXME: Read the threshold from the constraints script.
     if (IncreasedCost < Threshold) {
       DEBUG(dbgs() << "...going to inline function\n");
+      // The cost of ParentF changed.
+      CachedCost.erase(ParentF);
       return InlineCost::getAlways();
     }
 
