@@ -469,7 +469,7 @@ unsigned PreSchedRTLOpt::rewriteExprTree(VASTExprPtr Expr, MachineInstr *IP) {
     VASTExprPtr CurExpr = VisitStack.back().first;
     ChildIt It = VisitStack.back().second;
 
-    // All depenece of this node is visited.
+    // All dependencies of this node is visited.
     if (It == CurExpr->op_end()) {
       NewRegNo = rewriteExpr(CurExpr, calculateInsertPos(CurExpr.get(), IP));
 
