@@ -118,12 +118,13 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder) {
   } // SS flushes automatically here.
 
   DEBUG_WITH_TYPE("vtm-codegen-self-verify",
-  if (SlotNum != 0)
+  if (SlotNum != 0) {
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName() << " BB#"
-          << getParentBB()->getNumber() << ' '
-          << getParentBB()->getBasicBlock()->getName()
-          << " ready at %d\", $time());\n";
-  );
+          << getParentBB()->getNumber() << ' ';
+    if (const BasicBlock *BB = getParentBB()->getBasicBlock())
+      CtrlS << BB->getName();
+    CtrlS << " ready at %d\", $time());\n";
+  });
 
   bool hasSelfLoop = false;
   SmallVector<VASTValPtr, 2> EmptySlotEnCnd;
