@@ -386,7 +386,8 @@ void PreSchedRTLOpt::rewriteExprTreeForMO(MachineOperand &MO, MachineInstr *IP,
   VASTValPtr V = Builder->lookupExpr(MO.getReg());
 
   if (!V) {
-    assert(MRI->getVRegDef(MO.getReg()));
+    assert(MRI->getVRegDef(MO.getReg())
+           && "The virtual register defining instruction missed!");
     return;
   }
 
@@ -410,13 +411,15 @@ void PreSchedRTLOpt::rewriteExprTreeForMO(MachineOperand &MO, MachineInstr *IP,
       VInstrInfo::setBitWidth(MO, 1);
     }
 
+    assert(VInstrInfo::getBitWidth(MO) == V->getBitWidth()
+           && "Bitwidth not match!");
     return;
   }
 
-  if (MRI->getVRegDef(MO.getReg()))
-    return;
-
   MachineOperand NewMO = getAsOperand(V);
+  // Update the target flag of the original MO.
+  MO.setTargetFlags(NewMO.getTargetFlags());
+
   if (NewMO.isReg()) {
     MO.ChangeToRegister(NewMO.getReg(), false);
     return;
