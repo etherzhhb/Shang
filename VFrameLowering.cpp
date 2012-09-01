@@ -125,7 +125,8 @@ struct BlockRAMFormation : public ModulePass {
   bool runOnFunction(Function &F, Module &M);
   bool localizeGV(GlobalVariable *GV, Module &M);
 
-  void allocateGlobalAlias(AllocaInst *AI, Module &M, unsigned AddressSpace = 0);
+  GlobalVariable *allocateGlobalAlias(AllocaInst *AI, Module &M,
+                                      unsigned AddressSpace = 0);
   void annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType, Constant *InitGV,
                         Instruction *InsertPos, Module &M);
 };
@@ -220,9 +221,8 @@ struct GVUseCollector {
 
 char BlockRAMFormation::ID = 0;
 
-void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
-                                            unsigned AddressSpace) {
-  PointerType *Ty = AI->getType();
+GlobalVariable *BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
+                                                       unsigned AddressSpace) {
   Type *AllocatedType = AI->getAllocatedType();
   // Create the global alias.
   GlobalVariable *GV =
@@ -231,26 +231,15 @@ void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
                        AI->getName() + utostr_32(AllocaAliasCnt) + "_g_alias",
                        0, GlobalVariable::NotThreadLocal, AddressSpace);
   GV->setAlignment(AI->getAlignment());
+  // Replace the alloca by the global variable.
+  // Please note that this operation make the function become no reentrantable.
+  AI->replaceAllUsesWith(GV);
 
-  BasicBlock::iterator IP = AI->getParent()->getTerminator();
+  AI->eraseFromParent();
 
-  // Create the function call to annotate the alias.
-  Value *Args[] = { AI, GV };
-  // We may need a cast.
-  if (!Ty->getElementType()->isPrimitiveType()) {
-    PointerType *PtrTy = PointerType::getIntNPtrTy(M.getContext(), 8,
-                                                   Ty->getAddressSpace());
-    Args[0] = CastInst::CreatePointerCast(AI, PtrTy, AI->getName()+"_cast", IP);
-    Args[1] = ConstantExpr::getBitCast(GV, PtrTy);
-  }
-
-  Type *ArgTypes[] = { Args[0]->getType(), Args[1]->getType() };
-  Function *AllocaAliasGlobal =
-    IntrInfo.getDeclaration(&M, vtmIntrinsic::vtm_alloca_alias_global,
-                            ArgTypes, array_lengthof(ArgTypes));
-  CallInst::Create(AllocaAliasGlobal, Args, "", IP);
   ++NumGlobalAlias;
   ++AllocaAliasCnt;
+  return GV;
 }
 
 static void mutateAddressSpace(Value *V, unsigned AS) {
@@ -293,9 +282,11 @@ void BlockRAMFormation::annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType,
 bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
   bool changed = false;
   AllocateUseCollector Collector;
-  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-    AllocaInst *AI = dyn_cast<AllocaInst>(&*I);
+  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; /*++I*/) {
+    AllocaInst *AI = dyn_cast<AllocaInst>(&*I++);
     if (!AI) continue;
+
+    BasicBlock *BB = AI->getParent();
 
     changed |= true;
     // Can us handle the use tree of the allocated pointer?
@@ -306,17 +297,17 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
       continue;
     }
 
-    allocateGlobalAlias(AI, M, CurAddrSpace);
-    Constant *NullInitilizer =
-      Constant::getNullValue(PointerType::getIntNPtrTy(F.getContext(), 8, 0));
-    annotateBRAMInfo(CurAddrSpace, AI->getAllocatedType(),
-                     NullInitilizer, AI->getParent()->getTerminator(),
-                     *F.getParent());
     // Change the address space of the alloca, so the backend know the
     // load/store accessing this alloca are accessing block ram.
     mutateAddressSpace(AI, CurAddrSpace);
     while (!Collector.Uses.empty())
       mutateAddressSpace(Collector.Uses.pop_back_val(), CurAddrSpace);
+
+    GlobalVariable *GV = allocateGlobalAlias(AI, M, CurAddrSpace);
+    Constant *NullInitilizer =
+      Constant::getNullValue(PointerType::getIntNPtrTy(F.getContext(), 8, 0));
+    annotateBRAMInfo(CurAddrSpace, GV->getType()->getElementType(),
+                     NullInitilizer, BB->getTerminator(), M);
 
     ++NumBlockRAMs;
     ++CurAddrSpace;
