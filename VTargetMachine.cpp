@@ -28,6 +28,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -271,6 +272,8 @@ struct VTMPassConfig : public TargetPassConfig {
     // and these intructions are not able to be handle by the BlockRAMFormation
     // pass.
     PM->add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
+    // Schedule the DeadArgEliminationPass to clean up the module.
+    PM->add(createDeadArgEliminationPass());
 
     // Do not passs the target lowering information to LoopStrengthReducePass,
     // by doing this, the LSR pass will not perform address mode related

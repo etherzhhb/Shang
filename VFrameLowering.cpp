@@ -32,6 +32,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/InstIterator.h"
+#include "llvm/Support/CallSite.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
@@ -124,6 +125,9 @@ struct BlockRAMFormation : public ModulePass {
   bool runOnModule(Module &M);
   bool runOnFunction(Function &F, Module &M);
   bool localizeGV(GlobalVariable *GV, Module &M);
+  bool replaceCallUser(GlobalVariable *GV);
+  bool replaceCallUser(GlobalVariable *GV, Function *Callee, unsigned ArgNo,
+                       ArrayRef<CallSite> Users);
 
   GlobalVariable *allocateGlobalAlias(AllocaInst *AI, Module &M,
                                       unsigned AddressSpace = 0);
@@ -370,17 +374,74 @@ bool BlockRAMFormation::localizeGV(GlobalVariable *GV, Module &M) {
   return true;
 }
 
+bool BlockRAMFormation::replaceCallUser(GlobalVariable *GV) {
+  typedef DenseMap<std::pair<Function *, unsigned>, SmallVector<CallSite, 4> >
+          CallUsersMap;
+  CallUsersMap CallUsers;
+  bool changed = false;
+
+  typedef Value::use_iterator use_iterator;
+  for (use_iterator I = GV->use_begin(), E = GV->use_end(); I != E; ++I) {
+    CallInst *CI = dyn_cast<CallInst>(*I);
+
+    if (CI == 0) continue;
+
+    // Collect the CallSites.
+    CallSite CS(CI);
+    Function *Callee = CS.getCalledFunction();
+    unsigned ArgNo = CS.getArgumentNo(I);
+    CallUsers[std::make_pair(Callee, ArgNo)].push_back(CS);
+  }
+
+  typedef CallUsersMap::iterator iterator;
+  for (iterator I = CallUsers.begin(), E = CallUsers.end(); I != E; ++I)
+    changed |= replaceCallUser(GV, I->first.first, I->first.second, I->second);
+
+  return changed;
+}
+
+bool BlockRAMFormation::replaceCallUser(GlobalVariable *GV,Function *Callee,
+                                        unsigned ArgNo,
+                                        ArrayRef<CallSite> Users) {
+  // The user of the GV not cover all call of the Function.
+  if (Users.size() != Callee->getNumUses()) return false;
+
+  // Replace the argument by the GlobalVarialbe.
+  Argument *Arg = llvm::next(Callee->arg_begin(), ArgNo);
+  Arg->replaceAllUsesWith(GV);
+
+  for (unsigned i = 0; i < Users.size(); ++i) {
+    CallSite CS = Users[i];
+    CS.setArgument(ArgNo, Constant::getNullValue(GV->getType()));
+  }
+
+  return true;
+}
+
 bool BlockRAMFormation::runOnModule(Module &M) {
   bool changed = false;
   TD = &getAnalysis<TargetData>();
 
+  typedef Module::global_iterator global_iterator;
+
   if (EnableBRAM)
-    for (Module::global_iterator I = M.global_begin(), E = M.global_end();
-         I != E; ++I)
+    for (global_iterator I = M.global_begin(), E = M.global_end(); I != E; ++I)
       changed |= localizeGV(I, M);
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
     changed |= runOnFunction(*I, M);
+
+  // If the argument of a function is always passed by a GV, replace the
+  // argument by the GV in that function, by doing this, we can get better
+  // alias analysis.
+  bool LocalChange = true;
+
+  // Iterate untill the module is stable.
+  while (LocalChange) {
+    LocalChange = false;
+    for (global_iterator I = M.global_begin(), E = M.global_end(); I != E; ++I)
+      changed |= LocalChange |= replaceCallUser(I);
+  }
 
   return changed;
 }
