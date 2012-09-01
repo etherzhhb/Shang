@@ -605,6 +605,10 @@ VTargetLowering::LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const {
 
   switch (IntNo) {
   default: break;
+  case vtmIntrinsic::vtm_privatize_global: {
+    // The node is not need now.
+    return Chain;
+  }
   case vtmIntrinsic::vtm_annotated_bram_info: {
     VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
     unsigned BRamNum = Op->getConstantOperandVal(2),

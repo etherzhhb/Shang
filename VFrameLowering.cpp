@@ -237,6 +237,22 @@ GlobalVariable *BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M
   // Please note that this operation make the function become no reentrantable.
   AI->replaceAllUsesWith(GV);
 
+  BasicBlock::iterator IP = AI->getParent()->getTerminator();
+  Value *Arg = GV;
+
+  if (!GV->getType()->isPrimitiveType()) {
+    PointerType *PtrTy
+      = PointerType::getIntNPtrTy(M.getContext(), 8, AddressSpace);
+    Arg = ConstantExpr::getBitCast(GV, PtrTy);
+  }
+
+  Type *ArgTypes[] = { Arg->getType() };
+
+  Function *Privatize =
+    IntrInfo.getDeclaration(&M, vtmIntrinsic::vtm_privatize_global,
+                            ArgTypes, array_lengthof(ArgTypes));
+  CallInst::Create(Privatize, Arg, "", IP);
+
   AI->eraseFromParent();
 
   ++NumGlobalAlias;
