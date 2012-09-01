@@ -151,7 +151,7 @@ struct AllocateUseCollector {
       }
     }
 
-    return false;
+    return onlyUsedByLifetimeMarkers(ValUser);
   }
 };
 
