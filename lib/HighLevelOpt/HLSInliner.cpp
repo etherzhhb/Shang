@@ -34,13 +34,10 @@ namespace {
 
 // AlwaysInliner only inlines functions that are mark as "always inline".
 class HLSInliner : public Inliner {
-  InlineCostAnalyzer CA;
-  TargetData *TD;
-  CallGraph *CG;
   DenseMap<const Function*, DesignMetrics::DesignCost> CachedCost;
 public:
   // Use extremely low threshold.
-  HLSInliner() : Inliner(ID), TD(0) {
+  HLSInliner() : Inliner(ID) {
     initializeHLSInlinerPass(*PassRegistry::getPassRegistry());
   }
 
@@ -51,7 +48,7 @@ public:
 
     if (Cost) return Cost;
 
-    DesignMetrics Metrics(TD);
+    DesignMetrics Metrics(&getAnalysis<TargetData>());
     Metrics.visit(*F);
 
     Cost = Metrics.getCost();
@@ -66,8 +63,6 @@ public:
     Function *F = CS.getCalledFunction(), *ParentF = CS.getCalledFunction();
     if (!F || F->isDeclaration() ||  F->hasFnAttr(Attribute::NoInline))
       return InlineCost::getNever();
-
-    CallGraphNode *CGN = (*CG)[F];
 
     unsigned NumUses = 0;
     typedef Instruction::use_iterator use_iterator;
@@ -97,8 +92,6 @@ public:
     return InlineCost::getNever();
   }
 
-  bool doInitialization(CallGraph &CG);
-
   void releaseMemory() { CachedCost.clear(); }
 
   void getAnalysisUsage(AnalysisUsage &Info) const {
@@ -117,13 +110,4 @@ INITIALIZE_PASS_END(HLSInliner, "hls-inline",
 
 Pass *llvm::createHLSInlinerPass() {
   return new HLSInliner();
-}
-
-// doInitialization - Initializes the vector of functions that have not
-// been annotated with the "always inline" attribute.
-bool HLSInliner::doInitialization(CallGraph &CG) {
-  this->CG = &CG;
-  TD = getAnalysisIfAvailable<TargetData>();
-  assert(TD && "Cannot initialize target data!");
-  return false;
 }
