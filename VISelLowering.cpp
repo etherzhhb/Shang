@@ -579,21 +579,6 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
   return getTruncate(DAG, Op.getDebugLoc(), Operand, DstSize);
 }
 
-SDValue VTargetLowering::LowerFrameIndex(SDValue Op, SelectionDAG &DAG) const {
-  VFInfo *Info =DAG.getMachineFunction().getInfo<VFInfo>();
-  int FI = cast<FrameIndexSDNode>(Op)->getIndex();
-
-  // Alias with a global variable?
-  if (const GlobalValue *GV = Info->getGlobalAliasOfFrameIdx(FI))
-    return DAG.getGlobalAddress(GV, Op->getDebugLoc(), Op.getValueType());
-
-  // Otherwise, it is the offset of the block RAM.
-  // FIXME: There is non-zero offset if we merge the BRAMs, insert a symbol
-  // instead of constant zero, or lower the frame index to target frame
-  // index at last.
-  return DAG.getConstant(0, Op.getValueType());
-}
-
 SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                 SelectionDAG &DAG) const {
   SDValue Chain = Op.getOperand(0);
@@ -620,14 +605,6 @@ VTargetLowering::LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const {
 
   switch (IntNo) {
   default: break;
-  case vtmIntrinsic::vtm_alloca_alias_global: {
-    FrameIndexSDNode *FI = cast<FrameIndexSDNode>(Op->getOperand(2));
-    GlobalAddressSDNode *GSD = cast<GlobalAddressSDNode>(Op->getOperand(3));
-    VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
-    VFI->rememberFrameIdxAlias(FI->getIndex(), GSD->getGlobal());
-    // The node is not need now.
-    return Chain;
-  }
   case vtmIntrinsic::vtm_annotated_bram_info: {
     VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
     unsigned BRamNum = Op->getConstantOperandVal(2),
@@ -668,8 +645,6 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerExtend(Op, DAG, false);
   case ISD::TRUNCATE:
     return LowerTruncate(Op, DAG);
-  case ISD::FrameIndex:
-    return LowerFrameIndex(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:

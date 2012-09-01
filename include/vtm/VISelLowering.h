@@ -206,7 +206,6 @@ private:
   SDValue LowerSubC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerFrameIndex(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;

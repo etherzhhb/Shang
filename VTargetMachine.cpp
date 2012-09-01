@@ -80,7 +80,6 @@ struct VTMPassConfig : public TargetPassConfig {
     PM->add(createBasicAliasAnalysisPass());
     // Run the SCEVAA pass to compute more accurate alias information.
     PM->add(createScalarEvolutionAliasAnalysisPass());
-    PM->add(createVAliasAnalysisPass());
     PM->add(createVPreRegAllocSchedPass());
     return true;
   }
