@@ -142,7 +142,6 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Fuse the memory access together to mak full use of memory bandwidth.
     PM->add(createScalarEvolutionAliasAnalysisPass());
-    PM->add(createVAliasAnalysisPass());
     PM->add(createDeadMemOpEliminationPass());
     PM->add(createMemOpsFusingPass());
     addPass(DeadMachineInstructionElimID);

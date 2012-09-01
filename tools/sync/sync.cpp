@@ -151,6 +151,10 @@ int main(int argc, char **argv) {
                        LoopOptimizerEndExtensionFn);
   PassManager Passes;
   Passes.add(new TargetData(*target->getTargetData()));
+
+  // Add the immutable target-specific alias analysis ahead of all others AAs.
+  Passes.add(createVAliasAnalysisPass());
+
   Passes.add(createVerifierPass());
   // This is the final bitcode, internalize it to expose more optimization
   // opportunities. Note that we should internalize it before SW/HW partition,

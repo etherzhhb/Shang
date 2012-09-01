@@ -26,10 +26,10 @@
 using namespace llvm;
 
 namespace {
-struct VAliasAnalysis: public FunctionPass, public AliasAnalysis {
+struct VAliasAnalysis: public ImmutablePass, public AliasAnalysis {
   static char ID;
 
-  VAliasAnalysis() : FunctionPass(ID) {
+  VAliasAnalysis() : ImmutablePass(ID) {
     initializeVAliasAnalysisPass(*PassRegistry::getPassRegistry());
   }
 
@@ -39,14 +39,12 @@ struct VAliasAnalysis: public FunctionPass, public AliasAnalysis {
     return this;
   }
 
-  virtual bool runOnFunction(Function &F) {
+  virtual void initializePass() {
     InitializeAliasAnalysis(this);
-    return false;
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.setPreservesAll();
-    AliasAnalysis::getAnalysisUsage(AU);
+    AU.addRequired<AliasAnalysis>();
   }
 
   AliasResult alias(const Location &LocA, const Location &LocB) {
