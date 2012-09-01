@@ -339,13 +339,11 @@ DesignMetrics::DesignCost::DesignCost(uint64_t DatapathCost,
     NumAddrBusFanin(NumAddrBusFanin), NumDataBusFanin(NumDataBusFanin),
     StepLB(StepLB) {}
 
-DesignMetrics::DesignCost DesignMetrics::getCost(unsigned BoundarySteps) const {
+DesignMetrics::DesignCost DesignMetrics::getCost() const {
   return DesignCost(std::max<uint64_t>(Impl->getDatapathFUCost(), 1),
                     Impl->getNumAddrBusFanin(),
                     Impl->getNumDataBusFanin(),
-                    // Ignore the steps spend on control boundaries.
-                    std::max<int>(int(Impl->getStepsLowerBound() - BoundarySteps),
-                                      0));
+                    Impl->getStepsLowerBound());
 }
 
 void DesignMetrics::reset() { Impl->reset(); }

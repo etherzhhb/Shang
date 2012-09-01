@@ -54,9 +54,7 @@ public:
     DesignMetrics Metrics(TD);
     Metrics.visit(*F);
 
-    // The cost increment after the function is inlined.
-    // Ignore the 2 steps for submodule launching and returing.
-    Cost = Metrics.getCost(2);
+    Cost = Metrics.getCost();
     DEBUG(dbgs() << "Inline cost of function: " << F->getName() << ':'
                  << Cost << '\n' << "Number of CallSites: " << F->getNumUses()
                  << '\n');
