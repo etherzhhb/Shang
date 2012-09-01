@@ -143,6 +143,8 @@ struct AllocateUseCollector {
         // The pointer must use as pointer operand in load/store.
       case Instruction::Load: return cast<LoadInst>(I)->getPointerOperand() == V;
       case Instruction::Store:return cast<StoreInst>(I)->getPointerOperand() == V;
+        // Bitcast used by lifetime markers is allowed.
+      case Instruction::BitCast: return onlyUsedByLifetimeMarkers(ValUser);
       }
     } else if (const ConstantExpr *C = dyn_cast<ConstantExpr>(ValUser)) {
       if (C->getOpcode() == Instruction::GetElementPtr) {
@@ -151,7 +153,7 @@ struct AllocateUseCollector {
       }
     }
 
-    return onlyUsedByLifetimeMarkers(ValUser);
+    return false;
   }
 };
 
