@@ -63,7 +63,7 @@ Pass *createDetialLatencyInfoPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
-Pass *createVAliasAnalysisPass();
+Pass *createVAliasAnalysisPass(const TargetIntrinsicInfo *II);
 Pass *createVPreRegAllocSchedPass();
 
 // Register allocation.

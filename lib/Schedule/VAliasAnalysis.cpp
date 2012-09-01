@@ -15,22 +15,30 @@
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 
+#include "llvm/GlobalVariable.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Target/TargetData.h"
+#include "llvm/Target/TargetIntrinsicInfo.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/Pass.h"
 #include "llvm/ADT/STLExtras.h"
-
 using namespace llvm;
 
 namespace {
 struct VAliasAnalysis: public ImmutablePass, public AliasAnalysis {
   static char ID;
+  const TargetIntrinsicInfo *II;
 
-  VAliasAnalysis() : ImmutablePass(ID) {
+  explicit VAliasAnalysis(const TargetIntrinsicInfo *II = 0)
+                       : ImmutablePass(ID), II(II) {
     initializeVAliasAnalysisPass(*PassRegistry::getPassRegistry());
+    assert(II && "TargetIntrinsicInfo not available!"
+           "(Constructed by default constructor?)");
   }
 
   virtual void *getAdjustedAnalysisPointer(AnalysisID ID) {
@@ -45,14 +53,67 @@ struct VAliasAnalysis: public ImmutablePass, public AliasAnalysis {
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<AliasAnalysis>();
+    AU.addRequired<TargetData>();
+  }
+
+  bool isNoAliasArgAndGV(const Value *LHS, const Value *RHS) {
+    const Argument *Arg = dyn_cast<Argument>(LHS);
+
+    if (!Arg) return false;
+
+    // Try to retrieve annotation intrinsic.
+    const CallInst *Privatizer = 0;
+    typedef Value::const_use_iterator use_iterator;
+    for (use_iterator I = RHS->use_begin(), E = RHS->use_end(); I != E; ++I) {
+      Privatizer = dyn_cast<CallInst>(*I);
+
+      if (Privatizer == 0) {
+        if (const ConstantExpr *C = dyn_cast<ConstantExpr>(*I))
+          if (C->getOpcode() == Instruction::BitCast
+              && isNoAliasArgAndGV(LHS, C))
+          return true;
+
+        continue;
+      }
+
+      ImmutableCallSite CS(Privatizer);
+      const Function *F = CS.getCalledFunction();
+      if (!F || !F->isDeclaration()) return false;
+
+      unsigned ID = II->getIntrinsicID(const_cast<Function*>(F));
+
+      if (ID != vtmIntrinsic::vtm_privatize_global) {
+        // Not the privatize intrinsic, reset the result.
+        Privatizer = 0;
+        continue;
+      }
+
+      // Intrinsic found.
+      break;
+    }
+
+    // The privatize intrinsic not found.
+    if (Privatizer  == 0) return false;
+
+    // Since the privatized global variable is converted from the alloca, we can
+    // follow the rule in BasicAliasAnalysis: Argument not alias with AllocaInst.
+    return Arg->getParent() == Privatizer->getParent()->getParent();
   }
 
   AliasResult alias(const Location &LocA, const Location &LocB) {
-    PointerType *ATy = cast<PointerType>(LocA.Ptr->getType()),
-                *BTy = cast<PointerType>(LocB.Ptr->getType());
+    // Figure out what objects these things are pointing to if we can.
+    const Value *O1 = GetUnderlyingObject(LocA.Ptr->stripPointerCasts(), TD);
+    const Value *O2 = GetUnderlyingObject(LocB.Ptr->stripPointerCasts(), TD);
+
+    PointerType *ATy = cast<PointerType>(O1->getType()),
+                *BTy = cast<PointerType>(O2->getType());
 
     // Pointers pointing to different address space never alias.
     if (ATy->getAddressSpace() != BTy->getAddressSpace())
+      return NoAlias;
+
+    // Handle the privatize global variables, which are converted from allocas.
+    if (isNoAliasArgAndGV(O1, O2) || isNoAliasArgAndGV(O2, O1))
       return NoAlias;
 
     // TODO: Constant expression.
@@ -68,8 +129,8 @@ char VAliasAnalysis::ID = 0;
 INITIALIZE_AG_PASS(VAliasAnalysis, AliasAnalysis, "vaa",
                    "VTM Specific Alias Analyais", false, true, false)
 
-Pass *llvm::createVAliasAnalysisPass() {
-  return new VAliasAnalysis();
+Pass *llvm::createVAliasAnalysisPass(const TargetIntrinsicInfo *II) {
+  return new VAliasAnalysis(II);
 }
 
 namespace llvm {

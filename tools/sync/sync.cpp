@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
   Passes.add(new TargetData(*target->getTargetData()));
 
   // Add the immutable target-specific alias analysis ahead of all others AAs.
-  Passes.add(createVAliasAnalysisPass());
+  Passes.add(createVAliasAnalysisPass(target->getIntrinsicInfo()));
 
   Passes.add(createVerifierPass());
   // This is the final bitcode, internalize it to expose more optimization
