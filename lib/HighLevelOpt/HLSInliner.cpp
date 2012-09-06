@@ -67,14 +67,14 @@ public:
     unsigned NumUses = 0;
     typedef Instruction::use_iterator use_iterator;
     for (use_iterator I = F->use_begin(), E = F->use_end(); I != E; ++I) {
-      CallSite CS(*I);
+      CallSite CurCS(*I);
 
-      if (!CS.getInstruction() || !CS.getCaller()) continue;
+      if (!CurCS.getInstruction() || !CurCS.getCaller()) continue;
 
-      Function *CurCaller = CS.getCaller();
+      Function *CurCaller = CurCS.getCaller();
 
       // Don't try to inline F if all its caller function are not visited.
-      if (!CachedCost.count(CurCaller) && F->getNumUses() > 1)
+      if (!CachedCost.count(CurCaller) && F->getNumUses() != 0)
         return InlineCost::getNever();
 
       if (CurCaller == CallerF) ++NumUses;
