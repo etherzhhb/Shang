@@ -60,7 +60,7 @@ public:
   }
 
   InlineCost getInlineCost(CallSite CS) {
-    Function *F = CS.getCalledFunction(), *ParentF = CS.getCalledFunction();
+    Function *F = CS.getCalledFunction(), *CallerF = CS.getCaller();
     if (!F || F->isDeclaration() ||  F->hasFnAttr(Attribute::NoInline))
       return InlineCost::getNever();
 
@@ -69,22 +69,30 @@ public:
     for (use_iterator I = F->use_begin(), E = F->use_end(); I != E; ++I) {
       CallSite CS(*I);
 
-      if (CS.getInstruction() && CS.getCalledFunction() == ParentF) ++NumUses;
+      if (!CS.getInstruction() || !CS.getCaller()) continue;
+
+      Function *CurCaller = CS.getCaller();
+
+      // Don't try to inline F if all its caller function are not visited.
+      if (!CachedCost.count(CurCaller) && F->getNumUses() > 1)
+        return InlineCost::getNever();
+
+      if (CurCaller == CallerF) ++NumUses;
     }
 
     DEBUG(dbgs() << "Function: " << F->getName() << '\n');
     DesignMetrics::DesignCost Cost = lookupOrComputeCost(F);
-    uint64_t Threshold = VFUs::MulCost[63] * 4,
-             IncreasedCost = Cost.getCostInc(NumUses);
+    uint64_t Threshold = 64000;
+    uint64_t IncreasedCost = Cost.getCostInc(NumUses, 1, 8, 0) * Cost.StepLB;
 
-    DEBUG(dbgs() << "Cost: " << Cost << ' '
+    DEBUG(dbgs() << "Cost: " << Cost << '\n'
                  << "Increased cost: " << IncreasedCost << ' '
-                 << "Threshold: " << Threshold);
+                 << "IncThreshold: " << Threshold << '\n');
     // FIXME: Read the threshold from the constraints script.
     if (IncreasedCost < Threshold) {
       DEBUG(dbgs() << "...going to inline function\n");
       // The cost of ParentF changed.
-      CachedCost.erase(ParentF);
+      CachedCost.erase(CallerF);
       return InlineCost::getAlways();
     }
 
