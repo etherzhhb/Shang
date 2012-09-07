@@ -76,7 +76,7 @@ static std::string verilogConstToStr(uint64_t Value, unsigned bitwidth,
 // Helper function for Verilog RTL printing.
 
 static
-raw_ostream &printAssign(raw_ostream &OS, const char *Name, unsigned BitWidth) {
+raw_ostream &printAssign(raw_ostream &OS, const Twine &Name, unsigned BitWidth){
   OS << "assign " << Name
      << VASTValue::printBitRange(BitWidth, 0, false)
      << " = ";
@@ -89,22 +89,21 @@ static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *Wire) {
 
 template<typename OperandT>
 static void printCombMux(raw_ostream &OS, ArrayRef<OperandT> Ops,
-                         const char *LHSName, unsigned LHSWidth) {
-  // Handle the trivial case trivially: Only 1 input.
-  if (Ops.size() == 2) {
-    printAssign(OS, LHSName, LHSWidth);
-    Ops[1].printAsOperand(OS);
-    OS << ";\n";
-    return;
-  }
-
+                         const Twine &LHSName, unsigned LHSWidth) {
+  bool IsSimpleAssignment = (Ops.size() == 2);
   // Create the temporary signal.
   OS << "// Combinational MUX\n"
-     << "reg " << VASTValue::printBitRange(LHSWidth, 0, true)
+     << (IsSimpleAssignment ? "wire " : "reg ")
+     << VASTValue::printBitRange(LHSWidth, 0, false)
      << ' ' << LHSName << "_mux_wire;\n";
 
-  // Assign the temporary signal to the wire.
-  printAssign(OS, LHSName, LHSWidth) << LHSName << "_mux_wire;\n";
+  // Handle the trivial case trivially: Only 1 input.
+  if (IsSimpleAssignment) {
+    printAssign(OS, LHSName + "_mux_wire", LHSWidth);
+    Ops[1].printAsOperand(OS);
+    OS << ";\n\n";
+    return;
+  }
 
   // Print the mux logic.
   OS << "always @(*)begin  // begin mux logic\n";
@@ -116,10 +115,11 @@ static void printCombMux(raw_ostream &OS, ArrayRef<OperandT> Ops,
     Ops[i + 1].printAsOperand(OS);
     OS << ";\n";
   }
+
   // Write the default condition, otherwise latch will be inferred.
   OS.indent(4) << "default: " << LHSName << "_mux_wire = "
                << LHSWidth << "'bx;\n";
-  OS.indent(2) << "endcase\nend  // end mux logic\n";
+  OS.indent(2) << "endcase\nend  // end mux logic\n\n";
 }
 
 void VASTNode::dump() const {
@@ -1018,6 +1018,9 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 
   printCombMux(OS, E->getOperands(), W->getName(), W->getBitWidth());
+
+  // Assign the temporary signal to the wire.
+  printAssign(OS, W) << W->getName() << "_mux_wire;\n";
 }
 
 static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
