@@ -87,6 +87,41 @@ static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *Wire) {
   return printAssign(OS, Wire->getName(), Wire->getBitWidth());
 }
 
+template<typename OperandT>
+static void printCombMux(raw_ostream &OS, ArrayRef<OperandT> Ops,
+                         const char *LHSName, unsigned LHSWidth) {
+  // Handle the trivial case trivially: Only 1 input.
+  if (Ops.size() == 2) {
+    printAssign(OS, LHSName, LHSWidth);
+    Ops[1].printAsOperand(OS);
+    OS << ";\n";
+    return;
+  }
+
+  // Create the temporary signal.
+  OS << "// Combinational MUX\n"
+     << "reg " << VASTValue::printBitRange(LHSWidth, 0, true)
+     << ' ' << LHSName << "_mux_wire;\n";
+
+  // Assign the temporary signal to the wire.
+  printAssign(OS, LHSName, LHSWidth) << LHSName << "_mux_wire;\n";
+
+  // Print the mux logic.
+  OS << "always @(*)begin  // begin mux logic\n";
+  OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
+  for (unsigned i = 0; i < Ops.size(); i+=2) {
+    OS.indent(4);
+    Ops[i].printAsOperand(OS);
+    OS << ": " << LHSName << "_mux_wire = ";
+    Ops[i + 1].printAsOperand(OS);
+    OS << ";\n";
+  }
+  // Write the default condition, otherwise latch will be inferred.
+  OS.indent(4) << "default: " << LHSName << "_mux_wire = "
+               << LHSWidth << "'bx;\n";
+  OS.indent(2) << "endcase\nend  // end mux logic\n";
+}
+
 void VASTNode::dump() const {
   print(dbgs());
   dbgs() << '\n';
@@ -982,36 +1017,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   unsigned NumOperands = E->NumOps;
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 
-  // Handle the trivial case trivially: Only 1 input.
-  if (NumOperands == 2) {
-    printAssign(OS, W);
-    E->getOperand(1).printAsOperand(OS);
-    OS << ";\n";
-    return;
-  }
-
-  // Create the temporary signal.
-  OS << "// Combinational MUX\n"
-     << "reg " << VASTValue::printBitRange(W->getBitWidth(), 0, true)
-     << ' ' << W->getName() << "_mux_wire;\n";
-
-  // Assign the temporary signal to the wire.
-  printAssign(OS, W) << W->getName() << "_mux_wire;\n";
-
-  // Print the mux logic.
-  OS << "always @(*)begin  // begin mux logic\n";
-  OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
-  for (unsigned i = 0; i < NumOperands; i+=2) {
-    OS.indent(4);
-    E->getOperand(i).printAsOperand(OS);
-    OS << ": " << W->getName() << "_mux_wire = ";
-    E->getOperand(i + 1).printAsOperand(OS);
-    OS << ";\n";
-  }
-  // Write the default condition, otherwise latch will be inferred.
-  OS.indent(4) << "default: " << W->getName() << "_mux_wire = "
-               << W->getBitWidth() << "'bx;\n";
-  OS.indent(2) << "endcase\nend  // end mux logic\n";
+  printCombMux(OS, E->getOperands(), W->getName(), W->getBitWidth());
 }
 
 static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
