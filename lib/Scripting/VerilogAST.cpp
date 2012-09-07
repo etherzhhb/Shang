@@ -89,14 +89,12 @@ static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *Wire) {
 
 template<typename OperandT>
 static void printCombMux(raw_ostream &OS, ArrayRef<OperandT> Ops,
-                         const Twine &LHSName, unsigned LHSWidth,
-                         bool EncodeEnableInLSB) {
-  bool IsSimpleAssignment = (Ops.size() == 2) && !EncodeEnableInLSB;
+                         const Twine &LHSName, unsigned LHSWidth) {
+  bool IsSimpleAssignment = (Ops.size() == 2);
   // Create the temporary signal.
   OS << "// Combinational MUX\n"
      << (IsSimpleAssignment ? "wire " : "reg ")
-     // Use the MSB as enable bit.
-     << VASTValue::printBitRange(LHSWidth + (EncodeEnableInLSB ? 1 : 0),0,false)
+     << VASTValue::printBitRange(LHSWidth, 0, false)
      << ' ' << LHSName << "_mux_wire;\n";
 
   // Handle the trivial case trivially: Only 1 input.
@@ -114,18 +112,13 @@ static void printCombMux(raw_ostream &OS, ArrayRef<OperandT> Ops,
     OS.indent(4);
     Ops[i].printAsOperand(OS);
     OS << ": " << LHSName << "_mux_wire = ";
-    if (EncodeEnableInLSB) OS << "{ ";
     Ops[i + 1].printAsOperand(OS);
-    if (EncodeEnableInLSB) OS << ", 1'b1}";
     OS << ";\n";
   }
 
   // Write the default condition, otherwise latch will be inferred.
-  OS.indent(4) << "default: " << LHSName << "_mux_wire = ";
-  if (EncodeEnableInLSB) OS << "{ ";
-  OS << LHSWidth << "'bx";
-  if (EncodeEnableInLSB) OS << ", 1'b0}";
-  OS << ";\n";
+  OS.indent(4) << "default: " << LHSName << "_mux_wire = "
+               << LHSWidth << "'bx;\n";
   OS.indent(2) << "endcase\nend  // end mux logic\n\n";
 }
 
@@ -367,22 +360,29 @@ void VASTRegister::printSelector(raw_ostream &OS) const {
     MuxOperands.push_back(*I->second);
   }
 
-  printCombMux<VASTValPtr>(OS, MuxOperands, getName(), getBitWidth(), true);
+  printCombMux<VASTValPtr>(OS, MuxOperands, getName(), getBitWidth());
 }
 
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
                                    const VASTModule *Mod) const {
   if (Assigns.empty()) return;
 
-  OS.if_();
-  // The enable is encoded in the LSB of the result of the selector.
-  OS << getName() << "_mux_wire[0]";
-  OS._then();
+  std::string Pred;
+  raw_string_ostream PredSS(Pred);
+  PredSS << '(';
+
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    I->first->printAsOperand(PredSS, false);
+    PredSS << '|';
+  }
+
+  PredSS << "1'b0)";
+  PredSS.flush();
+  OS.if_begin(Pred);
   printAsOperandImpl(OS);
   OS << " <= " << getName() << "_mux_wire"
-     // The selected value is encoded in the higher part.
-     << printBitRange(getBitWidth() + 1, 1, true)
-     << ";\n";
+      << printBitRange(getBitWidth(), 0, false)
+      << ";\n";
   OS.exit_block();
 
   OS << "// synthesis translate_off\n";
@@ -1015,7 +1015,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   unsigned NumOperands = E->NumOps;
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 
-  printCombMux(OS, E->getOperands(), W->getName(), W->getBitWidth(), false);
+  printCombMux(OS, E->getOperands(), W->getName(), W->getBitWidth());
 
   // Assign the temporary signal to the wire.
   printAssign(OS, W) << W->getName() << "_mux_wire;\n";
