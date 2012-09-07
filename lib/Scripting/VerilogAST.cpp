@@ -350,53 +350,38 @@ bool VASTRegister::printReset(raw_ostream &OS) const {
   return true;
 }
 
+void VASTRegister::printSelector(raw_ostream &OS) const {
+  SmallVector<VASTValPtr, 8> MuxOperands;
+
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    MuxOperands.push_back(I->first);
+    MuxOperands.push_back(*I->second);
+  }
+
+  printCombMux<VASTValPtr>(OS, MuxOperands, getName(), getBitWidth());
+}
+
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
                                    const VASTModule *Mod) const {
   if (Assigns.empty()) return;
 
-  bool UseSwitch = Assigns.size() > 1;
-
-  typedef std::vector<VASTValPtr> OrVec;
-  typedef std::map<VASTValPtr, OrVec> CSEMapTy;
-  CSEMapTy SrcCSEMap;
-
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
-    SrcCSEMap[*I->second].push_back(I->first);
-
-  OS << "// Assignment of " << getName() << '\n';
-  if (UseSwitch) {
-    OS << VASTModule::ParallelCaseAttr << ' ';
-    OS.switch_begin("1'b1");
-  }
-
   std::string Pred;
   raw_string_ostream PredSS(Pred);
-  typedef CSEMapTy::iterator it;
+  PredSS << '(';
 
-  for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
-    PredSS << '(';
-
-    OrVec &Ors = I->second;
-    for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
-      OI->printAsOperand(PredSS);
-      PredSS << '|';
-    }
-
-    PredSS << "1'b0)";
-    PredSS.flush();
-    // Print the assignment under the condition.
-    if (UseSwitch) OS.match_case(Pred);
-    else OS.if_begin(Pred);
-    printAsOperandImpl(OS);
-    OS << " <= ";
-    I->first.printAsOperand(OS);
-    OS << ";\n";
-    OS.exit_block();
-
-    Pred.clear();
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    I->first->printAsOperand(PredSS, false);
+    PredSS << '|';
   }
 
-  if (UseSwitch) OS.switch_end();
+  PredSS << "1'b0)";
+  PredSS.flush();
+  OS.if_begin(Pred);
+  printAsOperandImpl(OS);
+  OS << " <= " << getName() << "_mux_wire"
+      << printBitRange(getBitWidth(), 0, false)
+      << ";\n";
+  OS.exit_block();
 
   OS << "// synthesis translate_off\n";
   verifyAssignCnd(OS, Mod);
@@ -504,6 +489,17 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
     // Do not print the trivial dead data-path.
     if (W->getAssigningValue() && (W->isPinned() || !W->use_empty()))
       W->printAssignment(OS);
+  }
+
+  // Print the MUXs for the registers.
+  typedef RegisterVector::const_iterator iterator;
+
+  for (iterator I = Registers.begin(), E = Registers.end(); I != E; ++I) {
+    VASTRegister *R = *I;
+
+    if (R->getRegType() == VASTRegister::Virtual) continue;
+
+    R->printSelector(OS);
   }
 }
 

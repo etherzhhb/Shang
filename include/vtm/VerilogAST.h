@@ -1083,6 +1083,7 @@ public:
   unsigned num_assigns() const { return Assigns.size(); }
   /*VASTUse getConstantValue() const;*/
 
+  void printSelector(raw_ostream &OS) const;
   void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
   // Return true if the reset is actually printed.
   bool printReset(raw_ostream &OS) const;
