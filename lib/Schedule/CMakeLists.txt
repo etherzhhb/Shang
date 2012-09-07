@@ -7,6 +7,7 @@ include_directories(
 
 add_llvm_library(VTMSchedule
   AdjustLIForBundles.cpp
+  ChainBreakingAnalysis.cpp
   CompGraph.cpp
   DetailLatencyInfo.cpp
   PrebindMuxBase.cpp
