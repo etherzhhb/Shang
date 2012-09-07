@@ -158,11 +158,11 @@ public:
 template<typename T>
 struct ValDefBase {
   unsigned RegNum;
-  unsigned FinishSlot;
+  unsigned ChainEnd;
   T *Next;
 
-  ValDefBase(unsigned RegNum, unsigned FinishSlot)
-    : RegNum(RegNum), FinishSlot(FinishSlot), Next(0) {}
+  ValDefBase(unsigned RegNum, unsigned ChainEnd)
+    : RegNum(RegNum), ChainEnd(ChainEnd), Next(0) {}
 
   // Return the last value of the define chain.
   inline T *getLatestValue() {
@@ -188,8 +188,8 @@ struct ValDefBase {
 };
 
 struct SimpleValDef : public ValDefBase<SimpleValDef> {
-  SimpleValDef(unsigned RegNum, unsigned FinishSlot)
-    : ValDefBase<SimpleValDef>(RegNum, FinishSlot) {}
+  SimpleValDef(unsigned RegNum, unsigned ChainEnd)
+    : ValDefBase<SimpleValDef>(RegNum, ChainEnd) {}
 };
 
 // Helper class to build bundles.
@@ -300,7 +300,7 @@ struct BundleBuilder {
   }
 
   bool isReadWrapAround(OpSlot ReadSlot, SimpleValDef *VD) const {
-    return OpSlot(VD->FinishSlot, true) < ReadSlot;
+    return OpSlot(VD->ChainEnd, true) < ReadSlot;
   }
 
   InsertPosTy getStateCtrlAt(OpSlot CtrlSlot) {
@@ -601,7 +601,7 @@ unsigned BundleBuilder::getRegAtSlot(SimpleValDef *VD, OpSlot ReadSlot,
     if (VD->Next == 0) {
       unsigned RegNo = createPHI(VD->RegNum, SizeInBits);
 
-      VD->push_back(createValDef(RegNo, VD->FinishSlot + II));
+      VD->push_back(createValDef(RegNo, VD->ChainEnd + II));
     }
 
     VD = VD->Next;
@@ -723,8 +723,8 @@ struct ChainValDef : public ValDefBase<ChainValDef> {
   MachineInstr &MI;
   bool IsChainedWithFU;
 
-  explicit ChainValDef(MachineInstr &MI, unsigned SchedSlot, unsigned FinishSlot)
-    : ValDefBase<ChainValDef>(0, FinishSlot), ChainStart(SchedSlot), MI(MI),
+  explicit ChainValDef(MachineInstr &MI, unsigned SchedSlot, unsigned ChainEnd)
+    : ValDefBase<ChainValDef>(0, ChainEnd), ChainStart(SchedSlot), MI(MI),
       IsChainedWithFU(!VInstrInfo::getPreboundFUId(&MI).isTrivial()
                        // Dirty Hack: Ignore the copy like FU operations, i.e. ReadFU,
                        // and VOpDstMux.
@@ -733,7 +733,7 @@ struct ChainValDef : public ValDefBase<ChainValDef> {
   MachineBasicBlock *getParentBB() const { return MI.getParent(); }
   unsigned getParentBBNum() const { return getParentBB()->getNumber(); }
 
-  bool isCopy() const { return FinishSlot == ChainStart; }
+  bool isCopy() const { return ChainEnd == ChainStart; }
 };
 
 struct ChainBreaker {
@@ -757,7 +757,7 @@ struct ChainBreaker {
   }
 
   unsigned getFinishAtCurBB(const ChainValDef &Def) {
-    return Def.getParentBB() == MBB ? Def.FinishSlot : StartSlot;
+    return Def.getParentBB() == MBB ? Def.ChainEnd : StartSlot;
   }
 
   unsigned getChainStartAtCurBB(const ChainValDef &Def) {
@@ -778,7 +778,7 @@ struct ChainBreaker {
 
   int getSlackFromFinish(unsigned UseSlot, unsigned UseBBNum,
                          const ChainValDef &Def) const {
-    return getSlack(UseSlot, UseBBNum, Def.FinishSlot, Def.getParentBBNum());
+    return getSlack(UseSlot, UseBBNum, Def.ChainEnd, Def.getParentBBNum());
   }
 
   MachineBasicBlock *MBB;
@@ -913,13 +913,13 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
 
 ChainValDef *ChainBreaker::getValAtSlot(ChainValDef *Def, unsigned Slot,
                                         bool CreateCopy) {
-  assert((Slot >= Def->FinishSlot || !CreateCopy)
+  assert((Slot >= Def->ChainEnd || !CreateCopy)
          && "Read before write detected!");
   // Only return the value at then end of the BB, do not perform cross BB copy.
-  if (Def->getParentBB() != MBB) Slot = Def->FinishSlot;
+  if (Def->getParentBB() != MBB) Slot = Def->ChainEnd;
 
   // Get the value just before ReadSlot.
-  while (Def->Next && Def->Next->FinishSlot <= Slot)
+  while (Def->Next && Def->Next->ChainEnd <= Slot)
     Def = Def->Next;
 
   if (Def->ChainStart != Slot && CreateCopy) {
@@ -990,11 +990,11 @@ ChainValDef *ChainBreaker::breakChainForAntiDep(ChainValDef *SrcDef,
   int ChainLength =  ChainEndSlot - ChainStartSlot;
 
   while (ChainLength > int(II)) {
-    assert(SrcDef->FinishSlot <= ReadSlot
+    assert(SrcDef->ChainEnd <= ReadSlot
            && "Cannot break the chain to preserve anti-dependency!");
     // Try to get the next value define, which hold the value of UseVal in
     // another register in later slots.
-    if (!SrcDef->Next || SrcDef->Next->FinishSlot > ReadSlot) {
+    if (!SrcDef->Next || SrcDef->Next->ChainEnd > ReadSlot) {
       unsigned CopySlot = std::min(ChainStartSlot + II, ReadSlot);
       SrcDef->insertAfter(insertCopyAtSlot(*SrcDef, CopySlot));
     }
@@ -1031,7 +1031,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
     int ChainBreakingSlack = getSlackFromFinish(ReadSlot, CurBBNum, *SrcVal);
     if (ChainBreakingSlack >= 0) {
       if (SrcVal->IsChainedWithFU)
-        SrcVal = getValAtSlot(SrcVal, SrcVal->FinishSlot, true);
+        SrcVal = getValAtSlot(SrcVal, SrcVal->ChainEnd, true);
 
       if (IsPipelined && InSameBB && !IsDangling && !IsPipeStage
           && LatestChainEnd - SrcVal->ChainStart > CurII
@@ -1049,7 +1049,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
       // The dangling MI is not read by the MI in the same BB, hence there is
       // no anti-dependencies to preserve.
       if (IsPipelined && !IsDangling) {
-        unsigned ChainEndSlot = IsDatapath ? Def.FinishSlot : Def.ChainStart;
+        unsigned ChainEndSlot = IsDatapath ? Def.ChainEnd : Def.ChainStart;
         // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
         // value 1 slot after its schedule slot.
         if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
@@ -1070,7 +1070,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
     // unsigned ExtraLatencyFromSrc = std::max(Src.Latency - Def.Latnecy, 0);
     // Def.FinishSlot = std::max(Def.FinishSlot,
     //                           SrcVal->FinishSlot + ExtraLatencyFromSrc);
-    Def.FinishSlot = std::max(Def.FinishSlot, SrcVal->FinishSlot);
+    Def.ChainEnd = std::max(Def.ChainEnd, SrcVal->ChainEnd);
 
     assert((SrcVal->getParentBB() == MBB || !SrcVal->IsChainedWithFU)
            && "Unexpected cross BB chain.");
@@ -1167,10 +1167,10 @@ void ChainBreaker::visit(VSUnit *U) {
       // The result of data-path operation is available 1 slot after the
       // operation start.
       Latency = std::max(1u, Latency);
-      Def.FinishSlot = std::max(SchedSlot + Latency, Def.FinishSlot);
+      Def.ChainEnd = std::max(SchedSlot + Latency, Def.ChainEnd);
       assert((!IsPipelined || U->isDangling()
               || MI->getOpcode() == VTM::VOpPipelineStage
-              || Def.FinishSlot - Def.ChainStart <= CurII)
+              || Def.ChainEnd - Def.ChainStart <= CurII)
              && "Anti-dependencies broken!");
     }
 
