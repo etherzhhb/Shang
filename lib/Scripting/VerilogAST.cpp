@@ -350,22 +350,18 @@ bool VASTRegister::printReset(raw_ostream &OS) const {
   return true;
 }
 
-void VASTRegister::printSelector(raw_ostream &OS) const {
-  if (Assigns.empty()) return;
-
+static void PrintSelector(raw_ostream &OS, const Twine &Name, unsigned BitWidth,
+                          const std::map<VASTValPtr, std::vector<VASTValPtr> > &
+                          SrcCSEMap) {
   typedef std::vector<VASTValPtr> OrVec;
   typedef std::map<VASTValPtr, OrVec> CSEMapTy;
-  typedef CSEMapTy::iterator it;
-  CSEMapTy SrcCSEMap;
-
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
-    SrcCSEMap[*I->second].push_back(I->first);
+  typedef CSEMapTy::const_iterator it;
 
   // Create the temporary signal.
   OS << "// Combinational MUX\n"
-     << "reg " << VASTValue::printBitRange(getBitWidth(), 0, false)
-     << ' ' << getName() << "_selector_wire;\n"
-     << "reg " << ' ' << getName() << "_selector_enable;\n";
+     << "reg " << VASTValue::printBitRange(BitWidth, 0, false)
+     << ' ' << Name << "_selector_wire;\n"
+     << "reg " << ' ' << Name << "_selector_enable;\n";
 
   // Print the mux logic.
   OS << "always @(*)begin  // begin mux logic\n";
@@ -374,28 +370,43 @@ void VASTRegister::printSelector(raw_ostream &OS) const {
   for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
     OS.indent(4) << '(';
 
-    OrVec &Ors = I->second;
-    for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
+    const OrVec &Ors = I->second;
+    for (OrVec::const_iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI)
+    {
       OI->printAsOperand(OS);
       OS << '|';
     }
 
     OS << "1'b0): begin\n";
     // Print the assignment under the condition.
-    OS.indent(6) << getName() << "_selector_wire = ";
+    OS.indent(6) << Name << "_selector_wire = ";
     I->first.printAsOperand(OS);
     OS << ";\n";
     // Print the enable.
-    OS.indent(6) << getName() << "_selector_enable = 1'b1;\n";
+    OS.indent(6) << Name << "_selector_enable = 1'b1;\n";
     OS.indent(4) << "end\n";
   }
 
   // Write the default condition, otherwise latch will be inferred.
   OS.indent(4) << "default: begin\n";
-  OS.indent(6) << getName() << "_selector_wire = " << getBitWidth() << "'bx;\n";
-  OS.indent(6) << getName() << "_selector_enable = 1'b0;\n";
+  OS.indent(6) << Name << "_selector_wire = " << BitWidth << "'bx;\n";
+  OS.indent(6) << Name << "_selector_enable = 1'b0;\n";
   OS.indent(4) << "end\n";
   OS.indent(2) << "endcase\nend  // end mux logic\n\n";
+}
+
+void VASTRegister::printSelector(raw_ostream &OS) const {
+  if (Assigns.empty()) return;
+
+  typedef std::vector<VASTValPtr> OrVec;
+  typedef std::map<VASTValPtr, OrVec> CSEMapTy;
+  typedef CSEMapTy::const_iterator it;
+  CSEMapTy SrcCSEMap;
+
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+    SrcCSEMap[*I->second].push_back(I->first);
+
+  PrintSelector(OS, Twine(getName()), getBitWidth(), SrcCSEMap);
 }
 
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
@@ -405,8 +416,8 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
   OS.if_begin(Twine(getName()) + Twine("_selector_enable"));
   printAsOperandImpl(OS);
   OS << " <= " << getName() << "_selector_wire"
-      << printBitRange(getBitWidth(), 0, false)
-      << ";\n";
+     << printBitRange(getBitWidth(), 0, false)
+     << ";\n";
   OS.exit_block();
 
   OS << "// synthesis translate_off\n";
