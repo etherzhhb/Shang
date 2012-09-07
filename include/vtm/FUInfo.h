@@ -338,29 +338,12 @@ public:
   static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
 
   // Signal names of the function unit.
-  inline static std::string getAddrBusName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "addr";
-  }
-
-  inline static std::string getInDataBusName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "in";
-  }
-
   inline static std::string getOutDataBusName(unsigned FUNum) {
     return "bram" + utostr(FUNum) + "out";
   }
 
-  // Dirty Hack: This should be byte enable.
-  inline static std::string getByteEnableName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "be";
-  }
-
-  inline static std::string getWriteEnableName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "we";
-  }
-
-  inline static std::string getEnableName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "en";
+  inline static std::string getArrayName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "array";
   }
 };
 

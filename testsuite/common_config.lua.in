@@ -10,11 +10,11 @@ initial
 #end
 
 always @ (posedge $(clk)) begin
-  if (bram$(num)en) begin
-    if (bram$(num)we)
-      mem$(num)[bram$(num)addr] <= bram$(num)in;
+  if (bram$(num)en_mux_wire) begin
+    if (bram$(num)we_mux_wire)
+      mem$(num)[bram$(num)addr_mux_wire] <= bram$(num)in_mux_wire;
 
-    bram$(num)out <= mem$(num)[bram$(num)addr];
+    bram$(num)out <= mem$(num)[bram$(num)addr_mux_wire];
   end
 end
 ]=]}

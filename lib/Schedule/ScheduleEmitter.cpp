@@ -857,34 +857,7 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
   // Insert pseudo copy to model write until finish.
   // FIXME: Insert for others MI rather than Representative MI?
   if (U->getLatency() && VInstrInfo::isWriteUntilFinish(U->getOpcode())) {
-    assert(U->getOpcode() == VTM::VOpBRAMTrans &&
-           "Only support BRAMTrans at the moment.");
-    MachineOperand &MO = MI->getOperand(0);
-    unsigned BRAMOpResult = MO.getReg();
-    unsigned BRAMPortReg = MRI.createVirtualRegister(RC);
-    // Change to the newly allocated register, and kill the new register
-    // with VOpPipelineStage.
-    MO.ChangeToRegister(BRAMPortReg, true);
-    unsigned ResultWidth = VInstrInfo::getBitWidth(MO);
-    MachineInstr *PipeStage =
-      BuildMI(*MBB, IP, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
-        .addOperand(VInstrInfo::CreateReg(BRAMOpResult, ResultWidth, true))
-        .addOperand(VInstrInfo::CreateReg(BRAMPortReg, ResultWidth)).addImm(Id.getData())
-        .addOperand(*VInstrInfo::getPredOperand(MI))
-        .addOperand(*VInstrInfo::getTraceOperand(MI));
-    assert(U->isControl() && "Only control operation write until finish!");
-    G.mapMI2SU(PipeStage, U, U->getLatency() - 1, true);
-
-    // Copy the result 1 cycle later after the value is finished, note that
-    // the PipeStage is emit to a data path slot, to delay the VOpReadFU 1
-    // cycle later, we need to set its delay to 2, other wise the copy will
-    // emit right after the RepLI finish, instead of 1 cycle after the RepLI
-    // finish. FIXME: Set the right latency.
-    G.addDummyLatencyEntry(PipeStage, 2.0f);
-    // The result is not provided by PipeStage.
-    // Copy the result of the pipe stage to register if it has any user.
-    if (!MRI.use_empty(BRAMOpResult))
-      buildReadFU(PipeStage, U, G.getStepsToFinish(PipeStage), Id);
+    llvm_unreachable("Not support write until finish on nozero latency FU yet!");
   } else if (!Id.isTrivial()) {
     // The result of InternalCall is hold by the ReadReturn operation, so we
     // do not need to create a new register to hold the result. Otherwise, a
@@ -894,8 +867,9 @@ void ChainBreaker::buildFUCtrl(VSUnit *U) {
     MRI.setRegClass(MI->getOperand(0).getReg(), RC);
   }
 
-  // We also need to disable the FU.
-  if (Id.isBound()) {
+  // We also need to disable the FU. Please note that disabling the Block RAMs
+  // are not needed.
+  if (Id.isBound() && Id.getFUType() != VFUs::BRam) {
     assert(Id.getFUType() != VFUs::Mux && "Unexpected FU type!");
     MachineOperand FU = MI->getOperand(0);
     FU.clearParent();

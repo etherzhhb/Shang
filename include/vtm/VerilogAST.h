@@ -613,6 +613,9 @@ public:
     LastFUOpc = dpUCmp,
     // Mux in datapath.
     dpMux,
+    // Read/Write block RAM.
+    dpRdBRAM, // Represented by the Address.
+    dpWrBRAM, // Represented by tuple (Address, Data).
     // Blackbox,
     dpBlackBox
   };
@@ -1037,6 +1040,7 @@ public:
   typedef ArrayRef<VASTValPtr> AndCndVec;
   enum Type {
     Data,       // Common registers which hold data for data-path.
+    BRAM,       // Block RAM.
     Operand,    // Operand registers of functional units.
     Slot,       // Slot register which hold the enable signals for each slot.
     OutputPort, // The I/O register of an output port.
@@ -1062,7 +1066,7 @@ public:
   }
 
   unsigned getDataRegNum() const {
-    assert(getRegType() == Data && "Wrong accessor!");
+    assert((getRegType() == Data || getRegType() == BRAM) && "Wrong accessor!");
     return SignalData;
   }
 

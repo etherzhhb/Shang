@@ -401,24 +401,68 @@ void VASTRegister::printSelector(raw_ostream &OS) const {
   typedef std::vector<VASTValPtr> OrVec;
   typedef std::map<VASTValPtr, OrVec> CSEMapTy;
   typedef CSEMapTy::const_iterator it;
-  CSEMapTy SrcCSEMap;
+  if (getRegType() == VASTRegister::BRAM) {
+    const std::string &BRAMArray = VFUBRAM::getArrayName(getDataRegNum());
 
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
-    SrcCSEMap[*I->second].push_back(I->first);
+    CSEMapTy AddrCSEMap, DataCSEMap;
+    for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+      VASTExpr *Expr = cast<VASTExpr>(*I->second);
 
-  PrintSelector(OS, Twine(getName()), getBitWidth(), SrcCSEMap);
+      // Add the address to the selector.
+      AddrCSEMap[Expr->getOperand(0)].push_back(I->first);
+
+      // Add the data to the selector.
+      if (Expr->getOpcode() == VASTExpr::dpWrBRAM)
+        DataCSEMap[Expr->getOperand(1)].push_back(I->first);
+    }
+
+    // DIRTYHACK: The size of address bus is stored in the InitVal.
+    PrintSelector(OS, Twine(BRAMArray) + "_addr", InitVal, AddrCSEMap);
+    PrintSelector(OS, Twine(BRAMArray) + "_data", getBitWidth(), DataCSEMap);
+  } else {
+    CSEMapTy SrcCSEMap;
+
+    for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+      SrcCSEMap[*I->second].push_back(I->first);
+
+    PrintSelector(OS, Twine(getName()), getBitWidth(), SrcCSEMap);
+  }
 }
 
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
                                    const VASTModule *Mod) const {
   if (Assigns.empty()) return;
 
-  OS.if_begin(Twine(getName()) + Twine("_selector_enable"));
-  printAsOperandImpl(OS);
-  OS << " <= " << getName() << "_selector_wire"
-     << printBitRange(getBitWidth(), 0, false)
-     << ";\n";
-  OS.exit_block();
+  if (getRegType() == VASTRegister::BRAM) {
+    const std::string &BRAMArray = VFUBRAM::getArrayName(getDataRegNum());
+
+    // DIRTYHACK: The size of address bus is stored in the InitVal.
+    unsigned AddrWidth = InitVal;
+    // The block RAM is active if the address bus is active.
+    OS.if_begin(Twine(BRAMArray) + "_addr" + "_selector_enable");
+    // It is a write if the data bus is active.
+    OS.if_begin(Twine(BRAMArray) + "_data" + "_selector_enable");
+    OS << BRAMArray << '[' << BRAMArray << "_addr_selector_wire"
+       << printBitRange(AddrWidth, 0, false) << ']' << " <= "
+       << BRAMArray << "_data_selector_wire"
+       << printBitRange(getBitWidth(), 0, false) << ";\n";
+    OS.else_begin();
+    // Else is is a read, write to the output port.
+    OS << VFUBRAM::getOutDataBusName(getDataRegNum())
+       << printBitRange(getBitWidth(), 0, false) << " <= "
+       << BRAMArray << '[' << BRAMArray << "_addr_selector_wire"
+       << printBitRange(AddrWidth, 0, false) << "];\n";
+    OS.exit_block();
+    OS.exit_block();
+
+  } else {
+    OS.if_begin(Twine(getName()) + Twine("_selector_enable"));
+    printAsOperandImpl(OS);
+    OS << " <= " << getName() << "_selector_wire"
+       << printBitRange(getBitWidth(), 0, false)
+       << ";\n";
+    OS.exit_block();
+  }
 
   OS << "// synthesis translate_off\n";
   verifyAssignCnd(OS, Mod);
@@ -578,8 +622,13 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
        I != E; ++I) {
     VASTRegister *R = *I;
     // The output register already declared in module signature.
-    if (R->getRegType() == VASTRegister::OutputPort
-        || R->getRegType() == VASTRegister::Virtual) continue;
+    switch (R->getRegType()) {
+    default: break;
+    case VASTRegister::OutputPort:
+    case VASTRegister::Virtual:
+    case VASTRegister::BRAM:
+      continue;
+    }
 
     R->printDecl(OS);
     OS << "\n";
@@ -591,7 +640,9 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
        I != E; ++I) {
     VASTRegister *R = *I;
 
-    if (R->getRegType() == VASTRegister::Virtual) continue;
+    if (R->getRegType() == VASTRegister::Virtual
+        || R->getRegType()== VASTRegister::BRAM)
+      continue;
 
     if (R->printReset(OS)) OS << "\n";
   }

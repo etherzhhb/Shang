@@ -304,7 +304,7 @@ let mayLoad      = 1,
                        (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable,
                         i8imm:$bramnum),
                        "$dst = bram $src, $addr, $isStore, $byteenable, $bramnum",
-                       [], FUBRam, 1 /*writeUntilFinish*/>;
+                       [], FUBRam, 0 /*writeUntilFinish*/>;
 }
 
 def ImpUse : InstVTM<(outs), (ins variable_ops), "imp-use", [], FUTrivial>;

@@ -706,19 +706,16 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       InitFilePath = VBEMangle(Initializer->getName()) + "_init.txt";
 
     // Create the enable signal for bram.
-    VM->addRegister(VFUBRAM::getEnableName(BramNum), 1);
-    VM->addRegister(VFUBRAM::getWriteEnableName(BramNum), 1);
-    VM->addRegister(VFUBRAM::getInDataBusName(BramNum), DataWidth);
-    VM->addRegister(VFUBRAM::getAddrBusName(BramNum), AddrWidth);
-    VASTRegister *BRAMOut = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
-                                            DataWidth, 0, VASTRegister::Virtual,
-                                            BramNum);
+    VASTRegister *BRAMArray = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
+                                              DataWidth, AddrWidth,
+                                              VASTRegister::BRAM, BramNum);
     // Used in template.
-    BRAMOut->Pin();
+    BRAMArray->Pin();
+
     S << "// Addrspace: " << I->first;
     if (Info.Initializer) S << *Info.Initializer;
     S << '\n';
-    indexVASTRegister(BramNum, BRAMOut);
+    indexVASTRegister(BramNum, BRAMArray);
     // FIXME: Get the file name from the initializer name.
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 DataWidth, AddrWidth, InitFilePath)
@@ -1109,10 +1106,6 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
   case VFUs::CalleeFN:
     EnablePort =  lookupSignal(MI->getOperand(0).getReg() + 1);
     break;
-  case VFUs::BRam:
-    EnablePort =
-      VM->getSymbol(VFUBRAM::getEnableName(MI->getOperand(0).getReg()));
-    break;
   default:
     llvm_unreachable("Unexpected FU to disable!");
     break;
@@ -1283,32 +1276,21 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   unsigned SizeInBytes = FInfo->getBRamInfo(BRamID).ElemSizeInBytes;
   unsigned Alignment = Log2_32_Ceil(SizeInBytes);
 
-  std::string RegName = VFUBRAM::getAddrBusName(FUNum);
-  VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
   VASTValPtr Addr = getAsOperand(MI->getOperand(1));
   Addr = Builder->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
-  VM->addAssignment(R, Addr, Slot, Cnds, MI);
-  // Assign store data.
-  RegName = VFUBRAM::getInDataBusName(FUNum);
-  R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds, MI);
-  // And write enable.
-  RegName = VFUBRAM::getWriteEnableName(FUNum);
-  R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds, MI);
-  // The byte enable.
-  //RegName = VFUBRAM::getByteEnableName(FUNum) + "_r";
-  //R = VM->getSymbol<VASTRegister>(RegName);
-  //VM->addAssignment(R, getAsOperand(MI->getOperand(4)), Slot, Cnds);
-
-  // Remember we enabled the memory bus at this slot.
-  std::string EnableName = VFUBRAM::getEnableName(FUNum);
-  VASTValPtr MemEn = VM->getSymbol(EnableName);
-
-  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
-  addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
-
-  // Remember the output register of block ram is defined at next slot.
+  
+  VASTRegister *BRAMArray = getAsLValue<VASTRegister>(MI->getOperand(0));
+  
+  if (VInstrInfo::mayStore(MI)) {
+    VASTValPtr Data = getAsOperand(MI->getOperand(2));
+    VASTValPtr WriteBRAM = Builder->buildExpr(VASTExpr::dpWrBRAM, Addr, Data,
+                                              SizeInBytes * 8);
+    VM->addAssignment(BRAMArray, WriteBRAM, Slot, Cnds, MI);
+  } else {
+    VASTValPtr ReadBRAM = Builder->buildExpr(VASTExpr::dpRdBRAM, Addr,
+                                             SizeInBytes * 8);
+    VM->addAssignment(BRAMArray, ReadBRAM, Slot, Cnds, MI);
+  }
 }
 
 MachineBasicBlock::iterator
