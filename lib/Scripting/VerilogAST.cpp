@@ -351,6 +351,8 @@ bool VASTRegister::printReset(raw_ostream &OS) const {
 }
 
 void VASTRegister::printSelector(raw_ostream &OS) const {
+  if (Assigns.empty()) return;
+
   SmallVector<VASTValPtr, 8> MuxOperands;
 
   for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
