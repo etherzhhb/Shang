@@ -353,34 +353,58 @@ bool VASTRegister::printReset(raw_ostream &OS) const {
 void VASTRegister::printSelector(raw_ostream &OS) const {
   if (Assigns.empty()) return;
 
-  SmallVector<VASTValPtr, 8> MuxOperands;
+  typedef std::vector<VASTValPtr> OrVec;
+  typedef std::map<VASTValPtr, OrVec> CSEMapTy;
+  typedef CSEMapTy::iterator it;
+  CSEMapTy SrcCSEMap;
 
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
-    MuxOperands.push_back(I->first);
-    MuxOperands.push_back(*I->second);
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+    SrcCSEMap[*I->second].push_back(I->first);
+
+  // Create the temporary signal.
+  OS << "// Combinational MUX\n"
+     << "reg " << VASTValue::printBitRange(getBitWidth(), 0, false)
+     << ' ' << getName() << "_selector_wire;\n"
+     << "reg " << ' ' << getName() << "_selector_enable;\n";
+
+  // Print the mux logic.
+  OS << "always @(*)begin  // begin mux logic\n";
+  OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
+
+  for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
+    OS.indent(4) << '(';
+
+    OrVec &Ors = I->second;
+    for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
+      OI->printAsOperand(OS);
+      OS << '|';
+    }
+
+    OS << "1'b0): begin\n";
+    // Print the assignment under the condition.
+    OS.indent(6) << getName() << "_selector_wire = ";
+    I->first.printAsOperand(OS);
+    OS << ";\n";
+    // Print the enable.
+    OS.indent(6) << getName() << "_selector_enable = 1'b1;\n";
+    OS.indent(4) << "end\n";
   }
 
-  printCombMux<VASTValPtr>(OS, MuxOperands, getName(), getBitWidth());
+  // Write the default condition, otherwise latch will be inferred.
+  OS.indent(4) << "default: begin\n";
+  OS.indent(6) << getName() << "_selector_wire = " << getBitWidth() << "'bx;\n";
+  OS.indent(6) << getName() << "_selector_enable = 1'b0;\n";
+  OS.indent(4) << "end\n";
+  OS.indent(2) << "endcase\nend  // end mux logic\n\n";
 }
 
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
                                    const VASTModule *Mod) const {
   if (Assigns.empty()) return;
 
-  std::string Pred;
-  raw_string_ostream PredSS(Pred);
-  PredSS << '(';
-
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
-    I->first->printAsOperand(PredSS, false);
-    PredSS << '|';
-  }
-
-  PredSS << "1'b0)";
-  PredSS.flush();
-  OS.if_begin(Pred);
+  OS.if_begin(Twine(getName()) + Twine("_selector_enable"));
   printAsOperandImpl(OS);
-  OS << " <= " << getName() << "_mux_wire"
+  OS << " <= " << getName() << "_selector_wire"
       << printBitRange(getBitWidth(), 0, false)
       << ";\n";
   OS.exit_block();
