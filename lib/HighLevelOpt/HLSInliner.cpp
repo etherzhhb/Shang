@@ -73,8 +73,10 @@ public:
 
       Function *CurCaller = CurCS.getCaller();
 
-      // Don't try to inline F if all its caller function are not visited.
-      if (!CachedCost.count(CurCaller) && F->getNumUses() != 0)
+      // Don't try to inline F if all its caller function are not visited, but
+      // please not that CurCaller will never be visited if it do not have any
+      // user.
+      if (!CachedCost.count(CurCaller) && CurCaller->getNumUses() != 0)
         return InlineCost::getNever();
 
       if (CurCaller == CallerF) ++NumUses;
@@ -91,7 +93,7 @@ public:
     // FIXME: Read the threshold from the constraints script.
     if (IncreasedCost < Threshold) {
       DEBUG(dbgs() << "...going to inline function\n");
-      // The cost of ParentF changed.
+      // The cost of ParentF is changed.
       CachedCost.erase(CallerF);
       return InlineCost::getAlways();
     }
