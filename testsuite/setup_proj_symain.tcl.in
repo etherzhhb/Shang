@@ -11,17 +11,10 @@ project_new DUT_TOP -overwrite
 #set_global_assignment -name FAMILY [lindex $quartus(args) 0]
 #set_global_assignment -name DEVICE AUTO
 
-if {"@MAIN_RTL_ENTITY@" == "jpeg2bmp_main_IMS_ASAP_main_DUT_RTL" | "@MAIN_RTL_ENTITY@" == "adpcm_main_IMS_ASAP_main_DUT_RTL"} {
-# Target: CycloneII
-set_global_assignment -name FAMILY CycloneII
-set_global_assignment -name DEVICE EP2C70F896C6
-#set_global_assignment -name DEVICE EP2C70F672C6
-} else {
 # Target: DE2 Board
 set_global_assignment -name FAMILY CycloneII
 set_global_assignment -name DEVICE EP2C70F896C6
 #set_global_assignment -name DEVICE EP2C35F672C6
-}
 
 # Build project and specify some confige
 # =====================
@@ -30,14 +23,9 @@ set_global_assignment -name SOURCE_FILE @MAIN_RTL_SRC@
 set_global_assignment -name SOURCE_FILE @MAIN_INT_TOP@
 set_global_assignment -name SOURCE_FILE @MAIN_INT_BRAM@
 set_global_assignment -name SOURCE_FILE @MAIN_INT_BRAMINIT@
-set_global_assignment -name SDC_FILE @MAIN_SDC_SRC_ALTERA@
+set_global_assignment -name SDC_FILE @MAIN_SDC_SRC@
 set_global_assignment -name VERILOG_MACRO "quartus_synthesis"
 
-if {"@MAIN_RTL_ENTITY@" == "jpeg2bmp_main_IMS_ASAP_main_DUT_RTL" | "@MAIN_RTL_ENTITY@" == "adpcm_main_IMS_ASAP_main_DUT_RTL"} {
-
-} else {
-# Assign pins
-# =====================
 set_location_assignment PIN_T29 -to rstN
 set_location_assignment PIN_T28 -to start
 set_location_assignment PIN_W27 -to LED7[0]
@@ -49,7 +37,7 @@ set_location_assignment PIN_Y23 -to LED7[5]
 set_location_assignment PIN_AA27 -to LED7[6]
 set_location_assignment PIN_AA24 -to LED7[7]
 set_location_assignment PIN_D16 -to clk
-}
+
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 set_global_assignment -name RESERVE_ASDO_AFTER_CONFIGURATION "AS OUTPUT DRIVING AN UNSPECIFIED SIGNAL"
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD LVTTL
