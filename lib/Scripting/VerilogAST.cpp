@@ -600,8 +600,9 @@ void VASTModule::printRegisterBlocks(vlang_raw_ostream &OS) const {
 
   for (iterator I = Registers.begin(), E = Registers.end(); I != E; ++I) {
     VASTRegister *R = *I;
-
-    if (R->getRegType() == VASTRegister::Virtual) continue;
+    // Ignore the register if it do not have any fanin or it is virtual
+    if (R->num_assigns() == 0 || R->getRegType() == VASTRegister::Virtual)
+      continue;
 
     // Print the data selector of the register.
     R->printSelector(OS);
