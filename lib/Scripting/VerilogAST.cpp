@@ -446,15 +446,16 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
        << printBitRange(AddrWidth, 0, false) << ']' << " <= "
        << BRAMArray << "_data_selector_wire"
        << printBitRange(getBitWidth(), 0, false) << ";\n";
-    OS.else_begin();
+    OS.exit_block();
+
     // Else is is a read, write to the output port.
+    // To let the synthesis tools correctly infer a block RAM, the write to
+    // result register is active even the current operation is a write access.
     OS << VFUBRAM::getOutDataBusName(getDataRegNum())
        << printBitRange(getBitWidth(), 0, false) << " <= "
        << BRAMArray << '[' << BRAMArray << "_addr_selector_wire"
        << printBitRange(AddrWidth, 0, false) << "];\n";
     OS.exit_block();
-    OS.exit_block();
-
   } else {
     OS.if_begin(Twine(getName()) + Twine("_selector_enable"));
     printAsOperandImpl(OS);
