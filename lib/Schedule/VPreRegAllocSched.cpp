@@ -73,41 +73,17 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
-  struct LoopDep {
-    enum MemDepTypes {
-      TrueDep, AntiDep, OutputDep, NoDep
-    };
-
-    unsigned Dep    : 2;
-    unsigned ItDst  : 30;
-
-    LoopDep(MemDepTypes dep, unsigned itDst)
-      : Dep(dep), ItDst(itDst) {}
-
-    LoopDep() : Dep(LoopDep::NoDep), ItDst(0) {}
-
-    bool hasDep() const {
-      return Dep != LoopDep::NoDep ;
-    }
-
-    unsigned getItDst() const { return ItDst; }
-
-    MemDepTypes getDepType() const {
-      return (MemDepTypes)Dep;
-    }
-  };
-
-  LoopDep analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
-                         bool SrcLoad, bool DstLoad, Loop &L, bool SrcBeforeDest);
+  int analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
+                     bool SrcLoad, bool DstLoad, Loop &L, bool SrcBeforeDest);
 
 
-  LoopDep advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
-                                   MachineMemOperand *DstAddr,
-                                   bool SrcLoad, bool DstLoad, Loop &L,
-                                   bool SrcBeforeDest, unsigned ElSizeInByte);
+  int advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
+                               MachineMemOperand *DstAddr,
+                               bool SrcLoad, bool DstLoad, Loop &L,
+                               bool SrcBeforeDest, unsigned ElSizeInByte);
 
-  LoopDep createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
-                        int Diff = 0);
+  int createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+                    int Diff = 0);
   unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
   unsigned calculateLatencyFromEntry(VSUnit *U) const;
 
@@ -285,11 +261,10 @@ void VPreRegAllocSched::print(raw_ostream &O, const Module *M) const {}
 VPreRegAllocSched::~VPreRegAllocSched() {}
 
 //===----------------------------------------------------------------------===//
-VPreRegAllocSched::LoopDep
-VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
-                                  MachineMemOperand *DstAddr,
-                                  bool SrcLoad, bool DstLoad,
-                                  Loop &L, bool SrcBeforeDest) {
+int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
+                                      MachineMemOperand *DstAddr,
+                                      bool SrcLoad, bool DstLoad,
+                                      Loop &L, bool SrcBeforeDest) {
   uint64_t SrcSize = SrcAddr->getSize();
   uint64_t DstSize = DstAddr->getSize();
   Value *SrcAddrVal = const_cast<Value*>(SrcAddr->getValue()),
@@ -306,11 +281,11 @@ VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
     if (isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
       return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
     else
-      return LoopDep();
+      return -1;
   }
 
   if (!isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
-    return LoopDep();
+    return -1;
 
   // We can only handle two access have the same element size.
   if (SrcSize == DstSize)
@@ -321,12 +296,11 @@ VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
   return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
 }
 
-VPreRegAllocSched::LoopDep
-VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
-                                            MachineMemOperand *DstAddr,
-                                            bool SrcLoad, bool DstLoad,
-                                            Loop &L, bool SrcBeforeDest,
-                                            unsigned ElSizeInByte) {
+int VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
+                                                MachineMemOperand *DstAddr,
+                                                bool SrcLoad, bool DstLoad,
+                                                Loop &L, bool SrcBeforeDest,
+                                                unsigned ElSizeInByte) {
   const SCEV *SSAddr =
     SE->getSCEVAtScope(getMachineMemOperandSCEV(SrcAddr, SE), &L);
   const SCEV *SDAddr =
@@ -344,15 +318,14 @@ VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
       return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest,
                            ItDistance / ElSizeInByte);
     else
-      return LoopDep();
+      return -1;
   }
 
   return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
 }
 
-VPreRegAllocSched::LoopDep
-VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
-                                 int Diff) {
+int VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad,
+                                     bool SrcBeforeDest, int Diff) {
    if (!SrcBeforeDest && (Diff == 0)) Diff = 1;
 
    assert(Diff >= 0 && "Do not create a dependence with diff small than 0!");
@@ -361,14 +334,14 @@ VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
    // WAW
    if (!SrcLoad && !DstLoad ) {
      DEBUG(dbgs() << " Out " << Diff << '\n');
-     return LoopDep(LoopDep::OutputDep, Diff);
+     return Diff;
    }
 
    if (!SrcLoad && DstLoad)
      SrcBeforeDest = !SrcBeforeDest;
 
    DEBUG(dbgs() << " Anti/True " << Diff << '\n');
-   return LoopDep(SrcBeforeDest ? LoopDep::AntiDep : LoopDep::TrueDep, Diff);
+   return Diff;
 }
 
 static inline bool mayAccessMemory(const MCInstrDesc &TID) {
@@ -446,24 +419,24 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
         // Dst not depend on Src if they are mutual exclusive.
         if (MayBothActive) {
           // Compute the iterate distance.
-          LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL,
+          int DepDst = analyzeLoopDep(SrcMO, DstMO,isSrcLoad, isDstLoad, *IRL,
                                       true);
 
-          if (LD.hasDep()) {
+          if (DepDst >= 0) {
             unsigned Latency = G.getStepsToFinish(SrcMI);
-            DstU->addDep<true>(SrcU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
+            DstU->addDep<true>(SrcU, VDEdge::CreateMemDep(Latency, DepDst));
           }
         }
 
         // We need to compute if Src depend on Dst even if Dst not depend on Src.
         // Because dependence depends on execute order, if SrcMI and DstMI are
         // mutual exclusive.
-        LoopDep LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL,
+        int DepDst = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL,
                                     false);
 
-        if (LD.hasDep()) {
+        if (DepDst >=0 ) {
           unsigned Latency = G.getStepsToFinish(SrcMI);
-          SrcU->addDep<true>(DstU, VDEdge::CreateMemDep(Latency, LD.getItDst()));
+          SrcU->addDep<true>(DstU, VDEdge::CreateMemDep(Latency, DepDst));
         }
       } else if (MayBothActive) {
         unsigned Latency = G.getStepsToFinish(SrcMI);
