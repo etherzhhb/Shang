@@ -1286,6 +1286,9 @@ const char *VASTExpr::StandarFUName[] = {
     "shang_ucmp",
     // Mux in datapath.
     0,
+    // Read/Write block RAM.
+    0,
+    0,
     // Blackbox,
     0
 };
