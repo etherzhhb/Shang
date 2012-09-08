@@ -698,26 +698,51 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned BramNum = Info.PhyRegNum;
     //const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
-    unsigned AddrWidth = std::max(Log2_32_Ceil(NumElem), 2u);
+    unsigned AddrWidth = Log2_32_Ceil(NumElem);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string InitFilePath = "";
-    if (const GlobalVariable *Initializer =
-        dyn_cast_or_null<GlobalVariable>(Info.Initializer))
-      InitFilePath = VBEMangle(Initializer->getName()) + "_init.txt";
+    const GlobalVariable *Initializer =
+      dyn_cast_or_null<GlobalVariable>(Info.Initializer);
 
-    // Create the enable signal for bram.
+    // If there is only 1 element, simply replace the block RAM by a register.
+    if (NumElem == 1) {
+      uint64_t InitVal = 0;
+      if (Initializer) {
+        // Try to retrieve the initialize value of the register, it may be a
+        // ConstantInt or ConstPointerNull, we can safely ignore the later case
+        // since the InitVal is default to 0.
+        const ConstantInt *CI
+          = dyn_cast_or_null<ConstantInt>(Initializer->getInitializer());
+        assert((CI || !Initializer->hasInitializer()
+                || isa<ConstantPointerNull>(Initializer->getInitializer()))
+               && "Unexpected initialier!");
+        if (CI) InitVal = CI->getZExtValue();
+      }
+
+      VASTRegister *R = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
+                                        DataWidth, InitVal, VASTRegister::Data,
+                                        BramNum);
+      indexVASTRegister(BramNum, R);
+      continue;
+    }
+
+    // Create the block RAM object.
     VASTRegister *BRAMArray = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
                                               DataWidth, AddrWidth,
                                               VASTRegister::BRAM, BramNum);
     // Used in template.
     BRAMArray->Pin();
-
-    S << "// Addrspace: " << I->first;
-    if (Info.Initializer) S << *Info.Initializer;
-    S << '\n';
     indexVASTRegister(BramNum, BRAMArray);
-    // FIXME: Get the file name from the initializer name.
-    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
+
+    // Set the initialize file's name if there is any.
+    if (Initializer)
+      InitFilePath = VBEMangle(Initializer->getName()) + "_init.txt";
+
+    // Generate the code for the block RAM.
+    S << "// Address space: " << I->first;
+    if (Info.Initializer) S << *Info.Initializer;
+    S << '\n'
+      << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 DataWidth, AddrWidth, InitFilePath)
       << '\n';
   }
@@ -1280,8 +1305,18 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   Addr = Builder->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
   
   VASTRegister *BRAMArray = getAsLValue<VASTRegister>(MI->getOperand(0));
-  
-  if (VInstrInfo::mayStore(MI)) {
+  bool IsWrite = VInstrInfo::mayStore(MI);
+  if (BRAMArray->getRegType() != VASTRegister::BRAM) {
+    // If the block RAM is replaced by a register, we can ignore the read
+    // operation.
+    if (IsWrite)
+      VM->addAssignment(BRAMArray, getAsOperand(MI->getOperand(2)),
+                        Slot, Cnds, MI);
+
+    return;
+  }
+
+  if (IsWrite) {
     VASTValPtr Data = getAsOperand(MI->getOperand(2));
     VASTValPtr WriteBRAM = Builder->buildExpr(VASTExpr::dpWrBRAM, Addr, Data,
                                               SizeInBytes * 8);
