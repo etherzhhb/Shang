@@ -698,7 +698,6 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned BramNum = Info.PhyRegNum;
     //const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
-    unsigned AddrWidth = Log2_32_Ceil(NumElem);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string InitFilePath = "";
     const GlobalVariable *Initializer =
@@ -728,7 +727,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
     // Create the block RAM object.
     VASTRegister *BRAMArray = VM->addRegister(VFUBRAM::getOutDataBusName(BramNum),
-                                              DataWidth, AddrWidth,
+                                              DataWidth, NumElem,
                                               VASTRegister::BRAM, BramNum);
     // Used in template.
     BRAMArray->Pin();
@@ -743,7 +742,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     if (Info.Initializer) S << *Info.Initializer;
     S << '\n'
       << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
-                                DataWidth, AddrWidth, InitFilePath)
+                                DataWidth, NumElem, InitFilePath)
       << '\n';
   }
 }

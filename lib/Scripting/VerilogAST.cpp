@@ -420,8 +420,10 @@ void VASTRegister::printSelector(raw_ostream &OS) const {
     }
 
     // DIRTYHACK: The size of address bus is stored in the InitVal.
-    assert(!AddrCSEMap.empty() && "Unexpected zero address bus fanin!");    
-    PrintSelector(OS, Twine(BRAMArray) + "_addr", InitVal, AddrCSEMap);
+    assert(!AddrCSEMap.empty() && "Unexpected zero address bus fanin!");
+    unsigned BlockRAMSize = InitVal;
+    unsigned AddrWidth = Log2_32_Ceil(BlockRAMSize);
+    PrintSelector(OS, Twine(BRAMArray) + "_addr", AddrWidth, AddrCSEMap);
 
     // Only create the selector if there is any fanin to the data port.
     if (!DataCSEMap.empty())
@@ -444,7 +446,8 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
     const std::string &BRAMArray = VFUBRAM::getArrayName(getDataRegNum());
 
     // DIRTYHACK: The size of address bus is stored in the InitVal.
-    unsigned AddrWidth = InitVal;
+    unsigned BlockRAMSize = InitVal;
+    unsigned AddrWidth = Log2_32_Ceil(BlockRAMSize);
     // The block RAM is active if the address bus is active.
     OS.if_begin(Twine(BRAMArray) + "_addr" + "_selector_enable");
     // Check if there is any write to the block RAM.

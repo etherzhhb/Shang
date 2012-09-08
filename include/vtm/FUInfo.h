@@ -318,7 +318,7 @@ public:
   VFUBRAM(luabind::object FUTable);
 
   std::string generateCode(const std::string &Clk, unsigned Num,
-                           unsigned DataWidth, unsigned AddrWidth,
+                           unsigned DataWidth, unsigned Size,
                            std::string Filename) const;
 
   static inline bool classof(const VFUBRAM *A) {

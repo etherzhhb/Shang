@@ -250,13 +250,13 @@ void FuncUnitId::dump() const {
 }
 
 std::string VFUBRAM::generateCode(const std::string &Clk, unsigned Num,
-                                  unsigned DataWidth, unsigned AddrWidth,
+                                  unsigned DataWidth, unsigned Size,
                                   std::string Filename) const {
   std::string Script;
   raw_string_ostream ScriptBuilder(Script);
 
   std::string ResultName = "bram" + utostr_32(Num) + "_"
-                           + utostr_32(DataWidth) + "x" + utostr_32(AddrWidth)
+                           + utostr_32(DataWidth) + "x" + utostr_32(Size)
                            + "_result";
   // FIXME: Use LUA api directly?
   // Call the preprocess function.
@@ -266,7 +266,7 @@ std::string VFUBRAM::generateCode(const std::string &Clk, unsigned Num,
                 << "input=[=[" << Template <<"]=],"
   // And the look up.
                 << "lookup={ "
-                << "datawidth=" << DataWidth << ", addrwidth=" << AddrWidth
+                << "datawidth=" << DataWidth << ", size=" << Size
                 << ", num=" << Num << ", filepath="
                 << "[[" << InitFileDir << "]]" << ", filename=" << "[[" << Filename
                 << "]]" << ", empty=" << "[[" << " " << "]]"
