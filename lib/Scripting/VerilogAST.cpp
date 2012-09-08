@@ -593,20 +593,9 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
     if (W->getAssigningValue() && (W->isPinned() || !W->use_empty()))
       W->printAssignment(OS);
   }
-
-  // Print the MUXs for the registers.
-  typedef RegisterVector::const_iterator iterator;
-
-  for (iterator I = Registers.begin(), E = Registers.end(); I != E; ++I) {
-    VASTRegister *R = *I;
-
-    if (R->getRegType() == VASTRegister::Virtual) continue;
-
-    R->printSelector(OS);
-  }
 }
 
-void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
+void VASTModule::printRegisterBlocks(vlang_raw_ostream &OS) const {
   typedef RegisterVector::const_iterator iterator;
 
   for (iterator I = Registers.begin(), E = Registers.end(); I != E; ++I) {
@@ -614,7 +603,22 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
 
     if (R->getRegType() == VASTRegister::Virtual) continue;
 
+    // Print the data selector of the register.
+    R->printSelector(OS);
+
+    bool IsDataRegister = R->getRegType() != VASTRegister::BRAM;
+    OS.always_ff_begin(IsDataRegister);
+    // Print the sequential logic of the register.
+    if (IsDataRegister) {
+      // Reset the register.
+      if (R->printReset(OS)) OS << "\n";
+      OS.else_begin();
+    }
+
+    // Print the assignment.
     R->printAssignment(OS, this);
+
+    OS.always_ff_end(IsDataRegister);
   }
 }
 
@@ -654,19 +658,6 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 
     R->printDecl(OS);
     OS << "\n";
-  }
-}
-
-void VASTModule::printRegisterReset(raw_ostream &OS) {
-  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
-       I != E; ++I) {
-    VASTRegister *R = *I;
-
-    if (R->getRegType() == VASTRegister::Virtual
-        || R->getRegType()== VASTRegister::BRAM)
-      continue;
-
-    if (R->printReset(OS)) OS << "\n";
   }
 }
 

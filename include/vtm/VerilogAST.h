@@ -1088,6 +1088,8 @@ public:
   /*VASTUse getConstantValue() const;*/
 
   void printSelector(raw_ostream &OS) const;
+
+  // Print data transfer between registers.
   void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
   // Return true if the reset is actually printed.
   bool printReset(raw_ostream &OS) const;
@@ -1217,7 +1219,7 @@ public:
   const std::string &getName() const { return Name; }
 
   void printDatapath(raw_ostream &OS) const;
-  void printRegisterAssign(vlang_raw_ostream &OS) const;
+  void printRegisterBlocks(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
   void buildSlotLogic(VASTExprBuilder &Builder);
@@ -1395,7 +1397,6 @@ public:
   VASTWire *assignWithExtraDelay(VASTWire *W, VASTValPtr V, unsigned latency);
 
   void printSignalDecl(raw_ostream &OS);
-  void printRegisterReset(raw_ostream &OS);
 
   void print(raw_ostream &OS) const;
 

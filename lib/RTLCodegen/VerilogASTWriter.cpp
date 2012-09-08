@@ -128,14 +128,15 @@ bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
   Out << VM->getDataPathStr();
   VM->printDatapath(Out);
 
+  // Sequential logic of the registers.
+  VM->printRegisterBlocks(Out);
+
   Out << "\n\n";
   Out << "// Always Block\n";
   Out.always_ff_begin();
 
-  VM->printRegisterReset(Out);
   Out.else_begin();
 
-  VM->printRegisterAssign(Out);
   Out << VM->getControlBlockStr();
 
   Out.always_ff_end();

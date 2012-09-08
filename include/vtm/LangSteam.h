@@ -205,13 +205,21 @@ public:
     unsigned Ind = 0)
     : lang_raw_ostream<VerilogTraits>(Stream, Delete) {}
 
-  vlang_raw_ostream &always_ff_begin(const std::string &Clk = "clk",
+  vlang_raw_ostream &always_ff_begin(bool PrintReset = true,
+                                     const std::string &Clk = "clk",
                                      const std::string &ClkEdge = "posedge",
                                      const std::string &Rst = "rstN",
                                      const std::string &RstEdge = "negedge") {
-    *this << "always @(" << ClkEdge << " "<< Clk <<", "
-                         << RstEdge << " " << Rst <<")";
+    *this << "always @(" << ClkEdge << " " << Clk;
+
+    if (PrintReset) *this << ", " << RstEdge << " " << Rst;
+
+    *this << ")";
+
     enter_block();
+
+    if (!PrintReset) return *this;
+
     *this << "if (";
     // negative edge reset?
     if (RstEdge == "negedge")
@@ -221,8 +229,8 @@ public:
     return *this;
   }
 
-  vlang_raw_ostream &always_ff_end() {
-    exit_block("//else reset\n");
+  vlang_raw_ostream &always_ff_end(bool ExitReset = true) {
+    if (ExitReset) exit_block("//else reset\n");
     exit_block("//always @(..)\n\n");
     return *this;
   }
