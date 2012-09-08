@@ -1,3 +1,5 @@
+FUs.BRam.Prefix = [=[altsyncram:]=]
+
 AlteraRunOnDatapath = [=[
 #local Slack = RTLDatapath.Slack
 #local DstName = RTLDatapath.Nodes[1].Name

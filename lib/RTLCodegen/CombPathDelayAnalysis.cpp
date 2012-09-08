@@ -189,14 +189,22 @@ static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
   return PathDelay;
 }
 
-static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
-  if (const VASTWire *W = dyn_cast<VASTWire>(V))
-    // Do not trust the name of the assign condition, it is the pointer to the
-    // defining MachineInstr.
-    if (W->getWireType() == VASTWire::AssignCond)
-      return false;
-
+static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {  
   if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
+    if (const VASTWire *W = dyn_cast<VASTWire>(V))
+      // Do not trust the name of the assign condition, it is the pointer to the
+      // defining MachineInstr.
+      if (W->getWireType() == VASTWire::AssignCond)
+        return false;
+
+    if (const VASTRegister *R = dyn_cast<VASTRegister>(V))
+      // The block RAM should be printed as Prefix + ArrayName in the script.
+      if (R->getRegType() == VASTRegister::BRAM) {
+        OS << " { Name ='" << getFUDesc<VFUBRAM>()->getPrefix()
+           << VFUBRAM::getArrayName(R->getDataRegNum()) << "' }";
+        return true;
+      }
+
     if (const char *N = NV->getName()) {
       OS << " { Name ='" << N << "' }";
       return true;

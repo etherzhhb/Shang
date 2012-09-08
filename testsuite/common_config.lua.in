@@ -1,22 +1,14 @@
 FUs.MemoryBus = { Latency= 1.0, StartInterval=1, AddressWidth=@POINTER_SIZE_IN_BITS@, DataWidth=64 }
+
 FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Template=[=[
 // Block Ram $(num)
-reg   [$(datawidth - 1):0]  bram$(num)out;
-reg   [$(datawidth - 1):0]  mem$(num)[0:$(2^addrwidth-1)];
+reg  [$(datawidth - 1):0]  bram$(num)out;
+reg  [$(datawidth - 1):0]  bram$(num)array[0:$(2^addrwidth-1)];
 
 #if filename ~= [[]] then
 initial
-    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", mem$(num));
+    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", bram$(num)array);
 #end
-
-always @ (posedge $(clk)) begin
-  if (bram$(num)en_mux_wire) begin
-    if (bram$(num)we_mux_wire)
-      mem$(num)[bram$(num)addr_mux_wire] <= bram$(num)in_mux_wire;
-
-    bram$(num)out <= mem$(num)[bram$(num)addr_mux_wire];
-  end
-end
 ]=]}
 
 FUs.CommonTemplate =[=[

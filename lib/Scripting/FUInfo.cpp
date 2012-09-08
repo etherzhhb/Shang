@@ -201,6 +201,7 @@ VFUBRAM::VFUBRAM(luabind::object FUTable)
             getProperty<unsigned>(FUTable, "StartInterval"),
             0, &VFUs::BRamLatency),
     DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
+    Prefix(getProperty<std::string>(FUTable, "Prefix")),
     Template(getProperty<std::string>(FUTable, "Template")),
     InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){
   *LatencyTable = getProperty<float>(FUTable, "Latency");
