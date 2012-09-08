@@ -698,7 +698,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned BramNum = Info.PhyRegNum;
     //const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
-    unsigned AddrWidth = std::max(Log2_32_Ceil(NumElem), 1u);
+    unsigned AddrWidth = std::max(Log2_32_Ceil(NumElem), 2u);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string InitFilePath = "";
     if (const GlobalVariable *Initializer =
