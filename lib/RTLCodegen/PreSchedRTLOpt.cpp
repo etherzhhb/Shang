@@ -301,7 +301,6 @@ void PreSchedRTLOpt::buildDatapath(MachineBasicBlock &MBB) {
     ++I;
 
   typedef MachineBasicBlock::instr_iterator instr_iterator;
-  instr_iterator InsertPos = I;
   while (I != E) {
     MachineInstr *MI = I++;
 
