@@ -259,7 +259,7 @@ float64 roundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig)
 #ifdef __cplusplus
 extern "C" {
 #endif
-float64 float64_div (float64 a, float64 b) __attribute__ ((noinline));
+
 float64 float64_div (float64 a, float64 b)
 {
   flag aSign, bSign, zSign;

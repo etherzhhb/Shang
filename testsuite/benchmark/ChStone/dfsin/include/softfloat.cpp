@@ -228,7 +228,6 @@ static float64 roundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig)
 | Bit 63 of `zSig' must be zero, and `zExp' must be 1 less than the ``true''
 | floating-point exponent.
 *----------------------------------------------------------------------------*/
-static float64 normalizeRoundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig) __attribute__ ((noinline));
 static float64 normalizeRoundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig)
 {
   int8 shiftCount;
@@ -243,7 +242,6 @@ static float64 normalizeRoundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig
 | to the double-precision floating-point format.  The conversion is performed
 | according to the IEC/IEEE Standard for Binary Floating-Point Arithmetic.
 *----------------------------------------------------------------------------*/
-float64 int32_to_float64 (int32 a) __attribute__ ((noinline));
 float64 int32_to_float64 (int32 a)
 {
   flag zSign;
@@ -426,7 +424,6 @@ normalizeRoundAndPack:
 | and `b'.  The operation is performed according to the IEC/IEEE Standard for
 | Binary Floating-Point Arithmetic.
 *----------------------------------------------------------------------------*/
-float64 float64_add (float64 a, float64 b) __attribute__ ((noinline));
 float64 float64_add (float64 a, float64 b)
 {
   flag aSign, bSign;
@@ -445,7 +442,6 @@ float64 float64_add (float64 a, float64 b)
 | `a' and `b'.  The operation is performed according to the IEC/IEEE Standard
 | for Binary Floating-Point Arithmetic.
 *----------------------------------------------------------------------------*/
-float64 float64_mul (float64 a, float64 b) __attribute__ ((noinline));
 float64 float64_mul (float64 a, float64 b)
 {
   flag aSign, bSign, zSign;
@@ -512,7 +508,6 @@ float64 float64_mul (float64 a, float64 b)
 | by the corresponding value `b'.  The operation is performed according to
 | the IEC/IEEE Standard for Binary Floating-Point Arithmetic.
 *----------------------------------------------------------------------------*/
-float64 float64_div (float64 a, float64 b) __attribute__ ((noinline));
 float64 float64_div (float64 a, float64 b)
 {
   flag aSign, bSign, zSign;
@@ -596,7 +591,6 @@ float64 float64_div (float64 a, float64 b)
 | performed according to the IEC/IEEE Standard for Binary Floating-Point
 | Arithmetic.
 *----------------------------------------------------------------------------*/
-flag float64_le (float64 a, float64 b) __attribute__ ((noinline));
 flag float64_le (float64 a, float64 b)
 {
   flag aSign, bSign;
@@ -615,7 +609,6 @@ flag float64_le (float64 a, float64 b)
 
 }
 
-flag float64_ge (float64 a, float64 b) __attribute__ ((noinline));
 flag float64_ge (float64 a, float64 b)
 {
   return float64_le (b, a);

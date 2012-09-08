@@ -130,7 +130,6 @@ flag extractFloat64Sign (float64 a) {
 #ifdef __cplusplus
 extern "C" {
 #endif
-// static void normalizeFloat64Subnormal (bits64 aSig, int16 * zExpPtr, bits64 * zSigPtr) __attribute__ ((noinline));
 void normalizeFloat64Subnormal (bits64 aSig, int16 * zExpPtr, bits64 * zSigPtr) {
   int8 shiftCount;
 
@@ -188,7 +187,6 @@ float64 packFloat64 (flag zSign, int16 zExp, bits64 zSig) {
 #ifdef __cplusplus
 extern "C" {
 #endif
-// static float64 roundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig) __attribute__ ((noinline));
 float64 roundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig) {
   int8 roundingMode;
   flag roundNearestEven, isTiny;
@@ -260,7 +258,6 @@ float64 roundAndPackFloat64 (flag zSign, int16 zExp, bits64 zSig) {
 #ifdef __cplusplus
 extern "C" {
 #endif
-float64 float64_mul (float64 a, float64 b) __attribute__ ((noinline));
 float64 float64_mul (float64 a, float64 b) {
   flag aSign, bSign, zSign;
   int16 aExp, bExp, zExp;

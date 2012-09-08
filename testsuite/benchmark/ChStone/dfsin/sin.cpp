@@ -46,7 +46,7 @@ float64 float64_abs (float64 x)
 {
   return (x & 0x7fffffffffffffffULL);
 }
-float64 sin (float64 rad) __attribute__ ((noinline));
+
 float64 sin (float64 rad) 
 {
   float64 app;

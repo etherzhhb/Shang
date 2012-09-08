@@ -893,7 +893,6 @@ void memcpy_blowfish (BF_LONG * s1, const BF_LONG * s2, int n)
 }
 
 /////////////////////////////////////////////////////
-void BF_set_key (int len, unsigned char *data) __attribute__ ((noinline));
 void BF_set_key (int len, unsigned char *data)
 {
   int i;
@@ -953,9 +952,7 @@ void BF_set_key (int len, unsigned char *data)
 }
 
 /////////////////////////////////////////////////////
-void BF_cfb64_encrypt (unsigned char *in, unsigned char *out, long length, unsigned char *ivec, int *num, int encrypt) __attribute__ ((noinline));
 void BF_cfb64_encrypt (unsigned char *in, unsigned char *out, long length, unsigned char *ivec, int *num, int encrypt)
-
 {
   register BF_LONG v0, v1, t;
   register int n;

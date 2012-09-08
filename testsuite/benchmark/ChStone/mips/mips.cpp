@@ -98,7 +98,7 @@ int dmem[64] = {0};
 #ifdef __cplusplus
 extern "C" {
 #endif
-int mips() __attribute__ ((noinline));
+
 int mips() {
   long long hilo;
   int reg[32];

@@ -49,7 +49,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void Initialize_Buffer() __attribute__ ((noinline));
+
 void
 Initialize_Buffer ()
 {
