@@ -2,7 +2,7 @@ FUs.MemoryBus = { Latency= 1.0, StartInterval=1, AddressWidth=@POINTER_SIZE_IN_B
 
 FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Template=[=[
 // Block Ram $(num)
-reg  [$(datawidth - 1):0]  bram$(num)out;
+reg  [$(datawidth - 1):0]  bram$(num)arrayout;
 reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
 
 #if filename ~= [[]] then

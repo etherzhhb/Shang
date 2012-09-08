@@ -339,7 +339,7 @@ public:
 
   // Signal names of the function unit.
   inline static std::string getOutDataBusName(unsigned FUNum) {
-    return "bram" + utostr(FUNum) + "out";
+    return "bram" + utostr(FUNum) + "arrayout";
   }
 
   inline static std::string getArrayName(unsigned FUNum) {
