@@ -143,6 +143,9 @@ bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
 std::pair<const Value*, int64_t>
 extractPointerAndOffset(const Value *V, int64_t Offset);
 
+// Loop dependency Analysis.
+int getLoopDepDist(bool SrcBeforeDest, int Distance = 0);
+
 class MachineBasicBlock;
 class TargetInstrInfo;
 void fixTerminators(MachineBasicBlock *MBB);

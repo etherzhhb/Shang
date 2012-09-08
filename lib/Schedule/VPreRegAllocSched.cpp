@@ -81,9 +81,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                                MachineMemOperand *DstAddr,
                                bool SrcLoad, bool DstLoad, Loop &L,
                                bool SrcBeforeDest, unsigned ElSizeInByte);
-
-  int createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
-                    int Diff = 0);
   unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
   unsigned calculateLatencyFromEntry(VSUnit *U) const;
 
@@ -279,7 +276,7 @@ int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
     // FIXME: What about nested loops?
     // Loop Invariant, let AA decide.
     if (isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
-      return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
+      return getLoopDepDist(SrcBeforeDest);
     else
       return -1;
   }
@@ -293,7 +290,7 @@ int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
                                     L, SrcBeforeDest, SrcSize);
 
   // Cannot handle, simply assume dependence occur.
-  return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
+  return getLoopDepDist(SrcBeforeDest);
 }
 
 int VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
@@ -315,33 +312,12 @@ int VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
     if (ItDistance >= 0)
       // The pointer distance is in Byte, but we need to get the distance in
       // Iteration.
-      return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest,
-                           ItDistance / ElSizeInByte);
+      return getLoopDepDist(SrcBeforeDest, ItDistance / ElSizeInByte);
     else
       return -1;
   }
 
-  return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
-}
-
-int VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad,
-                                     bool SrcBeforeDest, int Diff) {
-   if (!SrcBeforeDest && (Diff == 0)) Diff = 1;
-
-   assert(Diff >= 0 && "Do not create a dependence with diff small than 0!");
-   assert(!(SrcLoad && DstLoad) && "Do not create a RAR dep!");
-
-   // WAW
-   if (!SrcLoad && !DstLoad ) {
-     DEBUG(dbgs() << " Out " << Diff << '\n');
-     return Diff;
-   }
-
-   if (!SrcLoad && DstLoad)
-     SrcBeforeDest = !SrcBeforeDest;
-
-   DEBUG(dbgs() << " Anti/True " << Diff << '\n');
-   return Diff;
+  return getLoopDepDist(SrcBeforeDest);
 }
 
 static inline bool mayAccessMemory(const MCInstrDesc &TID) {

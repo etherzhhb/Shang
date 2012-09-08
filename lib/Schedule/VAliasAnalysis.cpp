@@ -283,4 +283,11 @@ MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
   // Cannot go any further, cause the AliasAnalysis is not offset aware.
   return AliasAnalysis::MayAlias;
 }
+
+int getLoopDepDist(bool SrcBeforeDest, int Distance){
+  if (!SrcBeforeDest && (Distance == 0)) Distance = 1;
+
+  assert(Distance >= 0 && "Do not create a dependence with diff small than 0!");
+  return Distance;
+}
 }
