@@ -65,10 +65,6 @@ private:
   typedef std::map<std::pair<FuncUnitId, unsigned>, InstSetTy> RTType;
   RTType RT;
 
-  // Do not mixing pipeline stage with variable latency FUs.
-  typedef DenseMap<unsigned, InstSetTy> PipelineStatusMap;
-  PipelineStatusMap PipeFUs, PipeBreakerFUs;
-
 protected:
   // Time frames for each schedule unit.
   typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
@@ -120,9 +116,6 @@ public:
   void resetRT() {
     for (RTType::iterator I = RT.begin(), E = RT.end(); I != E; ++I)
       I->second.clear();
-
-    PipeBreakerFUs.clear();
-    PipeFUs.clear();
   }
 
   InstSetTy &getRTFor(unsigned Step, FuncUnitId FU) {
@@ -280,11 +273,10 @@ protected:
     return at == FirstSlotConflicts.end() ? false : at->second.count(Id);
   }
 
-  void addLinOrdEdge(ConflictListTy &ConflictList, SUVecTy &PipeBreakers);
+  void addLinOrdEdge(ConflictListTy &ConflictList);
   // Add the linear ordering edges to the SUs in the vector and return the first
   // SU.
   VSUnit *addLinOrdEdge(SUVecTy &SUs);
-  VSUnit *addLinOrdEdgeForPipeOp(FuncUnitId Id, SUVecTy &SUs);
 
   explicit BasicLinearOrderGenerator(SchedulingBase &S) : S(S) {}
 

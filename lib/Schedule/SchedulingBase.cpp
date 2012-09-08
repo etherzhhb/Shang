@@ -296,26 +296,11 @@ SchedulingBase::findConflictedInst(const InstSetTy &Set, const MachineInstr *MI)
 
 void SchedulingBase::takeFU(const MachineInstr *MI, unsigned step,
                             unsigned Latency, FuncUnitId FU) {
-  VFUs::FUTypes Ty = FU.getFUType();
-
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
     InstSetTy &InstSet = getRTFor(s, FU);
     assert(!hasConflictedInst(InstSet, MI) && "FU conflict detected!");
     InstSet.push_back(MI);
-
-    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency".
-    if (Ty == VFUs::BRam) {
-      InstSetTy &InstSet = PipeFUs[s];
-      assert(std::find(InstSet.begin(), InstSet.end(), MI) == InstSet.end()
-             && "FU conflict detected!");
-      InstSet.push_back(MI);
-    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
-      InstSetTy &InstSet = PipeBreakerFUs[s];
-      assert(std::find(InstSet.begin(), InstSet.end(), MI) == InstSet.end()
-             && "FU conflict detected!");
-      InstSet.push_back(MI);
-    }
   }
 }
 
@@ -341,60 +326,12 @@ void SchedulingBase::takeFU(const VSUnit *U, unsigned step) {
 const MachineInstr *
 SchedulingBase::getConflictedInst(const MachineInstr *MI,unsigned step,
                                   unsigned Latency, FuncUnitId FU) {
-  VFUs::FUTypes Ty = FU.getFUType();
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned CurSlot = computeStepKey(i);
     InstSetTy &InstSet = getRTFor(CurSlot, FU);
     if (const MachineInstr *OtherMI = getConflictedInst(InstSet, MI))
       return OtherMI;
-    //// Do not conflict with the predicated channel as well.
-    //if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
-    //  return false;
-    //// Do not conflict with the un-predicated channel as well.
-    //if (PredReg && getRTFor(0, FU).test(s - StartSlot))
-    //  return false;
-    // Pipeline conflict:
-    // Pipeline FU | Pipeline Breaker
-    // Op0
-    // Op1         | Op2
-    // ...Pipeline Stall...
-    // Read Op0
-    // Read Op1
-    // Because the pipeline breaker, i.e. op2 has a variable latency,
-    // We may read the result of Op1 when we suppose read the result Op0 in the
-    // above example.
-    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency",
-    if (Ty == VFUs::BRam) {
-      unsigned NextSlot = computeStepKey(i + 1);
-      const InstSetTy &NextBreakers = PipeBreakerFUs.lookup(NextSlot);
-      if (const MachineInstr *BreakerMI = getConflictedInst(NextBreakers, MI)) {
-        // Cannot support II = 1
-        if (NextSlot == CurSlot) return BreakerMI;
-
-        InstSetTy &NextPipe = getRTFor(NextSlot, FU);
-        if (const MachineInstr *OtherMI = getConflictedInst(NextPipe, MI))
-          return OtherMI;
-      }
-
-      if (hasConflictedInst(PipeBreakerFUs.lookup(CurSlot), MI)) {
-        unsigned PrevSlot = computeStepKey(i - 1);
-        // Already detected by previous code.
-        //if (PrevSlot == CurSlot) return BreakerMI;
-        InstSetTy &PrevPipes = getRTFor(PrevSlot, FU);
-        if (const MachineInstr *OtherMI = getConflictedInst(PrevPipes, MI))
-          return OtherMI;
-      }
-    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
-      const InstSetTy &CurPipes = PipeFUs.lookup(CurSlot);
-      if (const MachineInstr *PipeLineMI = getConflictedInst(CurPipes, MI)) {
-        unsigned PrevSlot = computeStepKey(i - 1);
-        FuncUnitId PipeFU = VInstrInfo::getPreboundFUId(PipeLineMI);
-        if (PrevSlot == CurSlot // Cannot support II = 1
-            || hasConflictedInst(getRTFor(PrevSlot, PipeFU), MI))
-          return PipeLineMI;
-      }
-    }
   }
 
   return 0;
@@ -429,26 +366,12 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
 
 void SchedulingBase::revertFUUsage(const MachineInstr *MI, unsigned step,
                                    unsigned Latency, FuncUnitId FU) {
-  VFUs::FUTypes Ty = FU.getFUType();
-
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
     InstSetTy &InstSet = getRTFor(s, FU);
     InstSetTy::iterator at = std::find(InstSet.begin(), InstSet.end(), MI);
     assert(at != InstSet.end() && "MI not exist in FU table!");
     InstSet.erase(at);
-
-    if (Ty == VFUs::BRam) {
-      InstSetTy &PipeSet = PipeFUs[computeStepKey(i)];
-      InstSetTy::iterator at = std::find(PipeSet.begin(), PipeSet.end(), MI);
-      assert(at != PipeSet.end() && "MI not exist in FU table!");
-      PipeSet.erase(at);
-    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
-      InstSetTy &BreakerSet = PipeBreakerFUs[computeStepKey(i)];
-      InstSetTy::iterator at = std::find(BreakerSet.begin(), BreakerSet.end(), MI);
-      assert(at != BreakerSet.end() && "MI not exist in FU table!");
-      BreakerSet.erase(at);
-    }
   }
 }
 

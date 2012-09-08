@@ -45,7 +45,6 @@ struct alap_less {
 
 void BasicLinearOrderGenerator::addLinOrdEdge() {
   ConflictListTy ConflictList;
-  std::vector<VSUnit*> PipeBreakers;
 
   typedef VSchedGraph::iterator iterator;
   MachineBasicBlock *PrevBB = S->getEntryBB();
@@ -61,9 +60,8 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
 
     MachineBasicBlock *MBB = U->getParentBB();
     if (MBB != PrevBB) {
-      addLinOrdEdge(ConflictList, PipeBreakers);
+      addLinOrdEdge(ConflictList);
       ConflictList.clear();
-      PipeBreakers.clear();
       PrevBB = MBB;
     }
 
@@ -71,13 +69,11 @@ void BasicLinearOrderGenerator::addLinOrdEdge() {
 
     // FIXME: Detect mutually exclusive predicate condition.
     if (!Id.isBound()) continue;
-    if (Id.getFUType() == VFUs::MemoryBus || Id.getFUType() == VFUs::CalleeFN)
-      PipeBreakers.push_back(U);
 
     ConflictList[Id].push_back(U);
   }
 
-  addLinOrdEdge(ConflictList, PipeBreakers);
+  addLinOrdEdge(ConflictList);
 
   S->topologicalSortCPSUs();
 }
@@ -116,23 +112,14 @@ void BasicLinearOrderGenerator::buildSuccConflictMap(const VSUnit *U) {
   }
 }
 
-void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List,
-                                              SUVecTy &PipeBreakers) {
+void BasicLinearOrderGenerator::addLinOrdEdge(ConflictListTy &List) {
   typedef ConflictListTy::iterator iterator;
   for (iterator I = List.begin(), E = List.end(); I != E; ++I) {
     std::vector<VSUnit*> &SUs = I->second;
-    if (I->first.getFUType() == VFUs::BRam && SUs.size() > 1)
-      SUs.insert(SUs.end(), PipeBreakers.begin(), PipeBreakers.end());
-
     std::sort(SUs.begin(), SUs.end(), alap_less(S));
 
     VSUnit *FirstSU;
-    // A trivial id means SUs contains the MemoryBus and BRam operations,
-    // which need to be handle carefully.
-    if (I->first == VFUs::BRam)
-      FirstSU = addLinOrdEdgeForPipeOp(I->first, SUs);
-    else
-      FirstSU = addLinOrdEdge(I->second);
+    FirstSU = addLinOrdEdge(I->second);
 
     MachineBasicBlock *ParentBB = FirstSU->getParentBB();
     if (!isFUConflictedAtFirstSlot(ParentBB, I->first)) continue;
@@ -165,34 +152,6 @@ VSUnit *BasicLinearOrderGenerator::addLinOrdEdge(SUVecTy &SUs) {
   }
 
   return LaterSU;
-}
-
-VSUnit *BasicLinearOrderGenerator::addLinOrdEdgeForPipeOp(FuncUnitId Id,
-                                                          SUVecTy &SUs) {
-  VSUnit *LaterSU = SUs.back();
-  VSUnit *FirstSU = LaterSU;
-  SUs.pop_back();
-
-  while (!SUs.empty()) {
-    VSUnit *EalierSU = SUs.back();
-    SUs.pop_back();
-
-    // Build a dependence edge from EalierSU to LaterSU.
-    // TODO: Add an new kind of edge: Constraint Edge, and there should be
-    // hard constraint and soft constraint.
-    if (EalierSU->getFUId() == Id || LaterSU->getFUId() == Id) {
-      unsigned Latency = EalierSU->getLatency();
-      VDEdge Edge = VDEdge::CreateDep<VDEdge::LinearOrder>(Latency);
-      LaterSU->addDep<true>(EalierSU, Edge);
-    }
-
-    LaterSU = EalierSU;
-    if (Id == EalierSU->getFUId()) FirstSU = EalierSU;    
-  }
-
-  assert(FirstSU->getFUId() == Id
-         && "SUs not containing any SU with the right FU type?");
-  return FirstSU;
 }
 
 void SDCSchedulingBase::LPObjFn::setLPObj(lprec *lp) const {
