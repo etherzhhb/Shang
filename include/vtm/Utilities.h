@@ -146,6 +146,10 @@ extractPointerAndOffset(const Value *V, int64_t Offset);
 // Loop dependency Analysis.
 int getLoopDepDist(bool SrcBeforeDest, int Distance = 0);
 
+int getLoopDepDist(const SCEV *SSAddr, const SCEV *SDAddr,
+                   bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+                   unsigned ElemSizeInByte, ScalarEvolution *SE);
+
 class MachineBasicBlock;
 class TargetInstrInfo;
 void fixTerminators(MachineBasicBlock *MBB);

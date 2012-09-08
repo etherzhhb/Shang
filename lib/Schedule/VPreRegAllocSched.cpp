@@ -76,11 +76,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   int analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
                      bool SrcLoad, bool DstLoad, Loop &L, bool SrcBeforeDest);
 
-
-  int advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
-                               MachineMemOperand *DstAddr,
-                               bool SrcLoad, bool DstLoad, Loop &L,
-                               bool SrcBeforeDest, unsigned ElSizeInByte);
   unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
   unsigned calculateLatencyFromEntry(VSUnit *U) const;
 
@@ -285,38 +280,16 @@ int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
     return -1;
 
   // We can only handle two access have the same element size.
-  if (SrcSize == DstSize)
-    return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
-                                    L, SrcBeforeDest, SrcSize);
-
-  // Cannot handle, simply assume dependence occur.
-  return getLoopDepDist(SrcBeforeDest);
-}
-
-int VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
-                                                MachineMemOperand *DstAddr,
-                                                bool SrcLoad, bool DstLoad,
-                                                Loop &L, bool SrcBeforeDest,
-                                                unsigned ElSizeInByte) {
-  const SCEV *SSAddr =
-    SE->getSCEVAtScope(getMachineMemOperandSCEV(SrcAddr, SE), &L);
-  const SCEV *SDAddr =
-    SE->getSCEVAtScope(getMachineMemOperandSCEV(DstAddr, SE), &L);
-  DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << ": ");
-  // Use SCEV to compute the dependencies distance.
-  const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
-  DEBUG(Distance->dump());
-  // TODO: Get range.
-  if (const SCEVConstant *C = dyn_cast<SCEVConstant>(Distance)) {
-    int ItDistance = C->getValue()->getSExtValue();
-    if (ItDistance >= 0)
-      // The pointer distance is in Byte, but we need to get the distance in
-      // Iteration.
-      return getLoopDepDist(SrcBeforeDest, ItDistance / ElSizeInByte);
-    else
-      return -1;
+  if (SrcSize == DstSize) {
+    const SCEV *SSAddr =
+      SE->getSCEVAtScope(getMachineMemOperandSCEV(SrcAddr, SE), &L);
+    const SCEV *SDAddr =
+      SE->getSCEVAtScope(getMachineMemOperandSCEV(DstAddr, SE), &L);
+    return getLoopDepDist(SSAddr, SDAddr, SrcLoad, DstLoad, SrcBeforeDest,
+                          SrcSize, SE);
   }
 
+  // Cannot handle, simply assume dependence occur.
   return getLoopDepDist(SrcBeforeDest);
 }
 

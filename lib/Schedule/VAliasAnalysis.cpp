@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/GlobalVariable.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -282,6 +283,26 @@ MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
 
   // Cannot go any further, cause the AliasAnalysis is not offset aware.
   return AliasAnalysis::MayAlias;
+}
+
+int getLoopDepDist(const SCEV *SSAddr, const SCEV *SDAddr,
+                   bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+                   unsigned ElemSizeInByte, ScalarEvolution *SE) {
+  // Use SCEV to compute the dependencies distance.
+  const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
+  // TODO: Get range.
+  if (const SCEVConstant *C = dyn_cast<SCEVConstant>(Distance)) {
+    int ItDistance = C->getValue()->getSExtValue();
+    if (ItDistance >= 0)
+      // The pointer distance is in Byte, but we need to get the distance in
+      // Iteration.
+      return getLoopDepDist(SrcBeforeDest, ItDistance / ElemSizeInByte);
+
+    // No dependency.
+    return -1;
+  }
+
+  return getLoopDepDist(SrcBeforeDest);
 }
 
 int getLoopDepDist(bool SrcBeforeDest, int Distance){
