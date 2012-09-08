@@ -1296,7 +1296,6 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
                                         VASTValueVecTy &Cnds) {
-  unsigned FUNum = MI->getOperand(0).getReg();
   unsigned BRamID = MI->getOperand(5).getImm();
   unsigned SizeInBytes = FInfo->getBRamInfo(BRamID).ElemSizeInBytes;
   unsigned Alignment = Log2_32_Ceil(SizeInBytes);
