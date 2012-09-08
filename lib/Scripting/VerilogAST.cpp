@@ -361,7 +361,10 @@ static void PrintSelector(raw_ostream &OS, const Twine &Name, unsigned BitWidth,
   OS << "// Combinational MUX\n"
      << "reg " << VASTValue::printBitRange(BitWidth, 0, false)
      << ' ' << Name << "_selector_wire;\n"
-     << "reg " << ' ' << Name << "_selector_enable;\n";
+     << "reg " << ' ' << Name << "_selector_enable = 0;\n\n";
+
+  // If there is no fanin, leave the signal alone.
+  if (SrcCSEMap.empty()) return;
 
   // Print the mux logic.
   OS << "always @(*)begin  // begin mux logic\n";
@@ -417,8 +420,12 @@ void VASTRegister::printSelector(raw_ostream &OS) const {
     }
 
     // DIRTYHACK: The size of address bus is stored in the InitVal.
+    assert(!AddrCSEMap.empty() && "Unexpected zero address bus fanin!");    
     PrintSelector(OS, Twine(BRAMArray) + "_addr", InitVal, AddrCSEMap);
-    PrintSelector(OS, Twine(BRAMArray) + "_data", getBitWidth(), DataCSEMap);
+
+    // Only create the selector if there is any fanin to the data port.
+    if (!DataCSEMap.empty())
+      PrintSelector(OS, Twine(BRAMArray) + "_data", getBitWidth(), DataCSEMap);
   } else {
     CSEMapTy SrcCSEMap;
 
@@ -440,13 +447,27 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
     unsigned AddrWidth = InitVal;
     // The block RAM is active if the address bus is active.
     OS.if_begin(Twine(BRAMArray) + "_addr" + "_selector_enable");
-    // It is a write if the data bus is active.
-    OS.if_begin(Twine(BRAMArray) + "_data" + "_selector_enable");
-    OS << BRAMArray << '[' << BRAMArray << "_addr_selector_wire"
-       << printBitRange(AddrWidth, 0, false) << ']' << " <= "
-       << BRAMArray << "_data_selector_wire"
-       << printBitRange(getBitWidth(), 0, false) << ";\n";
-    OS.exit_block();
+    // Check if there is any write to the block RAM.
+    bool HasAnyWrite = false;
+
+    for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+      VASTExpr *Expr = cast<VASTExpr>(*I->second);
+      if (Expr->getOpcode() == VASTExpr::dpWrBRAM) {
+        HasAnyWrite = true;
+        break;
+      }
+    }
+
+    // Only print the write port if there is any write.
+    if (HasAnyWrite) {
+      // It is a write if the data bus is active.
+      OS.if_begin(Twine(BRAMArray) + "_data" + "_selector_enable");
+      OS << BRAMArray << '[' << BRAMArray << "_addr_selector_wire"
+         << printBitRange(AddrWidth, 0, false) << ']' << " <= "
+         << BRAMArray << "_data_selector_wire"
+         << printBitRange(getBitWidth(), 0, false) << ";\n";
+      OS.exit_block();
+    }
 
     // Else is is a read, write to the output port.
     // To let the synthesis tools correctly infer a block RAM, the write to
