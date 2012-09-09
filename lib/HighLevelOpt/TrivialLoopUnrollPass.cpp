@@ -195,8 +195,11 @@ void LoopDepGraph::buildDep(const Instruction *Inst, unsigned Distance) {
   for (op_iterator I = Inst->op_begin(), E = Inst->op_end(); I != E; ++I) {
     const Value *Src = *I;
     // Simply insert the nontrivial instruction to DepInfo.
-    if (const Value *Nontrivial = getAsNonTrivial(Src)) {
-      insertDep(DepInfo, Nontrivial, Distance);
+    if (const Instruction *Nontrivial = getAsNonTrivial(Src)) {
+      // Ignore the Instruction which is outside the loop. If the instruction
+      // is inside the loop, we should visited it as we are visiting the
+      // instructions in topological order.
+      if (DepMap.count(Nontrivial)) insertDep(DepInfo, Nontrivial, Distance);
       continue;
     }
 
