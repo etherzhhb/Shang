@@ -266,18 +266,15 @@ int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
         << *SrcAddr->getValue() << "+" << SrcAddr->getOffset() << " and "
         << *DstAddr->getValue() << "+" << DstAddr->getOffset() << ": ");
 
+  if (!isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
+    return -1;
+
   if (L.isLoopInvariant(SrcAddrVal) && L.isLoopInvariant(DstAddrVal)) {
     DEBUG(dbgs() << " Invariant");
     // FIXME: What about nested loops?
     // Loop Invariant, let AA decide.
-    if (isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
-      return getLoopDepDist(SrcBeforeDest);
-    else
-      return -1;
+    return getLoopDepDist(SrcBeforeDest);
   }
-
-  if (!isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
-    return -1;
 
   // We can only handle two access have the same element size.
   if (SrcSize == DstSize) {
