@@ -66,6 +66,56 @@ public:
   }
 };
 
+struct MemoryAccessAligner : public FunctionPass {
+  static char ID;
+
+  MemoryAccessAligner() : FunctionPass(ID) {}
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.setPreservesCFG();
+    AU.addRequired<ScalarEvolution>();
+    AU.addPreserved<ScalarEvolution>();
+  }
+
+  bool runOnFunction(Function &F) {
+    bool changed = false;
+    // Only handle the allocas in entry block.
+    BasicBlock &Entry = F.getEntryBlock();
+    for (BasicBlock::iterator I = Entry.begin(), E = Entry.end(); I != E; ++I) {
+      AllocaInst *AI = dyn_cast<AllocaInst>(I);
+
+      if (AI == 0) continue;
+      AI->setAlignment(std::max(8u, AI->getAlignment()));
+    }
+
+    ScalarEvolution &SE = getAnalysis<ScalarEvolution>();
+    for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
+      alignMemoryAccess(I, SE);
+
+    return changed;
+  }
+
+  static void alignMemoryAccess(BasicBlock *BB, ScalarEvolution &SE) {
+    for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
+      if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+        const SCEV *Ptr = SE.getSCEV(LI->getPointerOperand());
+        unsigned Align = (1 << SE.GetMinTrailingZeros(Ptr));
+        if (Align > LI->getAlignment()) LI->setAlignment(Align);
+      } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+        const SCEV *Ptr = SE.getSCEV(SI->getPointerOperand());
+        unsigned Align = (1 << SE.GetMinTrailingZeros(Ptr));
+        if (Align > SI->getAlignment()) SI->setAlignment(Align);
+      }
+    }
+  }
+
+  static void alignMemoryAccess(Loop *L, ScalarEvolution &SE) {
+    typedef Loop::block_iterator block_iterator;
+    for (block_iterator I = L->block_begin(), E = L->block_end(); I != E; ++I)
+      alignMemoryAccess(*I, SE);
+  }
+};
+
 // The dependency graph of the loop body.
 class LoopDepGraph {
   // DO NOT IMPLEMENT
@@ -522,6 +572,12 @@ bool LoopMetrics::isUnrollAccaptable(unsigned Count, uint64_t UnrollThreshold,
   return IncreasedCost < Gama * StepsElimnated;
 }
 
+Pass *llvm::createMemoryAccessAlignerPass() {
+  return new MemoryAccessAligner();
+}
+
+char MemoryAccessAligner::ID = 0;
+
 char TrivialLoopUnroll::ID = 0;
 INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll",
                       "Unroll trivial loops", false, false)
@@ -615,6 +671,9 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     }
     DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
   }
+
+  //assert(TripCount % Count == 0 && "Bad unroll count!");
+  //assert(Metrics.isUnrollAccaptable(Count, Threshold) && "Bad unroll count!");
 
   // Unroll the loop.
   if (!UnrollLoop(L, Count, TripCount, false, TripMultiple, LI, &LPM))
