@@ -30,6 +30,11 @@ class TargetData;
 class raw_ostream;
 
 class DesignMetrics {
+  // DO NOT IMPLEMENT
+  DesignMetrics(const DesignMetrics &);
+  // DO NOT IMPLEMENT
+  const DesignMetrics&operator=(const DesignMetrics &);
+
   DesignMetricsImpl *Impl;
 public:
   struct DesignCost {
