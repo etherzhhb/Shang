@@ -67,6 +67,11 @@ public:
 
 // The dependency graph of the loop body.
 class LoopDepGraph {
+  // DO NOT IMPLEMENT
+  LoopDepGraph(const LoopDepGraph &);
+  // DO NOT IMPLEMENT
+  const LoopDepGraph&operator=(const LoopDepGraph &);
+
   typedef DenseMap<const Value*, unsigned> DepInfoTy;
   // The map that hold the dependency distance from the load instructions.
   // In contrast, the the dependency graph should only contains load and store.
