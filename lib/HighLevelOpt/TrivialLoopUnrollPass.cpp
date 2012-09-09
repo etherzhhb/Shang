@@ -48,6 +48,7 @@ public:
   /// loop preheaders be inserted into the CFG...
   ///
   virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<AliasAnalysis>();
     AU.addRequired<TargetData>();
     AU.addRequired<LoopInfo>();
     AU.addPreserved<LoopInfo>();
@@ -78,6 +79,7 @@ class LoopDepGraph {
   typedef DenseMap<const Value*, DepInfoTy> DepMapTy;
   DepMapTy DepMap;
 
+protected:
   // The current Loop.
   Loop *L;
 
@@ -85,12 +87,7 @@ class LoopDepGraph {
 
   TargetData *TD;
 
-  // For the load/store, fusing the number of unrolled instance cause the memory
-  // bandwidth saturated.
-  DenseMap<const Instruction*, unsigned> SaturatedExpandCounts;
-
-  unsigned getSaturateCount(Value *Val, Value *Ptr);
-
+private:
   const Instruction *getAsNonTrivial(const Value *Src) {
     if (const Instruction *Inst = dyn_cast<Instruction>(Src)) {
       if (Inst->mayHaveSideEffects() || Inst->mayReadOrWriteMemory())
@@ -134,7 +131,6 @@ class LoopDepGraph {
       insertDep(To, I->first, I->second);
   }
 
-  bool buildDepMap(LoopInfo *LI, AliasAnalysis *AA);
   void buildDep(const Instruction *Inst, unsigned Distance);
   void buildDepForBackEdges();
   void buildMemDep(ArrayRef<const Instruction*> MemOps, AliasAnalysis *AA);
@@ -159,9 +155,34 @@ public:
   LoopDepGraph(Loop *L, TargetData *TD, ScalarEvolution &SE)
     : L(L), SE(SE), TD(TD) {}
 
+  typedef DepMapTy::const_iterator iterator;
+
+  iterator closure_begin() const { return DepMap.begin(); }
+  iterator closure_end() const { return DepMap.end(); }
+
   // Build the dependency graph of the loop body, return true if success, false
   // otherwise.
-  bool buildDepGraph(LoopInfo *LI, AliasAnalysis *AA);
+  bool buildDepGraph(LoopInfo *LI, AliasAnalysis *AA, DesignMetrics *Metrics = 0);
+};
+
+class LoopMetrics : public DesignMetrics, public LoopDepGraph {
+  // For the load/store, fusing the number of unrolled instance cause the memory
+  // bandwidth saturated.
+  typedef DenseMap<const Instruction*, unsigned> Inst2IntMap;
+  Inst2IntMap SaturatedCounts;
+
+  // The number of parallel iteration of the loop.
+  unsigned NumParallelIt;
+
+  unsigned getSaturateCount(Value *Val, Value *Ptr);
+public:
+
+  LoopMetrics(Loop *L, TargetData *TD, ScalarEvolution &SE)
+    : DesignMetrics(TD), LoopDepGraph(L, TD, SE), NumParallelIt(1) {}
+
+  void initialize(LoopInfo *LI, AliasAnalysis *AA);
+
+  unsigned getNumParallelIteration() const { return NumParallelIt; }
 };
 }
 
@@ -194,11 +215,8 @@ void LoopDepGraph::buildDep(const Instruction *Inst, unsigned Distance) {
   if (DepInfo.empty())  insertDep(DepInfo, L->getHeader(), 0);
 }
 
-bool
-LoopDepGraph::buildDepMap(LoopInfo *LI, AliasAnalysis *AA){
-  // Do not mess up with multi-block Loop right now.
-  if (L->getNumBlocks() > 1) return false;
-
+bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA,
+                                 DesignMetrics *Metrics){
   LoopBlocksDFS DFS(L);
   DFS.perform(LI);
 
@@ -222,6 +240,10 @@ LoopDepGraph::buildDepMap(LoopInfo *LI, AliasAnalysis *AA){
       // Build flow-dependences for the current Instruction, the iterate
       // distance of the dependences are 0.
       buildDep(BI, 0);
+
+      // Also estimate the implementation cost of the instruction is the
+      // design metrics is available.
+      if (Metrics) Metrics->visit(BI);
     }
   }
 
@@ -331,10 +353,14 @@ void LoopDepGraph::buildMemDep(ArrayRef<const Instruction*> MemOps,
   }
 }
 
-unsigned LoopDepGraph::getSaturateCount(Value *Val, Value *Ptr) {
+unsigned LoopMetrics::getSaturateCount(Value *Val, Value *Ptr) {
   // Reject stores that are so large that they overflow an unsigned.
   uint64_t SizeInBits = TD->getTypeSizeInBits(Val->getType());
   if ((SizeInBits % 8 != 0) || !isInt<32>(SizeInBits)) return 1;
+
+  // Check to see if the stride matches the size of the store.  If so, then we
+  // know that every byte is touched in the loop.
+  unsigned SizeInBytes = (unsigned)SizeInBits / 8;
 
   // The loop invariant load/store will be eliminated by dead load/store
   // elimination.
@@ -346,10 +372,6 @@ unsigned LoopDepGraph::getSaturateCount(Value *Val, Value *Ptr) {
   // loop, which indicates a strided store.  If we have something else, it's a
   // random store we can't handle.
   if (PtrSCEV == 0 || PtrSCEV->getLoop() != L || !PtrSCEV->isAffine()) return 1;
-
-  // Check to see if the stride matches the size of the store.  If so, then we
-  // know that every byte is touched in the loop.
-  unsigned SizeInBytes = (unsigned)SizeInBits / 8;
 
   unsigned BaseAlignment = (1u << SE.GetMinTrailingZeros(PtrSCEV->getStart()));
 
@@ -374,46 +396,63 @@ unsigned LoopDepGraph::getSaturateCount(Value *Val, Value *Ptr) {
   return std::max<unsigned>(BusSizeInBits / (Distance * 8), 1);
 }
 
-bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA) {
-  if (!buildDepMap(LI, AA)) return false;
+void LoopMetrics::initialize(LoopInfo *LI, AliasAnalysis *AA) {
+  if (!buildDepGraph(LI, AA, this)) return;
 
-  unsigned NumParallelIt = UINT32_MAX;
+  NumParallelIt = UINT32_MAX;
 
-  typedef DepMapTy::iterator iterator;
+  typedef LoopDepGraph::iterator iterator;
   DEBUG(dbgs() << "loops in dependency graph:\n");
-  for (iterator I = DepMap.begin(), E = DepMap.end(); I != E; ++I) {
+  for (iterator I = closure_begin(), E = closure_end(); I != E; ++I) {
     if (const Instruction *Inst = dyn_cast<Instruction>(I->first)) {
       unsigned LoopDistance = I->second.lookup(Inst);
       DEBUG(dbgs() << *Inst<< " loop-distance: " << LoopDistance << '\n');
 
-      if (LoopDistance) NumParallelIt = std::min(NumParallelIt, LoopDistance);
+      if (LoopDistance)
+        NumParallelIt = std::min(NumParallelIt, LoopDistance);
+      else
+        // If the distance is zero, the loop is not exist, which means the
+        // distance is infinite.
+        LoopDistance = UINT32_MAX;
 
       // Calculate the unroll count lead to a memory bus bandwidth saturate.
       if (const StoreInst *SI = dyn_cast<StoreInst>(Inst)) {
-        if (!SI->isSimple()) continue;
+        if (!SI->isSimple()) {
+          // Cannot fuse strange instruction.
+          SaturatedCounts.insert(std::make_pair(SI, 1));
+          continue;
+        }
 
         unsigned SaturatedCount
           = getSaturateCount(const_cast<Value*>(SI->getValueOperand()),
                              const_cast<Value*>(SI->getPointerOperand()));
         DEBUG(dbgs().indent(4) << "SaturatedCount: " << SaturatedCount << '\n');
 
-        SaturatedExpandCounts.insert(std::make_pair(SI, SaturatedCount));
+        // The SaturatedCount make sense only if instances can be fused together.
+        // That is there is no dependency between the instances.
+        SaturatedCount = std::min(SaturatedCount, LoopDistance);
+        SaturatedCounts.insert(std::make_pair(SI, SaturatedCount));
       }
 
       if (const LoadInst *LI = dyn_cast<LoadInst>(Inst)) {
-        if (!LI->isSimple()) continue;
+        if (!LI->isSimple()) {
+          // Cannot fuse strange instruction.
+          SaturatedCounts.insert(std::make_pair(LI, 1));
+          continue;
+        }
 
         unsigned SaturatedCount
           = getSaturateCount(const_cast<LoadInst*>(LI),
                              const_cast<Value*>(LI->getPointerOperand()));
         DEBUG(dbgs().indent(4) << "SaturatedCount: " << SaturatedCount << '\n');
 
-        SaturatedExpandCounts.insert(std::make_pair(LI, SaturatedCount));
+        // The SaturatedCount make sense only if instances can be fused together.
+        // That is there is no dependency between the instances.
+        SaturatedCount = std::min(SaturatedCount, LoopDistance);
+        SaturatedCounts.insert(std::make_pair(LI, SaturatedCount));
       }
     }
   }
-
-  return true;
 }
 
 char TrivialLoopUnroll::ID = 0;
@@ -466,13 +505,8 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
 
   unsigned Count = TripCount;
 
-  DesignMetrics Metrics(&getAnalysis<TargetData>());
-
-  LoopBlocksDFS DFS(L);
-  DFS.perform(LI);
-
-  // Visit the blocks in top-order.
-  Metrics.visit(DFS.beginRPO(), DFS.endRPO());
+  LoopMetrics Metrics(L, &getAnalysis<TargetData>(), *SE);
+  Metrics.initialize(LI, &getAnalysis<AliasAnalysis>());
 
   unsigned NumInlineCandidates = Metrics.getNumCalls();
 
