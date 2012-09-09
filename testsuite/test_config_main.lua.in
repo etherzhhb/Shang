@@ -86,6 +86,5 @@ BramInitFile:close()
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
 Misc.RTLGlobalScript = Misc.MainSynthesisRTLGlobalScript .. Misc.CommonRTLGlobalScript
 
-if "@SYNTHESIS_DUT@" == "ON" then
-  dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
-end
+dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
+
