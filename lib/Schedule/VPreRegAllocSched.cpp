@@ -74,7 +74,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
   int analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
-                     bool SrcLoad, bool DstLoad, Loop &L, bool SrcBeforeDest);
+                     Loop &L, bool SrcBeforeDest);
 
   unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
   unsigned calculateLatencyFromEntry(VSUnit *U) const;
@@ -255,7 +255,6 @@ VPreRegAllocSched::~VPreRegAllocSched() {}
 //===----------------------------------------------------------------------===//
 int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
                                       MachineMemOperand *DstAddr,
-                                      bool SrcLoad, bool DstLoad,
                                       Loop &L, bool SrcBeforeDest) {
   uint64_t SrcSize = SrcAddr->getSize();
   uint64_t DstSize = DstAddr->getSize();
@@ -282,8 +281,7 @@ int VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
       SE->getSCEVAtScope(getMachineMemOperandSCEV(SrcAddr, SE), &L);
     const SCEV *SDAddr =
       SE->getSCEVAtScope(getMachineMemOperandSCEV(DstAddr, SE), &L);
-    return getLoopDepDist(SSAddr, SDAddr, SrcLoad, DstLoad, SrcBeforeDest,
-                          SrcSize, SE);
+    return getLoopDepDist(SSAddr, SDAddr, SrcBeforeDest, SrcSize, SE);
   }
 
   // Cannot handle, simply assume dependence occur.
@@ -307,7 +305,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
     // Skip the non-memory operation and non-call operation.
     if (!mayAccessMemory(DstMI->getDesc())) continue;
 
-    bool isDstLoad = VInstrInfo::mayLoad(DstMI);
+    bool isDstWrite = VInstrInfo::mayStore(DstMI);
 
     // Dirty Hack: Is the const_cast safe?
     MachineMemOperand *DstMO = 0;
@@ -350,10 +348,10 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
         continue;
       }
 
-      bool isSrcLoad = VInstrInfo::mayLoad(SrcMI);
+      bool isSrcWrite = VInstrInfo::mayStore(SrcMI);
 
       // Ignore RAR dependence.
-      if (isDstLoad && isSrcLoad) continue;
+      if (!isDstWrite && !isSrcWrite) continue;
 
       if (!isMachineMemOperandAlias(SrcMO, DstMO, AA, SE))
         continue;
@@ -365,8 +363,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
         // Dst not depend on Src if they are mutual exclusive.
         if (MayBothActive) {
           // Compute the iterate distance.
-          int DepDst = analyzeLoopDep(SrcMO, DstMO,isSrcLoad, isDstLoad, *IRL,
-                                      true);
+          int DepDst = analyzeLoopDep(SrcMO, DstMO, *IRL, true);
 
           if (DepDst >= 0) {
             unsigned Latency = G.getStepsToFinish(SrcMI);
@@ -377,8 +374,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
         // We need to compute if Src depend on Dst even if Dst not depend on Src.
         // Because dependence depends on execute order, if SrcMI and DstMI are
         // mutual exclusive.
-        int DepDst = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL,
-                                    false);
+        int DepDst = analyzeLoopDep(DstMO, SrcMO, *IRL, false);
 
         if (DepDst >=0 ) {
           unsigned Latency = G.getStepsToFinish(SrcMI);

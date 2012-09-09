@@ -243,11 +243,9 @@ int LoopDepGraph::getDepDistance(const Instruction *Src, const Instruction *Dst,
     return getLoopDepDist(SrcBeforeDst);
 
   if (SrcLoc.Size == DstLoc.Size) {
-    const SCEV *SrcAddrSCEV = SE->getSCEVAtScope(SrcAddr, L);
-    const SCEV *DstAddrSCEV = SE->getSCEVAtScope(DstAddr, L);
-    return getLoopDepDist(SrcAddrSCEV, DstAddrSCEV,
-                          !Src->mayWriteToMemory(), !Dst->mayWriteToMemory(),
-                          SrcBeforeDst, SrcLoc.Size, SE);
+    const SCEV *SAddrSCEV = SE->getSCEVAtScope(SrcAddr, L);
+    const SCEV *DAddrSCEV = SE->getSCEVAtScope(DstAddr, L);
+    return getLoopDepDist(SAddrSCEV, DAddrSCEV,SrcBeforeDst, SrcLoc.Size, SE);
   }
 
   return getLoopDepDist(SrcBeforeDst);

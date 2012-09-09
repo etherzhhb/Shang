@@ -285,8 +285,7 @@ MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
   return AliasAnalysis::MayAlias;
 }
 
-int getLoopDepDist(const SCEV *SSAddr, const SCEV *SDAddr,
-                   bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+int getLoopDepDist(const SCEV *SSAddr, const SCEV *SDAddr, bool SrcBeforeDest,
                    unsigned ElemSizeInByte, ScalarEvolution *SE) {
   // Use SCEV to compute the dependencies distance.
   const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
