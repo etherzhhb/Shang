@@ -232,7 +232,7 @@ public:
   LoopMetrics(Loop *L, TargetData *TD, ScalarEvolution &SE)
     : DesignMetrics(TD), LoopDepGraph(L, TD, SE), NumParallelIt(1) {}
 
-  void initialize(LoopInfo *LI, AliasAnalysis *AA);
+  bool initialize(LoopInfo *LI, AliasAnalysis *AA);
 
   bool isUnrollAccaptable(unsigned Count, uint64_t UnrollThreshold,
                           uint64_t Alpha = 1, uint64_t Beta = 8,
@@ -455,8 +455,8 @@ unsigned LoopMetrics::getSaturateCount(Value *Val, Value *Ptr) {
   return std::max<unsigned>(BusSizeInBits / (Distance * 8), 1);
 }
 
-void LoopMetrics::initialize(LoopInfo *LI, AliasAnalysis *AA) {
-  if (!buildDepGraph(LI, AA, this)) return;
+bool LoopMetrics::initialize(LoopInfo *LI, AliasAnalysis *AA) {
+  if (!buildDepGraph(LI, AA, this)) return false;
 
   NumParallelIt = UINT32_MAX;
 
@@ -512,6 +512,8 @@ void LoopMetrics::initialize(LoopInfo *LI, AliasAnalysis *AA) {
       }
     }
   }
+
+  return true;
 }
 
 bool LoopMetrics::isUnrollAccaptable(unsigned Count, uint64_t UnrollThreshold,
@@ -629,12 +631,8 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   unsigned Count = TripCount;
 
   LoopMetrics Metrics(L, &getAnalysis<TargetData>(), *SE);
-  Metrics.initialize(LI, &getAnalysis<AliasAnalysis>());
-
-  unsigned NumInlineCandidates = Metrics.getNumCalls();
-
-  if (NumInlineCandidates != 0) {
-    DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
+  if (!Metrics.initialize(LI, &getAnalysis<AliasAnalysis>())) {
+    DEBUG(dbgs() << "  Not unrolling loop with strange instructions.\n");
     return false;
   }
 
