@@ -78,7 +78,8 @@ class LoopDepGraph {
 
   const Instruction *getAsNonTrivial(const Value *Src) {
     if (const Instruction *Inst = dyn_cast<Instruction>(Src)) {
-      if (Inst->mayHaveSideEffects()) return Inst;
+      if (Inst->mayHaveSideEffects() || Inst->mayReadOrWriteMemory())
+        return Inst;
 
       // The PHINode introducing the back-edge are also nontrivial.
       if (const PHINode *PN = dyn_cast<PHINode>(Inst))
@@ -89,10 +90,21 @@ class LoopDepGraph {
     return 0;
   }
 
-  static void insertDep(DepInfoTy &Dep, const Value *Src, unsigned Distance) {
-    // Relax the distance in the DepInfo.
+  static bool insertDep(DepInfoTy &Dep, const Value *Src, unsigned Distance) {
     unsigned &OldDistance = Dep[Src];
-    OldDistance = std::max(OldDistance, Distance);
+
+    // Relax the distance in the DepInfo.
+    if (OldDistance) {
+      // No need to change the old distance.
+      if (OldDistance <= Distance) return false;
+
+      // Replace the distance by a shorter one.
+      OldDistance = Distance;
+      return true;
+    }
+
+    OldDistance = Distance;
+    return OldDistance != 0;
   }
 
   void insertDep(const Value *Src, const Value *Dst, unsigned Distance) {
@@ -127,7 +139,7 @@ class LoopDepGraph {
   int getDepDistance(const Instruction *Src, const Instruction *Dst,
                      ScalarEvolution *SE, AliasAnalysis *AA, bool SrcBeforeDst);
 
-  void buildTransitiveClosure() {}
+  void buildTransitiveClosure(ArrayRef<const Instruction*> MemOps);
 public:
 
   explicit LoopDepGraph(Loop *L) : L(L) {}
@@ -160,6 +172,8 @@ void LoopDepGraph::buildDep(const Instruction *Inst, unsigned Distance) {
     mergeDeps(DepInfo, at->second);
   }
 
+  // Prevent loop when building dependency graph.
+  DepInfo.erase(Inst);
   // Make the current node depends on the header of the Loop (i.e. the root of
   // the dependency graph) if it do not have any source.
   if (DepInfo.empty())  insertDep(DepInfo, L->getHeader(), 0);
@@ -169,12 +183,6 @@ bool
 LoopDepGraph::buildDepMap(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA){
   // Do not mess up with multi-block Loop right now.
   if (L->getNumBlocks() > 1) return false;
-
-  // Find "latch trip count". UnrollLoop assumes that control cannot exit
-  // via the loop latch on any iteration prior to TripCount. The loop may exit
-  // early via an earlier branch.
-  BasicBlock *LatchBlock = L->getLoopLatch();
-  if (LatchBlock == 0) return false;
 
   LoopBlocksDFS DFS(L);
   DFS.perform(LI);
@@ -204,16 +212,53 @@ LoopDepGraph::buildDepMap(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA){
 
   buildDepForBackEdges();
 
-  buildMemDep(Nontrivials, SE, AA);
-
   // Remove the entry of the trivial instruction in the dependency map.
   while (!TrivialInsts.empty()) {
     DepMap.erase(TrivialInsts.back());
     TrivialInsts.pop_back();
   }
 
+  buildMemDep(Nontrivials, SE, AA);
+
+  // Simply create the entry for the root of the dependencies graph.
+  DepMap.insert(std::make_pair(L->getHeader(), DepInfoTy()));
+
+  // Build the transitive closure of the dependency relation.
+  // FIXME: Calculate the max parallel distance for each SCC.
+  buildTransitiveClosure(Nontrivials);
 
   return true;
+}
+
+void LoopDepGraph::buildTransitiveClosure(ArrayRef<const Instruction*> MemOps) {
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+
+    for (unsigned i = 0; i < MemOps.size(); ++i) {
+      const Instruction *CurInst = MemOps[i];
+      DepInfoTy &CurDep = DepMap[CurInst];
+      assert(!CurDep.empty() && "Unexpected empty dependency map!");
+
+      typedef DepInfoTy::iterator iterator;
+      for (iterator I = CurDep.begin(), E = CurDep.end(); I != E; ++I) {
+        const Value *Src = I->first;
+        unsigned Distance = I->second;
+
+        const DepInfoTy &SrcDep = DepMap[Src];
+        assert((!SrcDep.empty() || isa<BasicBlock>(Src))
+               && "Unexpected empty dependency map!");
+
+        // Forward the dependencies of Src.
+        typedef DepInfoTy::const_iterator const_iterator;
+        for (const_iterator SI = SrcDep.begin(), SE = SrcDep.end();
+             SI != SE; ++SI) {
+          unsigned NewDistance = Distance + SI->second;
+          Changed |= insertDep(CurDep, I->first, NewDistance);
+        }
+      }
+    }
+  }
 }
 
 void LoopDepGraph::buildDepForBackEdges() {
@@ -255,8 +300,14 @@ void LoopDepGraph::buildMemDep(ArrayRef<const Instruction*> MemOps,
                                ScalarEvolution *SE, AliasAnalysis *AA) {
   for (unsigned i = 1; i < MemOps.size(); ++i) {
     const Instruction *Dst = MemOps[i];
+    // Ignore the PHI's.
+    if (isa<PHINode>(Dst))  continue;
+
     for (unsigned j = 0; j < i; ++j) {
-      const Instruction *Src = MemOps[i];
+      const Instruction *Src = MemOps[j];
+      // Ignore the PHI's.
+      if (isa<PHINode>(Src))  continue;
+
       int Distance = getDepDistance(Src, Dst, SE, AA, true);
       if (Distance >= 0) insertDep(Src, Dst, Distance);
 
@@ -270,12 +321,26 @@ bool LoopDepGraph::buildDepGraph(LoopInfo *LI, ScalarEvolution *SE,
                                  AliasAnalysis *AA) {
   if (!buildDepMap(LI, SE, AA)) return false;
 
+  unsigned NumParallelIt = UINT32_MAX;
+
+  typedef DepMapTy::iterator iterator;
+  DEBUG(dbgs() << "loops in dependency graph:\n");
+  for (iterator I = DepMap.begin(), E = DepMap.end(); I != E; ++I) {
+    if (const Instruction *Inst = dyn_cast<Instruction>(I->first)) {
+      unsigned LoopDistance = I->second.lookup(Inst);
+      DEBUG(dbgs() << *Inst<< " loop-distance: " << LoopDistance << '\n');
+
+      if (LoopDistance) NumParallelIt = std::min(NumParallelIt, LoopDistance);
+    }
+  }
+
   return true;
 }
 
 char TrivialLoopUnroll::ID = 0;
 INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll",
                       "Unroll trivial loops", false, false)
+INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
