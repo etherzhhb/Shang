@@ -184,6 +184,10 @@ public:
 
   void initialize(LoopInfo *LI, AliasAnalysis *AA);
 
+  bool isUnrollAccaptable(unsigned Count, uint64_t UnrollThreshold,
+                          uint64_t Alpha = 1, uint64_t Beta = 8,
+                          uint64_t Gama = (2048 * 64)) const;
+
   unsigned getNumParallelIteration() const { return NumParallelIt; }
 };
 }
@@ -460,6 +464,64 @@ void LoopMetrics::initialize(LoopInfo *LI, AliasAnalysis *AA) {
   }
 }
 
+bool LoopMetrics::isUnrollAccaptable(unsigned Count, uint64_t UnrollThreshold,
+                                     uint64_t Alpha, uint64_t Beta,
+                                     uint64_t Gama) const {
+  // Handle the trivial case trivially.
+  if (Count == 1) return true;
+
+  DesignMetrics::DesignCost Cost = getCost();
+  uint64_t DataPathCost = Cost.getCostInc(Count, Alpha, 0, 0);
+  // Datapath cost increment must be smaller than the threshold.
+  if (DataPathCost > UnrollThreshold) return false;
+
+  unsigned StepsElimnated = 0, NumDataFanIn = 0, NumAddressFanIn = 0;
+
+  // Iterate over the load/store to calculate the related cost and benefit.
+  typedef Inst2IntMap::const_iterator iterator;
+  for (iterator I = SaturatedCounts.begin(), E = SaturatedCounts.end();
+       I != E; ++I) {
+    const Instruction *Inst = I->first;
+    unsigned SaturedCount = I->second;
+
+    // The unrolled instances can be fused.
+    if (SaturedCount >= Count) {
+      StepsElimnated += Count;
+    }
+
+    NumAddressFanIn += Count / SaturedCount;
+    if (isa<StoreInst>(Inst)) NumDataFanIn += Count / SaturedCount;
+  }
+
+  // For the loop with out any load/stores we believe the loop is parallel.
+  if (NumAddressFanIn == 0) StepsElimnated = Count;
+
+  // Calculate the MUX cost increment.
+  VFUMux *MUX = getFUDesc<VFUMux>();
+  VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
+  unsigned AddrWidth = MemBus->getAddrWidth();
+  unsigned DataWidth = MemBus->getDataWidth();
+
+  uint64_t MUXCost = Beta * (MUX->getMuxCost(NumAddressFanIn, AddrWidth)
+                             - MUX->getMuxCost(Cost.NumAddrBusFanin, AddrWidth))
+                   + Beta * (MUX->getMuxCost(NumDataFanIn, DataWidth)
+                             - MUX->getMuxCost(Cost.NumDataBusFanin, DataWidth));
+  uint64_t IncreasedCost = DataPathCost + MUXCost;
+
+  DEBUG(dbgs() << *L << ":\n" << "Count: " << Count
+               << ", DataPathCost: " << DataPathCost
+               << ", MUXCost: " << MUXCost
+               << ", IncreasedCost: " << IncreasedCost
+               << ", StepsElimnated: " << StepsElimnated
+               << ", NumDataFanIn: " << NumDataFanIn
+               << ", NumAddressFanIn: " << NumAddressFanIn
+               << "\n");
+  // Cost increment must be smaller than the threshold.
+  if (DataPathCost > UnrollThreshold) return false;
+
+  return IncreasedCost < Gama * StepsElimnated;
+}
+
 char TrivialLoopUnroll::ID = 0;
 INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll",
                       "Unroll trivial loops", false, false)
@@ -520,16 +582,12 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     return false;
   }
 
-  DesignMetrics::DesignCost Cost = Metrics.getCost();
-  DEBUG(dbgs() << "Body cost = " << Cost << "\n");
-
   // FIXME: Read the threshold from the constraints script.
-  unsigned Threshold = VFUs::MulCost[63] * 4;
+  uint64_t Threshold = 256000;
 
-  if (TripCount != 1 && Cost.getCostInc(Count) > Threshold) {
+  if (TripCount != 1 && !Metrics.isUnrollAccaptable(Count, Threshold)) {
     DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
-          << " because size: " << Cost.getCostInc(Count)
-          << ">" << Threshold << "\n");
+          << " because size >" << Threshold << "\n");
     if (TripCount) {
       // Search a feasible count by binary search.
       unsigned MaxCount = Count, MinCount = 1;
@@ -537,7 +595,7 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
       while (MinCount <= MaxCount) {
         unsigned MidCount = MinCount + (MaxCount - MinCount) / 2;
 
-        if (Cost.getCostInc(MidCount) <= Threshold) {
+        if (Metrics.isUnrollAccaptable(MidCount, Threshold)) {
           // MidCount is ok, try a bigger one.
           Count = MidCount;
           MinCount = MidCount + 1;
