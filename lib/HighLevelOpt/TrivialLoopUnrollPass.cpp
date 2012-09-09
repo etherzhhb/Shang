@@ -287,22 +287,23 @@ bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA,
   for (top_iterator I = DFS.beginRPO(), E = DFS.endRPO(); I != E; ++I) {
     BasicBlock *BB = *I;
     for (iterator BI = BB->begin(), BE = BB->end(); BI != BE; ++BI) {
+      Instruction *Inst = BI;
       // Ignore the loops with CallSite in its body.
-      if (isa<CallInst>(BI) || isa<InvokeInst>(BI)) return false;
+      if (isa<CallInst>(Inst) || isa<InvokeInst>(Inst)) return false;
 
       // Collect the nontrivial instructions, i.e. the load/store/call.
-      if (const Instruction *Nontrivial = getAsNonTrivial(BI))
+      if (const Instruction *Nontrivial = getAsNonTrivial(Inst))
         Nontrivials.push_back(Nontrivial);
       else
-        TrivialInsts.push_back(BI);
+        TrivialInsts.push_back(Inst);
 
       // Build flow-dependences for the current Instruction, the iterate
       // distance of the dependences are 0.
-      buildDep(BI, 0);
+      buildDep(Inst, 0);
 
       // Also estimate the implementation cost of the instruction is the
-      // design metrics is available.
-      if (Metrics) Metrics->visit(BI);
+      // design metrics is available. We also need to ignore loop invariant.
+      if (Metrics && !L->isLoopInvariant(Inst)) Metrics->visit(Inst);
     }
   }
 
