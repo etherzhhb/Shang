@@ -1,4 +1,4 @@
-FUs.BRam.Prefix = [=[altsyncram:]=]
+--[[ FUs.BRam.Prefix = [=[altsyncram:]=]
 
 FUs.BRam.Template=[=[
 // Block Ram $(num)
@@ -10,6 +10,7 @@ initial
     $(_put('$'))readmemh("$(FUs.BRam.InitFileDir .. '/' .. filename)", bram$(num)array);
 #end
 ]=]
+]]--
 
 RunOnDatapath = [=[
 #local Slack = RTLDatapath.Slack
