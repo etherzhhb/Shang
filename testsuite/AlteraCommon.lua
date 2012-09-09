@@ -1,9 +1,11 @@
-FUs.BRam.Prefix = [=[altsyncram:]=]
+-- Please note that such prefix may match the array in the submodule,
+-- however there should not be any path from/to block RAM in submodule.
+FUs.BRam.Prefix = [=[*]=]
 
 FUs.BRam.Template=[=[
 // Block Ram $(num)
 reg  [$(datawidth - 1):0]  bram$(num)arrayout;
-(* ramstyle = "M4K, no_rw_check" *) reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
+(* ramstyle = "no_rw_check" *) reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
 
 #if filename ~= [[]] then
 initial
