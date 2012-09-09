@@ -75,6 +75,7 @@ class LoopDepGraph {
 
   // The current Loop.
   Loop *L;
+  ScalarEvolution &SE;
 
   const Instruction *getAsNonTrivial(const Value *Src) {
     if (const Instruction *Inst = dyn_cast<Instruction>(Src)) {
@@ -119,11 +120,10 @@ class LoopDepGraph {
       insertDep(To, I->first, I->second);
   }
 
-  bool buildDepMap(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA);
+  bool buildDepMap(LoopInfo *LI, AliasAnalysis *AA);
   void buildDep(const Instruction *Inst, unsigned Distance);
   void buildDepForBackEdges();
-  void buildMemDep(ArrayRef<const Instruction*> MemOps, ScalarEvolution *SE,
-                   AliasAnalysis *AA);
+  void buildMemDep(ArrayRef<const Instruction*> MemOps, AliasAnalysis *AA);
   static
   AliasAnalysis::Location getLocation(const Instruction *I, AliasAnalysis *AA) {
     if (const LoadInst *LI = dyn_cast<LoadInst>(I))
@@ -137,16 +137,16 @@ class LoopDepGraph {
   }
 
   int getDepDistance(const Instruction *Src, const Instruction *Dst,
-                     ScalarEvolution *SE, AliasAnalysis *AA, bool SrcBeforeDst);
+                     AliasAnalysis *AA, bool SrcBeforeDst);
 
   void buildTransitiveClosure(ArrayRef<const Instruction*> MemOps);
 public:
 
-  explicit LoopDepGraph(Loop *L) : L(L) {}
+  LoopDepGraph(Loop *L, ScalarEvolution &SE) : L(L), SE(SE) {}
 
   // Build the dependency graph of the loop body, return true if success, false
   // otherwise.
-  bool buildDepGraph(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA);
+  bool buildDepGraph(LoopInfo *LI, AliasAnalysis *AA);
 };
 }
 
@@ -180,7 +180,7 @@ void LoopDepGraph::buildDep(const Instruction *Inst, unsigned Distance) {
 }
 
 bool
-LoopDepGraph::buildDepMap(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA){
+LoopDepGraph::buildDepMap(LoopInfo *LI, AliasAnalysis *AA){
   // Do not mess up with multi-block Loop right now.
   if (L->getNumBlocks() > 1) return false;
 
@@ -218,7 +218,7 @@ LoopDepGraph::buildDepMap(LoopInfo *LI, ScalarEvolution *SE, AliasAnalysis *AA){
     TrivialInsts.pop_back();
   }
 
-  buildMemDep(Nontrivials, SE, AA);
+  buildMemDep(Nontrivials, AA);
 
   // Simply create the entry for the root of the dependencies graph.
   DepMap.insert(std::make_pair(L->getHeader(), DepInfoTy()));
@@ -271,8 +271,7 @@ void LoopDepGraph::buildDepForBackEdges() {
 }
 
 int LoopDepGraph::getDepDistance(const Instruction *Src, const Instruction *Dst,
-                                 ScalarEvolution *SE, AliasAnalysis *AA,
-                                 bool SrcBeforeDst) {
+                                 AliasAnalysis *AA, bool SrcBeforeDst) {
   // Ignore RAR dependencies.
   if (!Src->mayWriteToMemory() && !Dst->mayWriteToMemory())
     return -1;
@@ -288,16 +287,16 @@ int LoopDepGraph::getDepDistance(const Instruction *Src, const Instruction *Dst,
     return getLoopDepDist(SrcBeforeDst);
 
   if (SrcLoc.Size == DstLoc.Size) {
-    const SCEV *SAddrSCEV = SE->getSCEVAtScope(SrcAddr, L);
-    const SCEV *DAddrSCEV = SE->getSCEVAtScope(DstAddr, L);
-    return getLoopDepDist(SAddrSCEV, DAddrSCEV,SrcBeforeDst, SrcLoc.Size, SE);
+    const SCEV *SAddrSCEV = SE.getSCEVAtScope(SrcAddr, L);
+    const SCEV *DAddrSCEV = SE.getSCEVAtScope(DstAddr, L);
+    return getLoopDepDist(SAddrSCEV, DAddrSCEV, SrcBeforeDst, SrcLoc.Size, &SE);
   }
 
   return getLoopDepDist(SrcBeforeDst);
 }
 
 void LoopDepGraph::buildMemDep(ArrayRef<const Instruction*> MemOps,
-                               ScalarEvolution *SE, AliasAnalysis *AA) {
+                               AliasAnalysis *AA) {
   for (unsigned i = 1; i < MemOps.size(); ++i) {
     const Instruction *Dst = MemOps[i];
     // Ignore the PHI's.
@@ -308,18 +307,17 @@ void LoopDepGraph::buildMemDep(ArrayRef<const Instruction*> MemOps,
       // Ignore the PHI's.
       if (isa<PHINode>(Src))  continue;
 
-      int Distance = getDepDistance(Src, Dst, SE, AA, true);
+      int Distance = getDepDistance(Src, Dst, AA, true);
       if (Distance >= 0) insertDep(Src, Dst, Distance);
 
-      Distance = getDepDistance(Dst, Src, SE, AA, false);
+      Distance = getDepDistance(Dst, Src, AA, false);
       if (Distance >= 0) insertDep(Dst, Src, Distance);
     }
   }
 }
 
-bool LoopDepGraph::buildDepGraph(LoopInfo *LI, ScalarEvolution *SE,
-                                 AliasAnalysis *AA) {
-  if (!buildDepMap(LI, SE, AA)) return false;
+bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA) {
+  if (!buildDepMap(LI, AA)) return false;
 
   unsigned NumParallelIt = UINT32_MAX;
 
