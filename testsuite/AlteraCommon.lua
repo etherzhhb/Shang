@@ -1,3 +1,14 @@
+FUs.BRam.Template=[=[
+// Block Ram $(num)
+reg  [$(datawidth - 1):0]  bram$(num)arrayout;
+(* ramstyle = "no_rw_check" *) reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
+
+#if filename ~= [[]] then
+initial
+    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", bram$(num)array);
+#end
+]=]
+
 RunOnDatapath = [=[
 #local Slack = RTLDatapath.Slack
 #local DstName = RTLDatapath.Nodes[1].Name

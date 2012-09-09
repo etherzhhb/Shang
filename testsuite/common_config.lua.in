@@ -1,15 +1,7 @@
 FUs.MemoryBus = { Latency= 1.0, StartInterval=1, AddressWidth=@POINTER_SIZE_IN_BITS@, DataWidth=64 }
 
-FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Prefix = [=[*]=], Template=[=[
-// Block Ram $(num)
-reg  [$(datawidth - 1):0]  bram$(num)arrayout;
-reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
-
-#if filename ~= [[]] then
-initial
-    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", bram$(num)array);
-#end
-]=]}
+-- Please note that the template of the block RAM is provided in <TargetPlatform>Common.lua
+FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Prefix = [=[*]=] }
 
 FUs.CommonTemplate =[=[
 
