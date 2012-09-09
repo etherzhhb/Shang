@@ -75,7 +75,16 @@ class LoopDepGraph {
 
   // The current Loop.
   Loop *L;
+
   ScalarEvolution &SE;
+
+  TargetData *TD;
+
+  // For the load/store, fusing the number of unrolled instance cause the memory
+  // bandwidth saturated.
+  DenseMap<const Instruction*, unsigned> SaturatedExpandCounts;
+
+  unsigned getSaturateCount(Value *Val, Value *Ptr);
 
   const Instruction *getAsNonTrivial(const Value *Src) {
     if (const Instruction *Inst = dyn_cast<Instruction>(Src)) {
@@ -142,7 +151,8 @@ class LoopDepGraph {
   void buildTransitiveClosure(ArrayRef<const Instruction*> MemOps);
 public:
 
-  LoopDepGraph(Loop *L, ScalarEvolution &SE) : L(L), SE(SE) {}
+  LoopDepGraph(Loop *L, TargetData *TD, ScalarEvolution &SE)
+    : L(L), SE(SE), TD(TD) {}
 
   // Build the dependency graph of the loop body, return true if success, false
   // otherwise.
@@ -316,6 +326,49 @@ void LoopDepGraph::buildMemDep(ArrayRef<const Instruction*> MemOps,
   }
 }
 
+unsigned LoopDepGraph::getSaturateCount(Value *Val, Value *Ptr) {
+  // Reject stores that are so large that they overflow an unsigned.
+  uint64_t SizeInBits = TD->getTypeSizeInBits(Val->getType());
+  if ((SizeInBits % 8 != 0) || !isInt<32>(SizeInBits)) return 1;
+
+  // The loop invariant load/store will be eliminated by dead load/store
+  // elimination.
+  if (L->isLoopInvariant(Ptr)) return UINT32_MAX;
+
+  const SCEVAddRecExpr *PtrSCEV
+    = dyn_cast<SCEVAddRecExpr>(SE.getSCEVAtScope(Ptr, L));
+  // See if the pointer expression is an AddRec like {base,+,1} on the current
+  // loop, which indicates a strided store.  If we have something else, it's a
+  // random store we can't handle.
+  if (PtrSCEV == 0 || PtrSCEV->getLoop() != L || !PtrSCEV->isAffine()) return 1;
+
+  // Check to see if the stride matches the size of the store.  If so, then we
+  // know that every byte is touched in the loop.
+  unsigned SizeInBytes = (unsigned)SizeInBits / 8;
+
+  unsigned BaseAlignment = (1u << SE.GetMinTrailingZeros(PtrSCEV->getStart()));
+
+  // Not benefit from load/store fusion if we do not have bigger alignment.
+  if (BaseAlignment <= SizeInBytes) return 1;
+
+  const SCEVConstant *Stride = dyn_cast<SCEVConstant>(PtrSCEV->getOperand(1));
+
+  // Unknown stride, do not know to calculate the distance.
+  if (Stride == 0) return 1;
+
+  int64_t Stride64 = Stride->getValue()->getSExtValue();
+
+  // Do not mess up with strange stride.
+  if (Stride64 <=0) return 1;
+
+  // The distance between pointer in successive iterations, in bytes.
+  unsigned Distance = Stride64 * SizeInBytes;
+  unsigned BusSizeInBits = getFUDesc<VFUMemBus>()->getDataWidth();
+
+  // Get the number of instances causing the bandwidth of memory bus saturate.
+  return std::max<unsigned>(BusSizeInBits / (Distance * 8), 1);
+}
+
 bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA) {
   if (!buildDepMap(LI, AA)) return false;
 
@@ -329,6 +382,29 @@ bool LoopDepGraph::buildDepGraph(LoopInfo *LI, AliasAnalysis *AA) {
       DEBUG(dbgs() << *Inst<< " loop-distance: " << LoopDistance << '\n');
 
       if (LoopDistance) NumParallelIt = std::min(NumParallelIt, LoopDistance);
+
+      // Calculate the unroll count lead to a memory bus bandwidth saturate.
+      if (const StoreInst *SI = dyn_cast<StoreInst>(Inst)) {
+        if (!SI->isSimple()) continue;
+
+        unsigned SaturatedCount
+          = getSaturateCount(const_cast<Value*>(SI->getValueOperand()),
+                             const_cast<Value*>(SI->getPointerOperand()));
+        DEBUG(dbgs().indent(4) << "SaturatedCount: " << SaturatedCount << '\n');
+
+        SaturatedExpandCounts.insert(std::make_pair(SI, SaturatedCount));
+      }
+
+      if (const LoadInst *LI = dyn_cast<LoadInst>(Inst)) {
+        if (!LI->isSimple()) continue;
+
+        unsigned SaturatedCount
+          = getSaturateCount(const_cast<LoadInst*>(LI),
+                             const_cast<Value*>(LI->getPointerOperand()));
+        DEBUG(dbgs().indent(4) << "SaturatedCount: " << SaturatedCount << '\n');
+
+        SaturatedExpandCounts.insert(std::make_pair(LI, SaturatedCount));
+      }
     }
   }
 
