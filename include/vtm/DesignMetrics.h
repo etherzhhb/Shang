@@ -76,6 +76,8 @@ public:
       visit(*I++);
   }
 
+  TargetData *getTargetData() const;
+
   void reset();
 
   // Visit all data-path expression and compute the cost.

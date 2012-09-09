@@ -51,6 +51,8 @@ public:
   EarlyDatapathBuilder(EarlyDatapathBuilderContext &Context, TargetData *TD)
     : VASTExprBuilder(Context), TD(TD) {}
 
+  TargetData *getTargetData() const { return TD; }
+
   unsigned getValueSizeInBits(const Value *V) const;
   unsigned getValueSizeInBits(const Value &V) const {
     return getValueSizeInBits(&V);

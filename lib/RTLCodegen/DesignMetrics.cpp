@@ -114,6 +114,8 @@ public:
   unsigned getNumDataBusFanin() const { return DataBusFanins.size(); }
   unsigned getStepsLowerBound() const { return StepLB; }
   unsigned getNumCalls() const { return NumCalls; }
+
+  TargetData *getTargetData() const { return Builder.getTargetData(); }
 };
 
 struct DesignMetricsPass : public FunctionPass {
@@ -314,6 +316,10 @@ uint64_t DesignMetricsImpl::getDatapathFUCost() const {
 
 DesignMetrics::DesignMetrics(TargetData *TD)
   : Impl(new DesignMetricsImpl(TD)) {}
+
+TargetData *DesignMetrics::getTargetData() const {
+  return Impl->getTargetData();
+}
 
 DesignMetrics::~DesignMetrics() { delete Impl; }
 
