@@ -103,20 +103,22 @@ private:
   }
 
   static bool insertDep(DepInfoTy &Dep, const Value *Src, unsigned Distance) {
-    unsigned &OldDistance = Dep[Src];
-
-    // Relax the distance in the DepInfo.
-    if (OldDistance) {
-      // No need to change the old distance.
-      if (OldDistance <= Distance) return false;
-
-      // Replace the distance by a shorter one.
-      OldDistance = Distance;
+    DepInfoTy::iterator at = Dep.find(Src);
+    // Simply create the entry if it does not exist.
+    if (at == Dep.end()) {
+      Dep.insert(std::make_pair(Src, Distance));
       return true;
     }
 
+    // Relax the distance in the DepInfo.
+    unsigned &OldDistance = at->second;
+
+    // No need to change the old distance.
+    if (OldDistance <= Distance) return false;
+
+    // Replace the distance by a shorter one.
     OldDistance = Distance;
-    return OldDistance != 0;
+    return true;
   }
 
   void insertDep(const Value *Src, const Value *Dst, unsigned Distance) {
