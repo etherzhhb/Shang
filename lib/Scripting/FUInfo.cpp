@@ -267,13 +267,11 @@ std::string VFUBRAM::generateCode(const std::string &Clk, unsigned Num,
   // And the look up.
                 << "lookup={ "
                 << "datawidth=" << DataWidth << ", size=" << Size
-                << ", num=" << Num << ", filepath="
-                << "[[" << InitFileDir << "]]" << ", filename=" << "[[" << Filename
-                << "]]" << ", empty=" << "[[" << " " << "]]"
-                << ", clk='" << Clk
-
+                << ", num=" << Num << ", clk='" << Clk << '\''
+                << ", filepath=" << "[[" << InitFileDir << "]]"
+                << ", filename=" << "[[" << Filename << "]]"
   // End the look up and the function call.
-                << "'}}\n";
+                << "}}\n";
   DEBUG(ScriptBuilder << "print(" << ResultName << ")\n");
   DEBUG(ScriptBuilder << "print(message)\n");
   ScriptBuilder.flush();
