@@ -29,11 +29,12 @@ SEL_ChainingThreshold = -1
 REDUCTION_ChainingThreshold = -1
 MUX_ChainingThreshold = -1
 
--- load platform information script
-dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
-
 -- Load bram initfile
 dofile('@TEST_BINARY_ROOT@/' .. 'common_config.lua')
+-- load platform information script
+dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
+dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
+
 
 -- Define some function
 dofile('@VTS_SOURCE_ROOT@/' .. 'FuncDefine.lua')
@@ -85,6 +86,3 @@ BramInitFile:close()
 
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
 Misc.RTLGlobalScript = Misc.MainSynthesisRTLGlobalScript .. Misc.CommonRTLGlobalScript
-
-dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
-

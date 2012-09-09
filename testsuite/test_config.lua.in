@@ -22,11 +22,11 @@ MUX_ChainingThreshold = -1
 
 POINTER_SIZE_IN_BITS = @POINTER_SIZE_IN_BITS@
 
--- load platform information script
-dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
-
 -- Load bram initfile
 dofile('@TEST_BINARY_ROOT@/' .. 'common_config.lua')
+-- load platform information script
+dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
+dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
 
 -- Define some function
 dofile('@VTS_SOURCE_ROOT@/' .. 'FuncDefine.lua')
@@ -64,6 +64,4 @@ import "DPI-C" function chandle vlt_$(escapeNumber(k))();
 
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
 Misc.RTLGlobalScript = Misc.CommonRTLGlobalScript
-
-dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
 
