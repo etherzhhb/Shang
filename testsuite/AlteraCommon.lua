@@ -5,7 +5,7 @@ reg  [$(datawidth - 1):0]  bram$(num)arrayout;
 
 #if filename ~= [[]] then
 initial
-    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", bram$(num)array);
+    $(_put('$'))readmemh("$(FUs.BRam.InitFileDir .. '/' .. filename)", bram$(num)array);
 #end
 ]=]
 
