@@ -388,7 +388,6 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
-  COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
   COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
   #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
   #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing

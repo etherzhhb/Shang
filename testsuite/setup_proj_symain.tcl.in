@@ -58,6 +58,9 @@ set_global_assignment -name EDA_ENABLE_GLITCH_FILTERING ON -section_id eda_simul
 #############################################################################
 set ENABLE_PHYSICAL_SYNTHESIS "@ENABLE_PHYSICAL_SYNTHESIS@"
 
+#Simulate the design to get is delay in cycles.
+exec timeout @TIMEOUTS@s sh @MAIN_MODELDO_FILE@
+
 source @VTS_SOURCE_ROOT@/quartus_compile.tcl
 #############################################################################
 execute_module -tool sta -args {--report_script @VTS_SOURCE_ROOT@/extract_timing.tcl}
@@ -65,6 +68,10 @@ execute_module -tool sta -args {--report_script @VTS_SOURCE_ROOT@/extract_timing
 #############################################################################
 #Write the netlist
 execute_module -tool eda
+
+
+#############################################################################
+#Process the result.
 load_report
 #Report failing paths.
 #qsta_utility::generate_top_failures_per_clock 10 
