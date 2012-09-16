@@ -4,7 +4,7 @@ PATH=~/altera/10.1/modelsim_ase/bin/:~/altera/modelsim_ase/bin/:$PATH
 vlib work
 vlog +define+quartus_synthesis -sv $(RTLModuleName).v
 vlog -sv INTF_$(RTLModuleName).v
-vlog -sv DUT_TOP_tb.v
+vlog -sv DUT_TOP_tb.sv
 vlog -sv BRAM.sv
 vsim -t 1ps work.DUT_TOP_tb -c -do "run -all;vcd flush;quit -f"
 

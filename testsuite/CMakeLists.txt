@@ -336,7 +336,7 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_XILINX_BIT     "${TEST_BINARY_ROOT}/dut_top.bit")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
-  set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.v")
+  set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.sv")
 
   set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
   set(MAIN_SC_O           "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.o")

@@ -327,14 +327,21 @@ DUT_TOP i1 (
 
 initial
 begin
-clk = 0;rstN = 1; start = 1; startcnt = 0;
-$('#')6 rstN = 0;
-$('#')10 rstN = 1;start = 0;
-$('#')10 start = 1;startcnt= 1;
+clk = 0;
+rstN = 1;
+start = 1;
+startcnt = 0;
+$('#')6ns;
+rstN = 0;
+$('#')10ns;
+rstN = 1;
+start = 0;
+$('#')10ns;
+startcnt = 1;
 end
 
 always
-$('#')5 clk = ~clk;
+$('#')5ns clk = ~clk;
 
 reg [31:0] cnt = 0;
 always@(posedge clk)begin
