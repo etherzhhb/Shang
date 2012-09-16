@@ -340,11 +340,16 @@ $('#')10ns;
 startcnt = 1;
 end
 
-always
-$('#')5ns clk = ~clk;
+// Generate the 100MHz clock.
+always $('#')5ns clk = ~clk;
 
 reg [31:0] cnt = 0;
-always@(posedge clk)begin
+
+// TEMPORARY HACK: Catch the finish signal at the negedge of the clock,
+// as we find there may be hold time voliation on the finish signal.
+// But the voliation should be ok because the finish signal is for debug only,
+// and we even not assign it to a pin of the FPGA.
+always@(negedge clk)begin
   if(startcnt)begin
     if(fin)begin
       $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);

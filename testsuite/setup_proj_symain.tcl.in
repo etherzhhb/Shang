@@ -58,9 +58,6 @@ set_global_assignment -name EDA_ENABLE_GLITCH_FILTERING ON -section_id eda_simul
 #############################################################################
 set ENABLE_PHYSICAL_SYNTHESIS "@ENABLE_PHYSICAL_SYNTHESIS@"
 
-#Simulate the design to get is delay in cycles.
-exec timeout @TIMEOUTS@s sh @MAIN_MODELDO_FILE@
-
 source @VTS_SOURCE_ROOT@/quartus_compile.tcl
 #############################################################################
 execute_module -tool sta -args {--report_script @VTS_SOURCE_ROOT@/extract_timing.tcl}
@@ -69,6 +66,11 @@ execute_module -tool sta -args {--report_script @VTS_SOURCE_ROOT@/extract_timing
 #Write the netlist
 execute_module -tool eda
 
+#Simulate the design to get is delay in cycles and get the vcd.
+exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@
+
+# Estimate power base on the vcd.
+execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
 
 #############################################################################
 #Process the result.
@@ -81,13 +83,24 @@ set DataJSON [open "@BenchmarkSummaryTmp@" a+]
 
 puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\","
 puts $DataJSON "\"restricted_fmax\":\"[get_report_panel_data -name {*Fmax*} -col 1 -row 1]\","
+
+# Read the power result.
+set powerFile [open "DUT_TOP.pow.summary" r]
+# Scan the entire power summary to get the total thermal power dissipation.
+while { [gets $powerFile line] >= 0 } {
+  if {[regexp {Total Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
+    set total_pow
+    puts $DataJSON "\"power_mw\":\"$total_pow\","
+  }
+}
+
 #Read the execution cycles
 set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
 #while { [gets $cycleFile line] >= 0 } {
 gets $cycleFile line
-regexp {@MAIN_RTL_ENTITY@ hardware run cycles ([0-9]+)} $line match total
-set total
-puts $DataJSON "\"cycles\":\"$total\","
+regexp {@MAIN_RTL_ENTITY@ hardware run cycles ([0-9]+)} $line match total_cycles
+set total_cycles
+puts $DataJSON "\"cycles\":\"$total_cycles\","
 #}
 close $cycleFile
 #############################################################################

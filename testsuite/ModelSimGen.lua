@@ -1,12 +1,13 @@
 ModelsimGenTemplate = [=[
-$('#')!/bin/sh
+$('#')!/bin/bash
 PATH=~/altera/10.1/modelsim_ase/bin/:~/altera/modelsim_ase/bin/:$PATH
+export CYCLONEII_SIM=$QUARTUS_ROOT/eda/sim_lib/cycloneii_atoms.v
+cd ./simulation/modelsim
 vlib work
-vlog +define+quartus_synthesis -sv $(RTLModuleName).v
-vlog -sv INTF_$(RTLModuleName).v
-vlog -sv DUT_TOP_tb.sv
-vlog -sv BRAM.sv
-vsim -t 1ps work.DUT_TOP_tb -c -do "run -all;vcd flush;quit -f"
+vlog -work work $CYCLONEII_SIM
+vlog DUT_TOP.vo
+vlog -sv ../../DUT_TOP_tb.sv
+vsim -t 1ps -L cycloneii_ver work.DUT_TOP_tb -c -do "do DUT_TOP_dump_all_vcd_nodes.tcl;run -all;vcd flush;quit -f"
 
 ]=]
 
