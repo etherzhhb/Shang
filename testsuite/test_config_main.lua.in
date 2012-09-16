@@ -46,6 +46,7 @@ dofile('@VTS_SOURCE_ROOT@/' .. 'AddModules.lua')
 dofile('@VTS_SOURCE_ROOT@/' .. 'SCIfCodegen.lua')
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramMIFGen.lua')
 dofile('@VTS_SOURCE_ROOT@/' .. 'InterfaceGen.lua')
+dofile('@VTS_SOURCE_ROOT@/' .. 'ModelSimGen.lua')
 
 -- Code for globalvariable symbols.
 RTLGlobalTemplate = [=[
