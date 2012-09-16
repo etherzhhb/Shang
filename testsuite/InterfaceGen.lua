@@ -23,13 +23,14 @@ InterfaceGen =[=[
 //------------------------Experiment module--------------------------//
 ///////////////////////////////////////////////////////////////////////
 module DUT_TOP(
-	input clk,
-	input rstN,
-	input start,
-	output [7:0] LED7
+	input wire clk,
+	input wire rstN,
+	input wire start,
+	output wire[7:0] LED7,
+	output wire succ,
+	output wire fin
 );
 
-wire   					    fin;
 wire  [31:0] 			  return_value;
 wire   					    mem0en;
 wire  [3:0] 			  mem0cmd;
@@ -44,6 +45,9 @@ wire  [63:0] 			  mem0in;
 wire   					    wren;
 wire	[63:0]        mem0out;
 wire					      start_N =~start;
+
+// The module successfully complete its execution if return_value is 0.
+assign succ = ~(|return_value);
 
 $(RTLModuleName) $(RTLModuleName)_inst(
     .clk(clk),
@@ -305,13 +309,17 @@ reg clk;
 reg rstN;
 reg start;
 wire [7:0] LED7;
+wire succ;
+wire fin;
 reg startcnt;
 
 DUT_TOP i1 (
 	.clk(clk),
 	.rstN(rstN),
-  .start(start),
-	.LED7(LED7)
+    .start(start),
+	.LED7(LED7),
+	.succ(succ),
+	.fin(fin)
 );
   integer wfile,wferror,wtmpfile;
   initial wfile = $('$')fopen("$(CounterFile)");
@@ -331,10 +339,10 @@ $('#')5 clk = ~clk;
 reg [31:0] cnt = 0;
 always@(posedge clk)begin
   if(startcnt)begin
-    if(i1.i1.fin)begin
+    if(fin)begin
       $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
       $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
-      if(i1.i1.return_value == 0)begin
+      if(succ)begin
         $('$')display ("The result is correct~");
       end else begin
         $('$')display ("The result is wrong!!!");
