@@ -303,7 +303,7 @@ BramFile:close()
 ]=]}
 
 DUTtbGen = [=[
-`timescale 1 ps/ 1 ps
+`timescale 1ns/1ps
 module DUT_TOP_tb();
 reg clk;
 reg rstN;
