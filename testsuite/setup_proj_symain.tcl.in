@@ -66,12 +66,6 @@ execute_module -tool sta -args {--report_script @VTS_SOURCE_ROOT@/extract_timing
 #Write the netlist
 execute_module -tool eda
 
-#Simulate the design to get is delay in cycles and get the vcd.
-exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@
-
-# Estimate power base on the vcd.
-execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
-
 #############################################################################
 #Process the result.
 load_report
@@ -82,10 +76,31 @@ load_report
 set DataJSON [open "@BenchmarkSummaryTmp@" a+]
 
 puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\","
-puts $DataJSON "\"restricted_fmax\":\"[get_report_panel_data -name {*Fmax*} -col 1 -row 1]\","
+
+set FMAX [get_report_panel_data -name {*Fmax*} -col 1 -row 1]
+puts $DataJSON "\"restricted_fmax\":\"$FMAX\","
+#############################################################################
+set MAIN_RTL_ENTITY "@MAIN_RTL_ENTITY@"
+set BenchmarkReportTmp "@BenchmarkReportTmp@"
+
+source @VTS_SOURCE_ROOT@/report_json_data.tcl
+#############################################################################
+unload_report
+
+#Simulate the netlist with the reported FMAX.
+regexp {([0-9.]+)} "$FMAX" match FMAX_NUM
+set FMAX_NUM
+set half_period_ns [expr "500 / $FMAX_NUM"]
+exec bash -c "sed -i -e 's/<half-period>/$half_period_ns/' DUT_TOP_tb.sv"
+
+#Simulate the design to get is delay in cycles and get the vcd.
+exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@
+
+# Estimate power base on the vcd.
+execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
 
 # Read the power result.
-set powerFile [open "DUT_TOP.pow.summary" r]
+set powerFile [open "@TEST_BINARY_ROOT@/DUT_TOP.pow.summary" r]
 # Scan the entire power summary to get the total thermal power dissipation.
 while { [gets $powerFile line] >= 0 } {
   if {[regexp {Total Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
@@ -100,14 +115,11 @@ set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
 gets $cycleFile line
 regexp {@MAIN_RTL_ENTITY@ hardware run cycles ([0-9]+)} $line match total_cycles
 set total_cycles
-puts $DataJSON "\"cycles\":\"$total_cycles\","
+puts $DataJSON "\"cycles\":\"$total_cycles\""
 #}
 close $cycleFile
-#############################################################################
-set MAIN_RTL_ENTITY "@MAIN_RTL_ENTITY@"
-set BenchmarkReportTmp "@BenchmarkReportTmp@"
 
-source @VTS_SOURCE_ROOT@/report_json_data.tcl
-#############################################################################
+puts $DataJSON "\}"
+close $DataJSON
 
 project_close

@@ -337,7 +337,7 @@ initial begin
 end
 
 // Generate the 100MHz clock.
-always $('#')5ns clk = ~clk;
+always $('#')<half-period>ns clk = ~clk;
 
 reg [31:0] cnt = 0;
 
