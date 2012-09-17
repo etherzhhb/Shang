@@ -3,6 +3,7 @@ $('#')!/bin/bash
 PATH=~/altera/10.1/modelsim_ase/bin/:~/altera/modelsim_ase/bin/:$PATH
 export CYCLONEII_SIM=$QUARTUS_ROOT/eda/sim_lib/cycloneii_atoms.v
 cd ./simulation/modelsim
+vdel -lib work *
 vlib work
 vlog -work work $CYCLONEII_SIM
 vlog DUT_TOP.vo
