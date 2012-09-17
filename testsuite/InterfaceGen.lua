@@ -321,23 +321,19 @@ DUT_TOP i1 (
 	.succ(succ),
 	.fin(fin)
 );
-  integer wfile,wferror,wtmpfile;
-  initial wfile = $('$')fopen("$(CounterFile)");
-  initial wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
-
-initial
-begin
-clk = 0;
-rstN = 1;
-start = 1;
-startcnt = 0;
-$('#')6ns;
-rstN = 0;
-$('#')10ns;
-rstN = 1;
-start = 0;
-$('#')10ns;
-startcnt = 1;
+  integer wfile,wtmpfile;
+initial begin
+  clk = 0;
+  rstN = 1;
+  start = 1;
+  startcnt = 0;
+  $('#')6ns;
+  rstN = 0;
+  $('#')10ns;
+  rstN = 1;
+  start = 0;
+  $('#')10ns;
+  startcnt = 1;
 end
 
 // Generate the 100MHz clock.
@@ -352,21 +348,20 @@ always_comb if (!succ) $('$')stop;
 // But the voliation should be ok because the finish signal is for debug only,
 // and we even not assign it to a pin of the FPGA.
 always@(negedge clk)begin
-  if(startcnt)begin
-    if(fin)begin
-      $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
-      $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
-      if(succ)begin
-        $('$')display ("The result is correct~");
+  if (startcnt) begin
+    if (fin) begin
+      if (succ) begin
+        $('$')display ("The result is correct!");
+        wfile = $('$')fopen("$(CounterFile)");
+        $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
+        $('$')fclose(wfile);
+        wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
+        $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
+        $('$')fclose(wtmpfile);
       end else begin
         $('$')display ("The result is wrong!!!");
-        wferror = $('$')fopen("$(INTFFILE)","a");
-        $('$')fwrite (wferror,"there is a error");
-        $('$')fclose(wferror);
       end
-      $('$')fclose(wfile);
-      $('$')fclose(wtmpfile);
-      $('#')1000 $('$')stop;
+      $('$')stop;
     end else begin
       cnt <= cnt + 1;
     end
