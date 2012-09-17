@@ -345,6 +345,8 @@ always $('#')5ns clk = ~clk;
 
 reg [31:0] cnt = 0;
 
+always_comb if (!succ) $('$')stop;
+
 // TEMPORARY HACK: Catch the finish signal at the negedge of the clock,
 // as we find there may be hold time voliation on the finish signal.
 // But the voliation should be ok because the finish signal is for debug only,
