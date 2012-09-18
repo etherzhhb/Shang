@@ -325,14 +325,20 @@ DUT_TOP i1 (
 initial begin
   clk = 0;
   rstN = 1;
-  start = 1;
-  startcnt = 0;
-  $('#')6ns;
-  rstN = 0;
-  $('#')10ns;
-  rstN = 1;
   start = 0;
-  $('#')10ns;
+  startcnt = 0;
+  $('#')<half-period>ns;
+  $('#')1ns;
+  rstN = 0;
+  $('#')<half-period>ns;
+  $('#')<half-period>ns;
+  rstN = 1;
+  $('#')<half-period>ns;
+  $('#')<half-period>ns;
+  start = 1;
+  $('#')<half-period>ns;
+  $('#')<half-period>ns;
+  start = 0;
   startcnt = 1;
 end
 
