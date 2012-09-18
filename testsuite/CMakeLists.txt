@@ -328,13 +328,10 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
   set(MAIN_RTL_ENTITY     "${DUT_NAME}_RTL")
   set(MAIN_RTL_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.v")
   set(MAIN_SDC_SRC "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
-  set(MAIN_UCF_SRC "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.ucf")
   set(MAIN_INT_TOP        "${TEST_BINARY_ROOT}/INTF_${MAIN_RTL_ENTITY}.v")
   set(MAIN_INT_BRAM       "${TEST_BINARY_ROOT}/BRAM.sv")
-  set(MAIN_INT_BRAM_XILINX       "${TEST_BINARY_ROOT}/BRAM_Xilinx.v")
   set(MAIN_INT_BRAMINIT   "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}_BramInit.txt")
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
-  set(MAIN_XILINX_BIT     "${TEST_BINARY_ROOT}/dut_top.bit")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
   set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.sv")
 
@@ -371,7 +368,7 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
   add_dependencies(main_ir ${TEST}_main_ir)
 
   add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_UCF_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} 
-                    ${MAIN_INT_BRAM_XILINX} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
+                            ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -400,22 +397,6 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
 
 endif(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
 
-if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main_xilinx)
-  configure_file (
-  ${xilinx_setup_prj_file}
-  "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl"
-  )
-
-  add_custom_command(OUTPUT ${MAIN_XILINX_BIT}
-  COMMAND ${XILINX_BIN_DIR}/ISE/bin/lin/xtclsh ${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl rebuild_project
-  DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain_xilinx.tcl" ${MAIN_UCF_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM_XILINX} ${MAIN_INT_BRAMINIT}
-  WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-  COMMENT "Using Xilinx to synthesis main RTL module and interface for ${SYN_FUNC}"
-  )
-  add_custom_target(${TEST}_synthesis_main_xilinx DEPENDS ${MAIN_XILINX_BIT})
-  add_dependencies(${TEST}_synthesis_main_xilinx ${TEST}_main_hls)
-
-endif(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main_xilinx)
 endmacro(add_general_main_test)
 
 macro(add_test_cases file_name)
