@@ -87,27 +87,8 @@ source @VTS_SOURCE_ROOT@/report_json_data.tcl
 #############################################################################
 unload_report
 
-#Simulate the netlist with the reported FMAX.
-regexp {([0-9.]+)} "$FMAX" match FMAX_NUM
-set FMAX_NUM
-set half_period_ns [expr "500 / $FMAX_NUM"]
-exec bash -c "sed -i -e 's/<half-period>/$half_period_ns/' DUT_TOP_tb.sv"
-
-#Simulate the design to get is delay in cycles and get the vcd.
+#Perform functional simulation.
 exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@
-
-# Estimate power base on the vcd.
-execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
-
-# Read the power result.
-set powerFile [open "@TEST_BINARY_ROOT@/DUT_TOP.pow.summary" r]
-# Scan the entire power summary to get the total thermal power dissipation.
-while { [gets $powerFile line] >= 0 } {
-  if {[regexp {Total Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
-    set total_pow
-    puts $DataJSON "\"power_mw\":\"$total_pow\","
-  }
-}
 
 #Read the execution cycles
 set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
@@ -118,6 +99,32 @@ set total_cycles
 puts $DataJSON "\"cycles\":\"$total_cycles\""
 #}
 close $cycleFile
+
+#Simulate the netlist with the reported FMAX.
+regexp {([0-9.]+)} "$FMAX" match FMAX_NUM
+set FMAX_NUM
+set half_period_ns [expr "ceil(500 / $FMAX_NUM)"]
+exec bash -c "sed -i -e 's/<half-period>/$half_period_ns/' DUT_TOP_tb.sv"
+#Set the simulation time according to the functional simulation.
+set run_time [expr "2 * $half_period_ns * $total_cycles + 100"]
+exec bash -c "sed -i -e 's/<run-time>/$run_time/' @MAIN_MODELDO_FILE@_post_routed"
+
+#Simulate the design to get the vcd.
+#TODO Check the result.
+exec bash @MAIN_MODELDO_FILE@_post_routed
+
+# Estimate power base on the vcd.
+execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
+
+# Read the power result.
+set powerFile [open "@TEST_BINARY_ROOT@/DUT_TOP.pow.summary" r]
+# Scan the entire power summary to get the total thermal power dissipation.
+while { [gets $powerFile line] >= 0 } {
+  if {[regexp {Total Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
+    set total_pow
+    puts $DataJSON ",\"power_mw\":\"$total_pow\""
+  }
+}
 
 puts $DataJSON "\}"
 close $DataJSON
