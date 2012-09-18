@@ -327,21 +327,13 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
 
   set(MAIN_RTL_ENTITY     "${DUT_NAME}_RTL")
   set(MAIN_RTL_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.v")
-  set(MAIN_SDC_SRC "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
+  set(MAIN_SDC_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
   set(MAIN_INT_TOP        "${TEST_BINARY_ROOT}/INTF_${MAIN_RTL_ENTITY}.v")
   set(MAIN_INT_BRAM       "${TEST_BINARY_ROOT}/BRAM.sv")
   set(MAIN_INT_BRAMINIT   "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}_BramInit.txt")
-  set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
   set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.sv")
-
-  set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
-  set(MAIN_SC_O           "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.o")
-  set(VERILATED_O         "${MAIN_OBJ_PRJ_ROOT}/verilated.o")
-  set(V_ALL_O             "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL__ALL*.o")
-  set(MAIN_V_MK           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL.mk")
-  set(MAIN_V__ALL         "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL__ALL.a")
-  set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
+  set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")
 
   configure_file (
@@ -349,7 +341,7 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
     "${TEST_BINARY_ROOT}/common_config.lua"
   )
   configure_file (
-    ${config_file}
+    "${config_file}"
     "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
     )
 
@@ -380,17 +372,16 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
 
 if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   configure_file (
-  ${altera_setup_prj_file}
-  "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
+    "${altera_setup_prj_file}" "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
   )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
-  COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
-  #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
-  #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-  DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
-  WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-  COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
+    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
+    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
+    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
+    WORKING_DIRECTORY ${TEST_BINARY_ROOT}
+    COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
   add_custom_target(${TEST}_synthesis_main DEPENDS ${MAIN_RTL_STA})
   add_dependencies(${TEST}_synthesis_main ${TEST}_main_hls)

@@ -355,6 +355,7 @@ always_comb begin
     wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
     $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
     $('$')fclose(wtmpfile);
+    $display("At %t the result is corrent!", $time());
     $('$')stop;
   end
 end
