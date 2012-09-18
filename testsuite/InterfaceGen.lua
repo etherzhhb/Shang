@@ -302,7 +302,7 @@ if message ~= nil then print(message) end
 BramFile:close()
 ]=]}
 
-DUTtbGen = [=[
+DUT_TB_Template = [=[
 `timescale 1ns/1ps
 module DUT_TOP_tb();
 reg clk;
@@ -341,43 +341,36 @@ always $('#')<half-period>ns clk = ~clk;
 
 reg [31:0] cnt = 0;
 
-always_comb if (!succ) $('$')stop;
+always_comb begin
+  if (!succ) begin
+    $('$')display ("The result is correct!");
+    $('$')stop;
+  end
 
-// TEMPORARY HACK: Catch the finish signal at the negedge of the clock,
-// as we find there may be hold time voliation on the finish signal.
-// But the voliation should be ok because the finish signal is for debug only,
-// and we even not assign it to a pin of the FPGA.
-always@(negedge clk)begin
-  if (startcnt) begin
-    if (fin) begin
-      if (succ) begin
-        $('$')display ("The result is correct!");
-        wfile = $('$')fopen("$(CounterFile)");
-        $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
-        $('$')fclose(wfile);
-        wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
-        $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
-        $('$')fclose(wtmpfile);
-      end else begin
-        $('$')display ("The result is wrong!!!");
-      end
-      $('$')stop;
-    end else begin
-      cnt <= cnt + 1;
-    end
+  if (fin) begin
+    wfile = $('$')fopen("$(CounterFile)");
+    $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
+    $('$')fclose(wfile);
+
+    wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
+    $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
+    $('$')fclose(wtmpfile);
+    $('$')stop;
   end
 end
+
+always@(posedge clk) if (startcnt) cnt <= cnt + 1;
 
 endmodule
 ]=]
 
-Passes.DUTtbGen = { FunctionScript = [=[
+Passes.DUT_TB_Gen = { FunctionScript = [=[
 if Functions[FuncInfo.Name] ~= nil then
 end
 ]=], GlobalScript =[=[
 local tbFile = assert(io.open (TBFILE, "w+"))
 local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=DUTtbGen, output=tbFile}
+local _, message = preprocess {input=DUT_TB_Template, output=tbFile}
 if message ~= nil then print(message) end
 tbFile:close()
 ]=]}
