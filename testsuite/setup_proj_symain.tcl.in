@@ -1,6 +1,3 @@
-# to run:
-# quartus_sh -t setup_proj.tcl <family> <verilog_name>
-
 # Load necessary package.
 load_package flow
 load_package report
@@ -8,10 +5,7 @@ load_package report
 
 project_new DUT_TOP -overwrite
 
-#set_global_assignment -name FAMILY [lindex $quartus(args) 0]
-#set_global_assignment -name DEVICE AUTO
-
-# Target: DE2 Board
+# Target: DE2-70 Board
 set_global_assignment -name FAMILY CycloneII
 set_global_assignment -name DEVICE EP2C70F896C6
 
@@ -88,7 +82,7 @@ source @VTS_SOURCE_ROOT@/report_json_data.tcl
 unload_report
 
 #Perform functional simulation.
-exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@
+exec timeout @TIMEOUTS@s bash @MAIN_MODELDO_FILE@ >@ stderr
 
 #Read the execution cycles
 set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
@@ -112,7 +106,7 @@ if {0} {
 
   #Simulate the design to get the vcd.
   #TODO Check the result.
-  exec bash @MAIN_MODELDO_FILE@_post_routed
+  exec bash @MAIN_MODELDO_FILE@_post_routed >@ stderr
 
   # Estimate power base on the vcd.
   execute_module -tool pow -args {--input_vcd=simulation/modelsim/DUT_TOP.vcd --use_vectorless_estimation=on --vcd_filter_glitches=on}
