@@ -360,7 +360,13 @@ always_comb begin
   end
 end
 
-always@(posedge clk) if (startcnt) cnt <= cnt + 1;
+always@(posedge clk) begin
+  if (startcnt) cnt <= cnt + 1;
+  // Produce the heard beat of the simulation.
+  if (cnt % 80 == 0) $('$')write(".");
+  // Do not exceed 80 columns.
+  if (cnt % 6400 == 0) $('$')write("\n");
+end
 
 endmodule
 ]=]
