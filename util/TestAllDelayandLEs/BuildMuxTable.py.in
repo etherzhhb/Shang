@@ -1,0 +1,123 @@
+#! /usr/bin/python
+
+InputNum = @INPUT_NUM@
+WIDTH = @WIDTH@
+FileToWrt = open('@TEST_VERILOG@','w')
+########first write the module declaration##########
+SetNum = 0
+FileToWrt.write("`define\twidth\t%d\n"%(WIDTH))
+FileToWrt.write("`define\tN\t%d\n\n"%(InputNum))
+###############################################
+ToWrtContent0 = "module mux(\ninput	clk,\n"
+FileToWrt.write(ToWrtContent0)
+while SetNum < InputNum:
+  ToWrtContent0 = "input  [`width-1:0] pin%d,\n"%(SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+SetNum = 0  
+while SetNum < InputNum:
+  ToWrtContent0 = "input  select%d,\n"%(SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+ToWrtContent0 = "output reg [`width-1:0] pout\n);\n"
+FileToWrt.write(ToWrtContent0)
+########Finish the module declaration##########
+FileToWrt.write("always@* begin\n")
+FileToWrt.write("\t/* parallel_case */case(1'b1)\n")
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\t(select%d) :\tpout = pin%d;\n"%(SetNum,SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+FileToWrt.write("\tdefault\t:\tpout = %d'bx;\n"%(WIDTH))
+FileToWrt.write("\tendcase\n")
+FileToWrt.write("end\n")
+FileToWrt.write("endmodule\n\n")
+#######################################
+##------------------------------------------------------##
+## module Shift4Pin(); endmodule
+ToWrtContent0 = "module Shift4Pin(\n\tinput\tclk,rst,\n"
+FileToWrt.write(ToWrtContent0)
+FileToWrt.write("\tinput\t[`width-1:0]\tshift_in,\n")
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\toutput\treg\t[`width-1:0]\tshift_reg%d,\n"%(SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+FileToWrt.write("\toutput\treg\t[`N-1:0]\tSel\n);\n")
+FileToWrt.write("always@(posedge clk)begin\n")
+FileToWrt.write("\tif(rst)begin\n")
+FileToWrt.write("\t\tSel <= %d'b"%(InputNum))
+SetNum = 0
+while SetNum < InputNum-1:
+  FileToWrt.write("0")  
+  SetNum = SetNum + 1
+FileToWrt.write("1;\n")
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\t\tshift_reg%d <= 0;\n"%(SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+FileToWrt.write("\tend else begin\n")  
+FileToWrt.write("\t\tshift_reg0 <= shift_in;\n")
+SetNum = 0
+while SetNum < InputNum-1: 
+  ToWrtContent0 = "\t\tshift_reg%d <= shift_reg%d;\n"%(SetNum+1,SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+FileToWrt.write("\t\tSel <= {Sel[0],Sel[`N-1:1]};\n")
+FileToWrt.write("\tend\n")
+FileToWrt.write("end\nendmodule\n\n")
+##-------------------------------------------------------##
+## module Top test(); endmodule
+FileToWrt.write("module @TEST_NAMES@(\n\tinput\tclk,rst,\n")
+FileToWrt.write("\tinput\t[`width-1:0]\tshift_in,\n\toutput\treg\t[`width-1:0]\tpout_top\n);\n")
+FileToWrt.write("wire\t[`N-1:0]\tSel;\n")
+FileToWrt.write("reg\t[`N-1:0]\tSel_0;\n")
+SetNum = 0
+while SetNum < InputNum: 
+  FileToWrt.write("wire\t[`width-1:0]\tpin%d;\n"%(SetNum))
+  FileToWrt.write("reg\t[`width-1:0]\tpin%d_0;\n"%(SetNum))  
+  SetNum = SetNum + 1
+FileToWrt.write("wire\t[`width-1:0]\tpout;\n")
+FileToWrt.write("\n")
+FileToWrt.write("always@(posedge clk)begin\n")
+FileToWrt.write("\tSel_0 <= Sel;\n")
+SetNum = 0
+while SetNum < InputNum: 
+  FileToWrt.write("\tpin%d_0 <= pin%d;\n"%(SetNum,SetNum))
+  SetNum = SetNum + 1
+FileToWrt.write("\tpout_top <= pout;\n")
+FileToWrt.write("end\n\n")
+FileToWrt.write("Shift4Pin\ti0(\n")
+FileToWrt.write("\t.clk(clk),\n")
+FileToWrt.write("\t.rst(rst),\n")
+FileToWrt.write("\t.shift_in(shift_in),\n")
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\t.shift_reg%d(pin%d),\n"%(SetNum,SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+FileToWrt.write("\t.Sel(Sel)\n")
+FileToWrt.write(");\n")     
+FileToWrt.write("mux\ti1(\n")
+FileToWrt.write("\t.clk(clk),\n")
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\t.pin%d(pin%d_0),\n"%(SetNum,SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1
+SetNum = 0
+while SetNum < InputNum: 
+  ToWrtContent0 = "\t.select%d(Sel_0[%d]),\n"%(SetNum,SetNum)
+  FileToWrt.write(ToWrtContent0)  
+  SetNum = SetNum + 1  
+FileToWrt.write("\t.pout(pout)\n);\nendmodule\n")
+##########################################################
+FileToWrt.close()
+
+##def prtcontent(SetNum,InputNum,ToWrtContent0):
+##  while SetNum < InputNum:
+##    FileToWrt.write(ToWrtContent0)  
+##    SetNum = SetNum + 1
+##  return 0

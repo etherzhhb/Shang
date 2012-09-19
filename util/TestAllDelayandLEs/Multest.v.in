@@ -1,0 +1,42 @@
+`define WIDTH @WIDTH@
+
+module @TEST_NAMES@(
+  input clk,
+  input wire[`WIDTH-1:0] a,
+  input wire[`WIDTH-1:0] b,
+  output reg[`WIDTH-1:0] c
+);
+
+  reg [`WIDTH-1:0] a_reg0;
+  reg [`WIDTH-1:0] a_reg1;
+  reg [`WIDTH-1:0] b_reg0;
+  reg [`WIDTH-1:0] b_reg1;
+  reg [`WIDTH-1:0] c_reg0;
+  wire [`WIDTH-1:0] c_wire;
+  
+always@(posedge clk) begin
+  a_reg0 <= a;
+  a_reg1 <= a_reg0;
+  b_reg0 <= b;
+  b_reg1 <= b_reg0;
+  c_reg0 <= c_wire;
+  c <= c_reg0;
+end  
+
+Mul i0(
+  .a(a_reg1),
+  .b(b_reg1),
+  .c(c_wire)
+);
+
+endmodule
+
+module Mul(
+  input wire[`WIDTH-1:0] a,
+  input wire[`WIDTH-1:0] b,
+  output wire[`WIDTH-1:0] c
+);
+
+assign c = a * b;
+
+endmodule

@@ -1,0 +1,35 @@
+`define WIDTH @WIDTH@
+
+module @TEST_NAMES@(
+  input clk,
+  input wire[`WIDTH-1:0] a,
+  output reg[`WIDTH-1:0] b
+);
+
+  reg [`WIDTH-1:0] a_reg0;
+  reg [`WIDTH-1:0] a_reg1;
+  reg [`WIDTH-1:0] b_reg;
+  wire [`WIDTH-1:0] b_wire;
+  
+always@(posedge clk) begin
+  a_reg0 <= a;
+  a_reg1 <= a_reg0;
+  b_reg <= b_wire;
+  b <= b_reg;
+end  
+
+Red i0(
+  .a(a_reg1),
+  .b(b_wire)
+);
+
+endmodule
+
+module Red(
+  input wire[`WIDTH-1:0] a,
+  output wire[`WIDTH-1:0] b
+);
+
+assign b = &a;
+
+endmodule
