@@ -361,7 +361,7 @@ always_comb begin
     wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
     $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
     $('$')fclose(wtmpfile);
-    $display("At %t the result is corrent!", $time());
+    $display("At %t the result is corrent!", $('$')time());
     $('$')stop;
   end
 end
@@ -371,7 +371,7 @@ always@(posedge clk) begin
   // Produce the heard beat of the simulation.
   if (cnt % 80 == 0) $('$')write(".");
   // Do not exceed 80 columns.
-  if (cnt % 6400 == 0) $('$')write("\n");
+  if (cnt % 6400 == 0) $('$')write("%t\n", $('$')time());
 end
 
 endmodule
