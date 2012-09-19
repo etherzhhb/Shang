@@ -53,7 +53,7 @@ $(_put('#')) $(DstName) <- $(ThuName) <- $(SrcName) Slack $(Slack)
 SDCHeader = [=[
 create_clock -name "clk" -period $(PERIOD)ns [get_ports {clk}]
 derive_pll_clocks -create_base_clocks
-set_multicycle_path -from [get_clocks {clk}] -to [get_clocks {clk}] -hold -end 1
+set_multicycle_path -from [get_clocks {clk}] -to [get_clocks {clk}] -hold -end 0
 ]=]
 
 Misc.DatapathScript = [=[
