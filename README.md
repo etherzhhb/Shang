@@ -189,7 +189,7 @@ We will demonstrate how to write a Lua script to configure Shang as follows. Now
 we assume that you want to convert a C code named float64_add.c which is available at
 testsuite\benchmark\ChStone\dfadd into the corresponding RTL code.  
 ######1.  Setup the input and output path######
-Now we should wirte a Lua script named "configure.lua" for Shang. To
+Now we should write a Lua script named "configure.lua" for Shang. To
 begin with, You should assign the input path of .bc or .ll file (float64_add.bc). 
 We also presume that the output path is the same as the input path. We output
 the RLT code (float64_add.v) and timing constraints script(float64_add.sdc).
