@@ -11,7 +11,7 @@ take as input C specification and generates
 LLVM IR. Unlike most other LLVM-based high-level synthesis frameworks, e.g.
 [C-to-Verilog](http://www.c-to-verilog.com/) or [Legup](http://legup.eecg.utoronto.ca/),
 which work on the LLVM-IR layer, Shang works on the LLVM machine code layer,
-this allow Shang to easily represent and optimize some high-level synthesis
+which allow Shang to easily represent and optimize some high-level synthesis
 specific operation(instruction), e.g. reduction OR, concatenation, etc.
 
 At the moment, Shang has several high-level synthesis specific (optimization)
@@ -43,7 +43,7 @@ sharing algorithm which only shares FUs/Registers with identical fanins.
 
 Getting Start
 -------------
-This guide should quickly get you started using Shang to synthesize C into
+This guide should quickly get you started on using Shang to synthesize C into
 Verilog. We divided this guide into 2 parts. Installation will guide you to
 install required packages and complie the source code on Ubuntu. Main or Hybrid
 Flow will show you how to use Shang in different synthesis flow. These flows has
@@ -186,10 +186,10 @@ scripting language. If you are not familiar with the syntax of Lua, you should
 spend a little time and go over the [Lua 5.1 reference book](http://www.lua.org/manual/5.1/).
 
 We will demonstrate how to write a Lua script to configure Shang as follows. Now
-we assume that you want to convert a C code float64_add.c which is available at
+we assume that you want to convert a C code named float64_add.c which is available at
 testsuite\benchmark\ChStone\dfadd into the corresponding RTL code.  
 ######1.  Setup the input and output path######
-Now we supposed that we wirte a Lua script named "configure.lua" for Shang. To
+Now we should wirte a Lua script named "configure.lua" for Shang. To
 begin with, You should assign the input path of .bc or .ll file (float64_add.bc). 
 We also presume that the output path is the same as the input path. We output
 the RLT code (float64_add.v) and timing constraints script(float64_add.sdc).
@@ -211,7 +211,7 @@ In this table, we create a table in which the "ModName" is the name of the
 converted verilog module, the "Scheduling" is the schedule mode of Shang (ASAP or ILP etc.),
 the "Pipeline" is the option whether we use software pipelining in Shang.
 ######3.  Setup the platform information script.######
-Supposed that we use the EP2C35F672C6 FPGA of altera, we could create another lua
+Supposed that we use the EP2C35F672C6 FPGA of altera as the hardware platform, we could create another lua
 script named "EP2C35F672C6.lua" to hold the platform information of EP2C35F672C6.
 The "EP2C35F672C6.lua" could be like this:
 
