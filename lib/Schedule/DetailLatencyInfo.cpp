@@ -16,13 +16,15 @@
 //===----------------------------------------------------------------------===//
 #include "vtm/DetailLatencyInfo.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#define DEBUG_TYPE "detail-latency"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
 static cl::opt<bool>
-EnableBLC("vtm-enable-blc",
-          cl::desc("Enable bit-level chaining"),
-          cl::init(true));
+DisableBLC("vtm-disable-blc",
+          cl::desc("Disable bit-level chaining"),
+          cl::init(false));
 
 INITIALIZE_PASS_BEGIN(DetialLatencyInfo, "detail-latency-info",
                       "Calculating the latency of instructions",
@@ -258,9 +260,10 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     BitLatency = std::max(SrcLatency.first - SrcLatency.second / Size,
                           VFUs::LutLatency);
 
-  unsigned Opcode = VTM::INSTRUCTION_LIST_END;
+  unsigned Opcode = SrcMI->getOpcode();
   bool isCtrl = VInstrInfo::isControl(SrcMI->getOpcode());
-  if (EnableBLC) Opcode = SrcMI->getOpcode();
+  if (DisableBLC && Opcode != VTM::VOpBitSlice)
+    Opcode = VTM::INSTRUCTION_LIST_END;
 
   switch (Opcode) {
   default:
