@@ -48,6 +48,11 @@
 #include "llvm/Support/Debug.h"
 using namespace llvm;
 
+static cl::opt<bool>
+DisableDangling("vtm-disable-dangling",
+          cl::desc("Disable cross BasicBlock chain"),
+          cl::init(false));
+
 STATISTIC(MutexPredNoAlias, "Number of no-alias because of mutex predicate");
 //===----------------------------------------------------------------------===//
 namespace {
@@ -966,7 +971,7 @@ void VPreRegAllocSched::updateWaitSets(MachineInstr *MI, VSchedGraph &G) {
       MIsToRead.insert(SrcMI);
   }
 
-  if (IsControl || false /*Disable Dangling*/) MIsToWait.insert(MI);
+  if (IsControl || DisableDangling) MIsToWait.insert(MI);
 
   if (!IsControl) return;
 
