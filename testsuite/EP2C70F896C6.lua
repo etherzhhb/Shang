@@ -1,6 +1,6 @@
 FUs.ClkEnSelLatency = 1.535 / PERIOD --1.535
 FUs.MaxLutSize = 4
-FUs.LutLatency = 0.635 / PERIOD
+FUs.LutLatency = 0.150 / PERIOD
 -- Latency table for EP2C35F672C6
 FUs.AddSub = { Latencies = { 2.113 / PERIOD, 2.700 / PERIOD, 4.052 / PERIOD, 6.608 / PERIOD },
                Costs = {128, 576, 1088, 2112, 4160}, StartInterval=1,
