@@ -167,7 +167,7 @@ static LatInfoTy getBitSliceLatency(unsigned OperandSize,
 }
 
 static float adjustChainedLatency(float Latency, unsigned SrcOpcode,
-                                   unsigned DstOpcode) {
+                                  unsigned DstOpcode) {
   bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpcode);
   bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpcode);
 
@@ -193,6 +193,14 @@ static float adjustChainedLatency(float Latency, unsigned SrcOpcode,
 
   // Chain the operations if dst not read value at the edge of the clock.
   return std::max(0.0f, Latency - Delta);
+}
+
+// Ensure all latency are not smaller than the elemental latency,
+// i.e. the latency of a single LUT.
+static LatInfoTy ensureElementalLatency(LatInfoTy L) {
+  return
+    std::make_pair(L.first  == 0.0f ? 0.0f : std::max(L.first, VFUs::LutLatency),
+                   L.second == 0.0f ? 0.0f : std::max(L.second, VFUs::LutLatency));
 }
 
 float DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
@@ -221,27 +229,32 @@ template<bool IsCtrlDep>
 LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
                                              unsigned DstOpcode,
                                              unsigned UB, unsigned LB) {
-  float MaxLatency = getCachedLatencyResult(SrcMI);
-  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, MaxLatency)) {
-    MaxLatency = adjustChainedLatency(MaxLatency, SrcMI->getOpcode(), DstOpcode);
+  float MSBLatency = getCachedLatencyResult(SrcMI);
+  float LSBLatency = MSBLatency;
+  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, *MRI, MSBLatency)) {
+    LSBLatency = MSBLatency
+      = adjustChainedLatency(MSBLatency, SrcMI->getOpcode(), DstOpcode);
     // If we are only reading the lower part of the result of SrcMI, and the
     // LSB of the result of SrcMI are available before SrcMI completely finish,
     // we can read the subword before SrcMI finish.
     if (UB && propagateFromLSB2MSB(SrcMI->getOpcode())) {
       unsigned SrcSize = VInstrInfo::getBitWidth(SrcMI->getOperand(0));
+      LSBLatency = MSBLatency / SrcSize;
       // DirtyHack: Ignore the invert flag.
       if (SrcSize != 1 && UB != 3) {
         assert(UB <= SrcSize && UB > LB  && "Bad bitslice!");
-        float SrcBitLatency = std::max(MaxLatency / SrcSize, VFUs::LutLatency);
-        return getBitSliceLatency(SrcSize, UB, LB, LatInfoTy(MaxLatency, SrcBitLatency));
+        tie(MSBLatency, LSBLatency)
+          = getBitSliceLatency(SrcSize, UB, LB,
+                               LatInfoTy(MSBLatency, LSBLatency));
       }
     }
   } else {
     // IsCtrlDep
-    MaxLatency = std::max(0.0f, MaxLatency - DetialLatencyInfo::DeltaLatency);
+    LSBLatency = MSBLatency
+      = std::max(0.0f, MSBLatency - DetialLatencyInfo::DeltaLatency);
   }
 
-  return std::make_pair(MaxLatency, MaxLatency);
+  return std::make_pair(MSBLatency, LSBLatency);
 }
 
 template<bool IsCtrlDep>
@@ -260,6 +273,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     BitLatency = std::max((SrcLatency.first - SrcLatency.second) / Size,
                           VFUs::LutLatency);
 
+  SrcLatency = ensureElementalLatency(SrcLatency);
   unsigned Opcode = SrcMI->getOpcode();
   bool isCtrl = VInstrInfo::isControl(SrcMI->getOpcode());
   if (DisableBLC && Opcode != VTM::VOpBitSlice)
@@ -299,6 +313,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       // Create the entry for the bitslice, the latency of the bitslice is the
       // same as the scaled BitSliceSrc.
       SrcLatency = getLatencyToDst<IsCtrlDep>(BitSliceSrc, DstOpcode, UB, LB);
+      SrcLatency = ensureElementalLatency(SrcLatency);
       updateLatency(CurLatInfo, SrcMI, SrcLatency);
 
       buildDepLatInfo<IsCtrlDep>(BitSliceSrc, CurLatInfo, UB, LB, DstOpcode);
