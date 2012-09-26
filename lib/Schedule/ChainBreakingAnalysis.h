@@ -33,10 +33,7 @@ class ScheduleLiveInterval {
   unsigned EndSlot;
 
 public:
-  explicit ScheduleLiveInterval(unsigned StartSlot = 0, unsigned EndSlot = 1)
-                              : StartSlot(StartSlot), EndSlot(EndSlot) {
-    assert(StartSlot < EndSlot && "Bad interval!");
-  }
+  explicit ScheduleLiveInterval(unsigned StartSlot = 0, unsigned EndSlot = 1);
 
   bool isOverlapped(const ScheduleLiveInterval &Other) const {
     return Other.EndSlot < StartSlot || EndSlot < Other.StartSlot;
@@ -47,6 +44,8 @@ class ChainBreakingAnalysis {
 public:
 
   /// @brief Get the slot to break the chain start from U.
+  ///
+  /// @return The upper bound slot that the chain must be broken.
   unsigned getBreakingSlot(const VSUnit *U) const;
 };
 }
