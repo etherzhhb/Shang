@@ -104,6 +104,9 @@ public:
   MachineRegisterInfo *MRI;
 
 private:
+  // Statistics of the longest path's latency.
+  float LongestPathLatency;
+
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
@@ -138,6 +141,7 @@ protected:
 
 public:
   DetialLatencyInfo();
+  ~DetialLatencyInfo();
 
   // Get the source register and the corresponding latency to DstMI
   const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
