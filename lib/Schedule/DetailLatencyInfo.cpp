@@ -37,13 +37,8 @@ INITIALIZE_PASS_END(DetialLatencyInfo, "detail-latency-info",
 char DetialLatencyInfo::ID = 0;
 const float DetialLatencyInfo::DeltaLatency = FLT_EPSILON * 8.0f;
 
-DetialLatencyInfo::DetialLatencyInfo() : MachineFunctionPass(ID), MRI(0),
-                                         LongestPathLatency(0.0f) {
+DetialLatencyInfo::DetialLatencyInfo() : MachineFunctionPass(ID), MRI(0) {
   initializeDetialLatencyInfoPass(*PassRegistry::getPassRegistry());
-}
-
-DetialLatencyInfo::~DetialLatencyInfo() {
-  dbgs() << "Longest path latency: " << LongestPathLatency << '\n';
 }
 
 Pass *llvm::createDetialLatencyInfoPass() {
@@ -270,7 +265,6 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   assert(SrcLatInfo && "SrcMI not visited yet?");
 
-  unsigned Opcode = SrcMI->getOpcode();
   LatInfoTy SrcLatency = getLatencyToDst<IsCtrlDep>(SrcMI, DstOpcode, UB, LB);
 
   // Try to compute the per-bit latency.
@@ -280,7 +274,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                           VFUs::LutLatency);
 
   SrcLatency = ensureElementalLatency(SrcLatency);
-
+  unsigned Opcode = SrcMI->getOpcode();
   bool isCtrl = VInstrInfo::isControl(SrcMI->getOpcode());
   if (DisableBLC && Opcode != VTM::VOpBitSlice)
     Opcode = VTM::INSTRUCTION_LIST_END;
@@ -400,18 +394,6 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
   if (CurLatInfo.empty() && (!IsControl || MI->isPHI())) {
     Latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(Latency, Latency)));
-  }
-
-  typedef DepLatInfoTy::const_iterator src_it;
-  for (src_it I = CurLatInfo.begin(), E = CurLatInfo.end(); I != E; ++I) {
-    const MachineInstr *SrcMI = I->first.dyn_cast_mi();
-    
-    if (SrcMI && !VInstrInfo::isControl(SrcMI->getOpcode())) continue;
-
-    // The control-path operation are actually have no combinational delay.
-    if (SrcMI) LongestPathLatency -= VInstrInfo::getDetialLatency(SrcMI);
-
-    LongestPathLatency += getMaxLatency(*I);
   }
 
   return CurLatInfo;
