@@ -129,7 +129,7 @@ SC_MODULE(V$(RTLModuleName)_tb){
       outfile.open ("$(BenchmarkCycles)", ios_base::app); 
       outfile <<",\n{\"name\":\"$(RTLModuleName)\", \"total\":" << cnt << ", \"wait\":" << memcnt << '}' <<endl;
       outfile.close();
-      sc_stop();
+      exit(0);
     }
     //Memory bus function
     void bus_transation(){
