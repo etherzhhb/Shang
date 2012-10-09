@@ -41,9 +41,7 @@ extern "C" {
 using namespace llvm;
 
 // The text template processing lua module
-static void openLuapp(lua_State *L) {
 #include "luapp.inc"
-}
 
 LuaScript::LuaScript() : State(lua_open()) {
   FUSet.grow(VFUs::LastCommonFUType);
@@ -67,7 +65,7 @@ void LuaScript::init() {
   // Open lua libraries.
   luaL_openlibs(State);
 
-  openLuapp(State);
+  load_luapp_lo(State);
 
   // Bind our class.
   luabind::open(State);

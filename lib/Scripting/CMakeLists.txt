@@ -19,7 +19,7 @@ macro(luamodule luasrc)
     
   add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
       COMMAND ${LUA_LUAC} -o ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.lo ${CMAKE_CURRENT_SOURCE_DIR}/${luasrc}.lua
-      COMMAND ${LUA_BIN2C} ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.lo > ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/lua2c.lua ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.lo > ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
       COMMENT "Generating ${luasrc}.inc ... "
       DEPENDS ${luasrc}.lua
     )
