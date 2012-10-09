@@ -18,7 +18,7 @@
 
 #include "SchedulingBase.h"
 #include "vtm/VInstrInfo.h"
-#include "lp_solve/lp_lib.h"
+#include "lpsolve/lp_lib.h"
 #define DEBUG_TYPE "sdc-scheduler"
 #include "llvm/Support/Debug.h"
 
