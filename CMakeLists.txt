@@ -1,4 +1,4 @@
-#modify from clang cmakelist.txt
+#Modifid from clang cmakelist.txt
 
 set(VBE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(VBE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
