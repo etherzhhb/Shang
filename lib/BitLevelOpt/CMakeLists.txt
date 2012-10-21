@@ -12,7 +12,7 @@ add_dependencies(VTMBitLevelOpt VerilogBackendTableGen)
 
 if (ENABLE_LOGIC_SYNTHESIS)
 include_directories(
-  ${ABC_INCLUDE_DIR}
+  ${ABC_INCLUDE_DIR}/src
   ${ABC_INCLUDE_DIR}/src/aig/aig
   ${ABC_INCLUDE_DIR}/src/aig/saig
   ${ABC_INCLUDE_DIR}/src/aig/gia
