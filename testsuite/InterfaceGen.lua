@@ -349,7 +349,7 @@ reg [31:0] cnt = 0;
 
 always_comb begin
   if (!succ) begin
-    $('$')display ("The result is correct!");
+    $('$')display ("The result is incorrect!");
     $('$')stop;
   end
 
@@ -361,7 +361,7 @@ always_comb begin
     wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
     $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
     $('$')fclose(wtmpfile);
-    $display("At %t the result is corrent!", $('$')time());
+    $display("At %t the result is correct!", $('$')time());
     $('$')stop;
   end
 end
