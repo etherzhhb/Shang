@@ -43,6 +43,12 @@ using namespace llvm;
 
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
 
+static cl::opt<uint32_t>
+BranchProbabilityScale("vtm-branch-probability-scale",
+          cl::desc("The interger to scale the floating point probability back"
+                   "to interger."),
+          cl::init(8192));
+
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
   static char ID;
@@ -149,103 +155,6 @@ struct HyperBlockFormation : public MachineFunctionPass {
   void moveRetValBeforePHI(MachineInstr *PHI, MachineBasicBlock *RetBB);
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
-
-
-template<typename T>
-static T gcd(T a, T b) {
-  while (b > 0) {
-    T temp = b;
-    b = a % b; // % is remainder
-    a = temp;
-  }
-
-  return a;
-}
-
-template<typename T>
-static T lcm(T a, T b) {
-  return a * (b / gcd(a, b));
-}
-
-//template<typename T>
-//static long gcd(ArrayRef<T> input) {
-//  T result = input[0];
-//
-//  for(unsigned i = 1; i < input.size(); i++)
-//    result = gcd(result, input[i]);
-//
-//  return result;
-//}
-//
-//template<typename T>
-//static T lcm(ArrayRef<T> input) {
-//  T result = input[0];
-//
-//  for(int i = 1; i < input.size(); i++)
-//    result = lcm(result, input[i]);
-//
-//  return result;
-//}
-
-struct Probability {
-  // Numerator
-  uint32_t N;
-
-  // Denominator
-  uint32_t D;
-
-  void scale(uint32_t S) {
-    N /= S;
-    D /= S;
-  }
-
-  void scaleByGCD() {
-    scale(gcd(N, D));
-  }
-
-  /*implicit*/ Probability(BranchProbability P)
-    : N(P.getNumerator()), D(P.getDenominator()) {
-    assert(D > 0 && "Denomiator cannot be 0!");
-    //scaleByGCD();
-  }
-
-  explicit Probability(uint32_t n = 0, uint32_t d = 1) : N(n), D(d) {
-    assert(D > 0 && "Denomiator cannot be 0!");
-    //scaleByGCD();
-  }
-
-  uint32_t getNumerator() const { return N; }
-  uint32_t getDenominator() const { return D; }
-
-  Probability &operator+=(Probability P) {
-
-    uint32_t Numerator = getNumerator() * P.getDenominator() +
-                        P.getNumerator() * getDenominator();
-    uint32_t Denominator = getDenominator() * P.getDenominator();
-    N = Numerator;
-    D = Denominator;
-    scaleByGCD();
-    return *this;
-  }
-
-  Probability &operator*=(Probability P) {
-    uint32_t Numerator = getNumerator() * P.getNumerator();
-    uint32_t Denominator = getDenominator() * P.getDenominator();
-    N = Numerator;
-    D = Denominator;
-    scaleByGCD();
-    return *this;
-  }
-
-  void print(raw_ostream &OS) const {
-    OS << N << " / " << D << " = " << format("%g%%", ((double)N / D) * 100.0);
-  }
-};
-
-raw_ostream &operator<<(raw_ostream &OS, const Probability &Prob) {
-  Prob.print(OS);
-  return OS;
-}
 }
 
 char HyperBlockFormation::ID = 0;
@@ -840,6 +749,11 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
   return DstBB;
 }
 
+// Convert the branch probability to floating point number.
+static float getBrProb(BranchProbability BP) {
+  return float(BP.getNumerator()) / float(BP.getDenominator());
+}
+
 void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
                                       VInstrInfo::JT &SrcJT,
                                       MachineBasicBlock *EdgeDst,
@@ -852,21 +766,19 @@ void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
 
   SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
 
-  typedef DenseMap<MachineBasicBlock*, Probability> ProbMapTy;
+  typedef DenseMap<MachineBasicBlock*, float> ProbMapTy;
   ProbMapTy BBProbs;
-  uint32_t WeightLCM = 1;
   // The probability of the edge from ToBB to FromBB.
-  BranchProbability MergedBBProb = MBPI->getEdgeProbability(EdgeSrc, EdgeDst);
+  float MergedBBProb = getBrProb(MBPI->getEdgeProbability(EdgeSrc, EdgeDst));
 
   for (const_jt_it I = DstJT.begin(),E = DstJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
 
-    Probability SuccProb = MBPI->getEdgeProbability(EdgeDst, Succ);
+    float SuccProb = getBrProb(MBPI->getEdgeProbability(EdgeDst, Succ));
     // In the merged block, sum of probabilities of FromBB's successor should
     // be the original edge probability from ToBB to FromBB.
     SuccProb *= MergedBBProb;
     BBProbs.insert(std::make_pair(Succ, SuccProb));
-    WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
   }
 
   typedef MachineBasicBlock::succ_iterator succ_it;
@@ -874,9 +786,8 @@ void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
     succ_it SuccIt = EdgeSrc->succ_begin() + i - 1;
     MachineBasicBlock *Succ = *SuccIt;
     if (Succ != EdgeDst) {
-      Probability &SuccProb = BBProbs[Succ];
-      SuccProb += MBPI->getEdgeProbability(EdgeSrc, Succ);
-      WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
+      float &SuccProb = BBProbs[Succ];
+      SuccProb += getBrProb(MBPI->getEdgeProbability(EdgeSrc, Succ));
     }
 
     EdgeSrc->removeSuccessor(SuccIt);
@@ -884,8 +795,8 @@ void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
 
   // Rebuild the successor list with new weights.
   for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
-    Probability Prob = I->second;
-    uint32_t w = Prob.getNumerator() * WeightLCM / Prob.getDenominator();
+    float Prob = I->second;
+    uint32_t w = uint32_t(Prob * BranchProbabilityScale);
     DEBUG(dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n');
     EdgeSrc->addSuccessor(I->first, w);
   }
