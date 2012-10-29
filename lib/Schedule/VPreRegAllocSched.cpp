@@ -232,7 +232,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   // Create a place holder for the virtual exit for the scheduling graph.
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   MF.push_back(VirtualExit);
-  
+
   VSchedGraph G(getAnalysis<DetialLatencyInfo>(), false, 1);
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
@@ -318,7 +318,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
     if (!DstMI->memoperands_empty() && !DstMI->hasVolatileMemoryRef()) {
       assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem ops!");
       assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile op!");
-      
+
       // FIXME: DstMO maybe null in a VOpCmdSeq
       if ((DstMO = /*ASSIGNMENT*/ *DstMI->memoperands_begin())){
         assert(!isa<PseudoSourceValue>(DstMO->getValue())
@@ -632,7 +632,7 @@ void VPreRegAllocSched::addControlPathDepForSU(VSUnit *A, VSchedGraph &G) {
   assert(A->isControl() && "Unexpected data-path operations!");
 
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
-    MachineInstr *MI = A->getPtrAt(I);    
+    MachineInstr *MI = A->getPtrAt(I);
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *Deps = G.getDepLatInfo(MI);
     assert(Deps && "Operand latency information not available!");
@@ -885,7 +885,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
       continue;
     }
   }
-  
+
   VSUnit *ExitSU = G.createTerminator(MBB);
   NewSUs.push_back(ExitSU);
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
@@ -986,7 +986,7 @@ void VPreRegAllocSched::updateWaitSets(MachineInstr *MI, VSchedGraph &G) {
   }
 }
 
-void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G, 
+void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
                                               MachineBasicBlock *MBB,
                                               std::vector<VSUnit*> &NewSUs) {
   // Clean the context
@@ -1009,7 +1009,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &G,
     updateWaitSets(I, G);
 
     if (!G.isLoopPHIMove(I)) continue;
-    
+
     VSUnit *PHIMove = buildSUnit(I, G);
     NewSUs.push_back(PHIMove);
     addIncomingDepForPHI(PHIMove, G);
@@ -1180,7 +1180,7 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
 
   // Preserve the read fu information, and keep reading the source fu register
   if (DefMI.getOpcode() == VTM::VOpReadFU ||
-      DefMI.getOpcode() == VTM::VOpPipelineStage)    
+      DefMI.getOpcode() == VTM::VOpPipelineStage)
     DI.getOperand().ChangeToRegister(0, true);
   else {
     // FIXME: Remove the PHI, and incoming copies (Bug 14).
