@@ -47,7 +47,7 @@ static cl::opt<uint32_t>
 BranchProbabilityScale("vtm-branch-probability-scale",
           cl::desc("The interger to scale the floating point probability back"
                    "to interger."),
-          cl::init(8192));
+          cl::init(1u << 24));
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
@@ -793,10 +793,11 @@ void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
     EdgeSrc->removeSuccessor(SuccIt);
   }
 
+
   // Rebuild the successor list with new weights.
   for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
     float Prob = I->second;
-    uint32_t w = uint32_t(Prob * BranchProbabilityScale);
+    uint32_t w = std::max(uint32_t(Prob * BranchProbabilityScale), 1u);
     DEBUG(dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n');
     EdgeSrc->addSuccessor(I->first, w);
   }
