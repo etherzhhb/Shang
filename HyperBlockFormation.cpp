@@ -438,7 +438,7 @@ public:
     SrcMap.clear();
     BitWidth = 0;
     RC = 0;
-    if ((PHI = P))  buildSrcMap();    
+    if ((PHI = P))  buildSrcMap();
   }
 
   void forwardAllIncomingFrom(MachineBasicBlock *PredBB) {
@@ -510,7 +510,7 @@ public:
   void fillBySelfLoop(iterator begin, iterator end){
     unsigned PHIReg = PHI->getOperand(0).getReg();
     while (begin != end) {
-      MachineBasicBlock *SrcBB = *begin++;      
+      MachineBasicBlock *SrcBB = *begin++;
       SrcMap.insert(std::make_pair(SrcBB, PHIReg));
     }
   }
@@ -598,7 +598,7 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   assert(isBlockAlmostEmtpy(MBB) && "Not an empty MBB!");
   // Cannot handle.
   if (MBB->succ_size() > 1 && MBB->instr_begin()->isPHI()) return false;
-  
+
   VInstrInfo::JT EmptyBBJT, PredJT;
   if (VInstrInfo::extractJumpTable(*MBB, EmptyBBJT))
     return false;
@@ -623,7 +623,7 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
     // FIXME: This not work if there is more then 1 successors.
     assert(Succs.size() == 1 && "Cannot handle yet!");
     Editor.reset(MI++);
-    MachineBasicBlock *Succ = Succs.front(); 
+    MachineBasicBlock *Succ = Succs.front();
     Editor.fillBySelfLoop(Succ->pred_begin(), Succ->pred_end());
     Editor.removeSrc(MBB);
 
