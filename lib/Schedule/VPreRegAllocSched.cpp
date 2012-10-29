@@ -1105,8 +1105,6 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
       MachineBasicBlock *MBB = I;
       BlockFrequency BlockFreq = MBFI.getBlockFreq(MBB);
       double BBFreq = double(BlockFreq.getFrequency()) / FreqSum;
-      // Avoid setting zero coefficient.
-      BBFreq = std::max(0.001, BBFreq);
 
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
       // Minimize the latency of the BB.
@@ -1129,8 +1127,6 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
           = double(EdgeProb.getFrequency()) / double(BlockFreq.getFrequency());
 
         EdgeFreq *= BBFreq;
-        // Avoid setting zero coefficient.
-        EdgeFreq = std::max(0.001, EdgeFreq);
 
         // Minimize the latency of edge.
         // Min (SuccBBStart - MBBEnd) * EdgeFreq;
