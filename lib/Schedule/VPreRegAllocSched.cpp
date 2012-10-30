@@ -1092,7 +1092,7 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   typedef MachineFunction::iterator iterator;
 
   for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
-    FreqSum += MBFI.getBlockFreq(I).getFrequency();
+    FreqSum += std::max(MBFI.getBlockFreq(I).getFrequency(), UINT64_C(1));
 
   SDCScheduler<true> Scheduler(G);
 
@@ -1103,8 +1103,9 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   if (Scheduler.createLPAndVariables()) {
     for (iterator I = EntryBB, E = ExitBB; I != E; ++I) {
       MachineBasicBlock *MBB = I;
-      BlockFrequency BlockFreq = MBFI.getBlockFreq(MBB);
-      double BBFreq = double(BlockFreq.getFrequency()) / FreqSum;
+      uint64_t BlockFreq
+        = std::max(MBFI.getBlockFreq(I).getFrequency(), UINT64_C(1));
+      double BBFreq = double(BlockFreq) / FreqSum;
 
       DEBUG(dbgs() << "MBB#" << MBB->getNumber() << ' ' << BBFreq << '\n');
       // Minimize the latency of the BB.
