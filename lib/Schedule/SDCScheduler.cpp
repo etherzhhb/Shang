@@ -450,7 +450,7 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       VDEdge Edge = DI.getEdge();
 
       // Ignore the control-dependency edges between BBs.
-      if (Src->isTerminator() && IsBBEntry)
+      if (IsBBEntry && Src->isTerminator())
         continue;
 
       H.resetSrc(Src, this);

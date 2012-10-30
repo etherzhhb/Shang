@@ -502,8 +502,9 @@ void VPreRegAllocSched::addControlPathDepForMI(MachineInstr *MI, int MIOffset,
 
       // Note that the dangling node are not chained with its depending control
       // operations, so for the scheduled instruction that has nozero latency,
-      // the result is written to register, so the result will available 1 slot
-      // later than it is expected when we are computing the original latency.
+      // the result is written to register, which means the result will
+      // is available 1 slot later than it is expected when we are computing the
+      // original latency.
       if (!VInstrInfo::isCopyLike(SrcMI->getOpcode())) Latency += 1;
 
       // We are in local scheduling mode.
