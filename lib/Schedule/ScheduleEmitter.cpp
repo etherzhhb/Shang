@@ -1191,7 +1191,7 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
   return top_sort_slot(LHS, RHS);
 }
 
-unsigned VSchedGraph::emitSchedule() {
+unsigned VSchedGraph::emitSchedule(bool AllowDangling) {
   // Erase the virtual exit root right now, so that we can avoid the special
   // code to handle it.
   assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
@@ -1207,6 +1207,8 @@ unsigned VSchedGraph::emitSchedule() {
     VSUnit *U = *I;
 
     if (!U->isDangling()) continue;
+
+    if (!AllowDangling) llvm_unreachable("Unexpected dangling node!");
 
     // If the SU is scheduled within the boundary of its parent BB, then it is
     // not dangling.

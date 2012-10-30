@@ -245,7 +245,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   VirtualExit->eraseFromParent();
   MF.RenumberBlocks(&MF.back());
 
-  unsigned TotalCycles = G.emitSchedule();
+  unsigned TotalCycles = G.emitSchedule(!DisableDangling);
   FInfo->setTotalSlots(TotalCycles);
 
   cleanUpSchedule();

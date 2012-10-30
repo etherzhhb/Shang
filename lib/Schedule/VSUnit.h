@@ -921,7 +921,7 @@ public:
   // scheduled, this can reduce register usage.
   void scheduleControlPath();
   void scheduleDatapath();
-  unsigned emitSchedule();
+  unsigned emitSchedule(bool AllowDangling);
   //}
 };
 
