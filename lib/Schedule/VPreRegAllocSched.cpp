@@ -1091,7 +1091,7 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
   MachineBasicBlock *EntryBB = G.getEntryBB(), *ExitBB = G.getExitBB();
   typedef MachineFunction::iterator iterator;
 
-  for (iterator I = G.getEntryBB(), E = G.getExitBB(); I != E; ++I)
+  for (iterator I = EntryBB, E = ExitBB; I != E; ++I)
     FreqSum += std::max(MBFI.getBlockFreq(I).getFrequency(), UINT64_C(1));
 
   SDCScheduler<true> Scheduler(G);
