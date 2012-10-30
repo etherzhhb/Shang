@@ -1115,7 +1115,7 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
       Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
 
       typedef MachineBasicBlock::const_succ_iterator succ_iterator;
-      for (succ_iterator SI = MBB->succ_begin(), SE = MBB->succ_begin();
+      for (succ_iterator SI = MBB->succ_begin(), SE = MBB->succ_end();
            SI != SE; ++SI) {
         MachineBasicBlock *SuccBB = *SI;
         // Ignore the back-edges and edge to the virtual ExitBB.
@@ -1123,19 +1123,14 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
           continue;
 
         BlockFrequency EdgeProb
-          = BlockFreq * MBPI.getEdgeProbability(MBB, SuccBB);
-        double EdgeFreq
-          = double(EdgeProb.getFrequency()) / double(BlockFreq.getFrequency());
+          = BlockFrequency(BlockFreq) * MBPI.getEdgeProbability(MBB, SuccBB);
+        double EdgeFreq = double(EdgeProb.getFrequency()) / double(FreqSum);
 
-        EdgeFreq *= BBFreq;
-
-        // Minimize the latency of edge.
-        // Min (SuccBBStart - MBBEnd) * EdgeFreq;
-        // => Max MBBEnd * EdgeFreq - SuccBBStart * EdgeFreq
-        Scheduler.addObjectCoeff(G.lookupSUnit(SuccBB), -EdgeFreq);
-        // Do not set the coefficient of the terminator, otherwise the
-        // coefficient to minimize the latency of the BB will be neutralized.
-        //Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), EdgeFreq);
+        // Add soft constraint to the *REVERSE* CFG edges, i.e. dst->src,
+        // so that the MBBs are scheduled as early as possible.
+        Scheduler.addSoftConstraint(G.lookupSUnit(SuccBB),
+                                    G.lookUpTerminator(MBB),
+                                    0, EdgeFreq);
       }
     }
 
