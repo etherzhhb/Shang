@@ -202,7 +202,14 @@ public:
   unsigned buildTimeFrameAndResetSchedule(bool reset);
   void resetTimeFrame();
   void buildTimeFrame();
-  void printTimeFrame(raw_ostream &OS) const;
+  void printSUTimeFrame(raw_ostream &OS, const VSUnit *A) const;
+
+  void printTimeFrame(raw_ostream &OS) const {
+    OS << "Time frame:\n";
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      printSUTimeFrame(OS, *I);
+  }
+
   void dumpTimeFrame() const;
 
   bool scheduleCriticalPath() {

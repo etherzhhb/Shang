@@ -225,19 +225,23 @@ void Scheduler<IsCtrlPath>::buildALAPStep() {
 }
 
 template<bool IsCtrlPath>
-void Scheduler<IsCtrlPath>::printTimeFrame(raw_ostream &OS) const {
-  OS << "Time frame:\n";
-  for (iterator I = begin(), E = end(); I != E; ++I) {
-    const VSUnit *A = *I;
-    A->print(OS);
-    OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
-      << "} " <<  getTimeFrame(A);
+void Scheduler<IsCtrlPath>::printSUTimeFrame(raw_ostream &OS,
+                                             const VSUnit *A) const {
+  A->print(OS);
+  OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
+    << "} " <<  getTimeFrame(A);
 
-    for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI)
-      OS << " [" << DI->getIdx() << "]"; 
-    
-    OS << '\n';
-  }
+  for (const_dep_it DI = dep_begin(A), DE = dep_end(A); DI != DE; ++DI)
+    OS << " [" << DI->getIdx() << '@' << DI->getSlot()
+       << '~' << DI.getLatency() << ']';
+
+  OS << " | ";
+
+  for (const_use_it UI = use_begin(A), UE = use_end(A); UI != UE; ++UI)
+    OS << " [" << (*UI)->getIdx() << '@' << (*UI)->getSlot()
+       << '~' << (*UI)->getEdgeFrom<IsCtrlPath>(A).getLatency() <<  ']';
+
+  OS << '\n';
 }
 
 template<bool IsCtrlPath>
