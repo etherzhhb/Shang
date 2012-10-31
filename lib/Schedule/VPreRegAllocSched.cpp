@@ -49,9 +49,9 @@
 using namespace llvm;
 
 static cl::opt<bool>
-DisableDangling("vtm-disable-dangling",
-          cl::desc("Disable cross BasicBlock chain"),
-          cl::init(false));
+EnableDangling("vtm-enable-dangling",
+          cl::desc("Enable cross BasicBlock chain"),
+          cl::init(true));
 
 STATISTIC(MutexPredNoAlias, "Number of no-alias because of mutex predicate");
 //===----------------------------------------------------------------------===//
@@ -233,7 +233,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MachineBasicBlock *VirtualExit = MF.CreateMachineBasicBlock();
   MF.push_back(VirtualExit);
 
-  VSchedGraph G(getAnalysis<DetialLatencyInfo>(), false, 1);
+  VSchedGraph G(getAnalysis<DetialLatencyInfo>(), EnableDangling, false, 1);
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 
@@ -245,7 +245,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   VirtualExit->eraseFromParent();
   MF.RenumberBlocks(&MF.back());
 
-  unsigned TotalCycles = G.emitSchedule(!DisableDangling);
+  unsigned TotalCycles = G.emitSchedule();
   FInfo->setTotalSlots(TotalCycles);
 
   cleanUpSchedule();
@@ -629,7 +629,7 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
 
   // Add control dependencies to restrict the data-path operation within its
   // parent BB.
-  if (DisableDangling && A->isDatapath()) {
+  if (!G.AllowDangling && A->isDatapath()) {
     VSUnit *Entry = G.lookupSUnit(ParentBB),
            *Exit = G.lookUpTerminator(ParentBB);
     A->addDep<false>(Entry, VDEdge::CreateCtrlDep(0));
@@ -984,7 +984,7 @@ void VPreRegAllocSched::updateWaitSets(MachineInstr *MI, VSchedGraph &G) {
       MIsToRead.insert(SrcMI);
   }
 
-  if (IsControl || DisableDangling) MIsToWait.insert(MI);
+  if (IsControl ||!G.AllowDangling) MIsToWait.insert(MI);
 
   if (!IsControl) return;
 
@@ -1048,7 +1048,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &G,
 
 bool VPreRegAllocSched::pipelineBBLocally(VSchedGraph &G, MachineBasicBlock *MBB,
                                           MachineBasicBlock *VExit) {
-  VSchedGraph LocalG(G.DLInfo, true, 1);
+  VSchedGraph LocalG(G.DLInfo, G.AllowDangling, true, 1);
   std::vector<VSUnit*> NewSUs;
   VSUnit *CurEntry = LocalG.createVSUnit(MBB);
   buildControlPathGraph(LocalG, MBB, NewSUs);

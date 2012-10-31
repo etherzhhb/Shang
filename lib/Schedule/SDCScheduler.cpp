@@ -449,8 +449,9 @@ void SDCScheduler<IsCtrlPath>::addDependencyConstraints(lprec *lp) {
       const VSUnit *Src = *DI;
       VDEdge Edge = DI.getEdge();
 
-      // Ignore the control-dependency edges between BBs.
-      if (IsBBEntry && Src->isTerminator())
+      // Ignore the control-dependency edges between BBs if dangling nodes are
+      // allowed.
+      if (IsBBEntry && G.AllowDangling && Src->isTerminator())
         continue;
 
       H.resetSrc(Src, this);

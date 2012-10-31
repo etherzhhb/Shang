@@ -607,6 +607,10 @@ public:
   typedef SUnitVecTy::const_iterator const_iterator;
   enum { NullSUIdx = 0u, FirstSUIdx = 1u };
   DetialLatencyInfo &DLInfo;
+
+  // The flag to indicate whether dangling nodes (or cross BB chains) are
+  // allowed.
+  const bool AllowDangling;
 private:
   // Scheduling units in data-path and control-path.
   SUnitVecTy DPSUs, CPSUs;
@@ -682,9 +686,10 @@ private:
 public:
   const unsigned EntrySlot;
 
-  VSchedGraph(DetialLatencyInfo &DLInfo, bool EnablePipeline, unsigned EntrySlot)
-    : DLInfo(DLInfo), Exit(0), NextSUIdx(FirstSUIdx), LoopOp(0, EnablePipeline),
-      EntrySlot(EntrySlot) {}
+  VSchedGraph(DetialLatencyInfo &DLInfo, bool AllowDangling,
+              bool EnablePipeline, unsigned EntrySlot)
+    : DLInfo(DLInfo), AllowDangling(AllowDangling), Exit(0),
+      NextSUIdx(FirstSUIdx), LoopOp(0, EnablePipeline), EntrySlot(EntrySlot) {}
 
   ~VSchedGraph() {
     std::for_each(DPSUs.begin(), DPSUs.end(), deleter<VSUnit>);
@@ -921,7 +926,7 @@ public:
   // scheduled, this can reduce register usage.
   void scheduleControlPath();
   void scheduleDatapath();
-  unsigned emitSchedule(bool AllowDangling);
+  unsigned emitSchedule();
   //}
 };
 

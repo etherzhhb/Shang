@@ -594,7 +594,7 @@ void BundleBuilder::moveInstr(MachineInstr &Inst, OpSlot SchedSlot) {
 }
 
 unsigned BundleBuilder::getRegAtSlot(SimpleValDef *VD, OpSlot ReadSlot,
-                                         unsigned SizeInBits) {
+                                     unsigned SizeInBits) {
   // If the use is appear before the definition of the register, we need to
   // insert PHI nodes to preserve SSA-form.
   while (isReadWrapAround(ReadSlot, VD)) {
@@ -1191,13 +1191,13 @@ static inline bool top_sort_bb_and_slot(const VSUnit* LHS, const VSUnit* RHS) {
   return top_sort_slot(LHS, RHS);
 }
 
-unsigned VSchedGraph::emitSchedule(bool AllowDangling) {
+unsigned VSchedGraph::emitSchedule() {
   // Erase the virtual exit root right now, so that we can avoid the special
   // code to handle it.
   assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
   CPSUs.resize(CPSUs.size() - 1);
   // Insert the delay blocks to fix the inter-bb-latencies.
-  insertDelayBlocks();
+  if (AllowDangling) insertDelayBlocks();
 
   // Break the multi-cycles chains to expose more FU sharing opportunities.
   for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
