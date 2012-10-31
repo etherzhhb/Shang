@@ -1006,7 +1006,10 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
       if (SrcVal->IsChainedWithFU)
         SrcVal = getValAtSlot(SrcVal, SrcVal->ChainEnd, true);
 
+      // Try to break the long chain early, even the current read distance is
+      // no greater than II.
       if (IsPipelined && InSameBB && !IsDangling
+          && ReadSlot - SrcVal->ChainStart <= CurII
           && LatestChainEnd - SrcVal->ChainStart > CurII
           && LatestChainEnd - ReadSlot < CurII)
         // Insert the copy to break the chain.
