@@ -270,7 +270,6 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
   unsigned DefRegNo = 0;
   RegSet *UsedByWire= 0;
   SlotIndex DefSlot = LIS->getInstructionIndex(Inst).getRegSlot();
-  bool isPipeStage = Inst->getOpcode() == VTM::VOpPipelineStage;
 
   typedef MachineInstr::mop_iterator op_it;
   for (op_it OI = Inst->operands_begin(), OE = Inst->operands_end();
@@ -317,15 +316,12 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
           extendLI(DefRegNo, TransitiveUsedReg, DefSlot);
           UsedByWire->insert(TransitiveUsedReg);
         }
-      } else
-        // Don't extend the LI of operand of pipe stage, there are supposed
-        // to kill the LI of pipelined FU.
-        if (!isPipeStage) {
-          // Going to extend the live interval of the register which used by this
-          // wire.
-          extendLI(DefRegNo, UseRegNo, DefSlot);
-          UsedByWire->insert(UseRegNo);
-        }
+      } else {
+        // Going to extend the live interval of the register which used by this
+        // wire.
+        extendLI(DefRegNo, UseRegNo, DefSlot);
+        UsedByWire->insert(UseRegNo);
+      }
     }
   }
 

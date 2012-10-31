@@ -410,7 +410,6 @@ class VerilogASTBuilder : public MachineFunctionPass,
   void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
-  void handlePipeStage(MachineInstr *MI);
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
     return "SubMod" + utostr(FNNum) + "_" + PortName;
@@ -1333,28 +1332,10 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
          && "Expect data-path bundle start!");
 
   instr_it I = Bundle;
-  while ((++I)->isInsideBundle()) {
+  while ((++I)->isInsideBundle())
     Builder->createAndIndexExpr(I, true);
 
-    if (I->getOpcode() == VTM::VOpPipelineStage)
-      handlePipeStage(I);
-  }
-
   return I;
-}
-
-void VerilogASTBuilder::handlePipeStage(MachineInstr *MI) {
-  VASTRegister *VReg = getAsLValue<VASTRegister>(MI->getOperand(1));
-
-  if (VReg == 0) return;
-
-  // Get the control slot corresponding to the pipe stage. Note that the value
-  // is available at the next slot, hence we should get 
-  // S[VInstrInfo::getBundleSlot(MI)] instead of
-  // S[VInstrInfo::getBundleSlot(MI) - 1].
-  VASTSlot *Slot = VM->getSlot(VInstrInfo::getBundleSlot(MI));
-  // Add the virtual assignment.
-  VM->addVitrualAssignment(VReg, Slot, MI);
 }
 
 static void printOperandImpl(raw_ostream &OS, const MachineOperand &MO,

@@ -71,7 +71,6 @@ VASTValPtr DatapathBuilder::buildDatapathExpr(MachineInstr *MI) {
   case VTM::VOpROr:       return buildReduceOr(MI);
   case VTM::VOpRAnd:      return buildUnaryOp(MI, VASTExpr::dpRAnd);
   case VTM::VOpRXor:      return buildUnaryOp(MI, VASTExpr::dpRXor);
-  case VTM::VOpPipelineStage: return buildUnaryOp(MI, VASTExpr::dpAssign);
   default:  assert(0 && "Unexpected opcode!");    break;
   }
 

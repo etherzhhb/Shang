@@ -987,7 +987,6 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
 
   unsigned CurBBNum = MBB->getNumber();
   bool IsDatapath = VInstrInfo::isDatapath(MI->getOpcode());
-  bool IsPipeStage = MI->getOpcode() == VTM::VOpPipelineStage;
   // The control-path operation can read the old value just before the new
   // value come out, calculate the latest slot at which the value can be read
   // by current operation.
@@ -1007,7 +1006,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
       if (SrcVal->IsChainedWithFU)
         SrcVal = getValAtSlot(SrcVal, SrcVal->ChainEnd, true);
 
-      if (IsPipelined && InSameBB && !IsDangling && !IsPipeStage
+      if (IsPipelined && InSameBB && !IsDangling
           && LatestChainEnd - SrcVal->ChainStart > CurII
           && LatestChainEnd - ReadSlot < CurII)
         // Insert the copy to break the chain.
@@ -1024,9 +1023,6 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
       // no anti-dependencies to preserve.
       if (IsPipelined && !IsDangling) {
         unsigned ChainEndSlot = IsDatapath ? Def.ChainEnd : Def.ChainStart;
-        // DIRTY HACK: The PipeStage is actually a copy operation, and copy the
-        // value 1 slot after its schedule slot.
-        if (IsPipeStage) ChainEndSlot = ReadSlot + 1;
 
         // Break the chain to preserve anti-dependencies.
         SrcVal = breakChainForAntiDep(SrcVal, ChainEndSlot, ReadSlot, CurII);
@@ -1034,7 +1030,7 @@ void ChainBreaker::visitUse(MachineInstr *MI, ChainValDef &Def, bool IsDangling,
 
       // Find the longest chain so that we can break the chain to preserve the
       // anti-dependencies.
-      if (IsDatapath && !IsPipeStage)
+      if (IsDatapath)
         Def.ChainStart = std::min(Def.ChainStart, SrcVal->ChainStart);
 
       Def.IsChainedWithFU |= SrcVal->IsChainedWithFU && IsDatapath;
@@ -1070,8 +1066,8 @@ static inline bool canForwardSrcVal(unsigned Opcode) {
   // Try to forward the copied value. However, do not forward the VOpDstMux,
   // otherwise we may extend the live-interval of the VOpDstMux and prevent
   // it from binding to the specific Mux.
-  return VInstrInfo::isCopyLike(Opcode) && Opcode != VTM::VOpPipelineStage &&
-         Opcode != VTM::PHI && Opcode != VTM::VOpDstMux;
+  return VInstrInfo::isCopyLike(Opcode) && Opcode != VTM::PHI
+      && Opcode != VTM::VOpDstMux;
 }
 
 void ChainBreaker::visit(VSUnit *U) {
@@ -1143,7 +1139,6 @@ void ChainBreaker::visit(VSUnit *U) {
       Latency = std::max(1u, Latency);
       Def.ChainEnd = std::max(SchedSlot + Latency, Def.ChainEnd);
       assert((!IsPipelined || U->isDangling()
-              || MI->getOpcode() == VTM::VOpPipelineStage
               || Def.ChainEnd - Def.ChainStart <= CurII)
              && "Anti-dependencies broken!");
     }

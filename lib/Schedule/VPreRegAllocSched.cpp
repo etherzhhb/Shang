@@ -1184,8 +1184,7 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
   }
 
   // Preserve the read fu information, and keep reading the source fu register
-  if (DefMI.getOpcode() == VTM::VOpReadFU ||
-      DefMI.getOpcode() == VTM::VOpPipelineStage)
+  if (DefMI.getOpcode() == VTM::VOpReadFU)
     DI.getOperand().ChangeToRegister(0, true);
   else {
     // FIXME: Remove the PHI, and incoming copies (Bug 14).
