@@ -626,9 +626,6 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
     }
   }
 
-  assert((NumValDep || IsCtrl) && "Expect at least 1 dependency in the same MBB!");
-  (void) NumValDep;
-
   // Add control dependencies to restrict the data-path operation within its
   // parent BB.
   if (!G.AllowDangling && A->isDatapath()) {
@@ -640,6 +637,10 @@ void VPreRegAllocSched::addDatapathDep(VSchedGraph &G, VSUnit *A) {
     // scheduled at least 1 slot earlier than the exit root.
     Exit->addDep<false>(A, VDEdge::CreateCtrlDep(std::max(A->getLatency(), 1u)));
   }
+
+  assert((NumValDep || IsCtrl ||!G.AllowDangling)
+         && "Expect at least 1 dependency in the same MBB!");
+  (void) NumValDep;
 }
 
 template<bool CrossBBOnly>
