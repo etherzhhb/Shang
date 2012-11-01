@@ -645,6 +645,20 @@ private:
     unsigned getTotalSlot() const {
       return Exit->getSlot() - Entry->getSlot();
     }
+
+    MachineBasicBlock *operator ->() const {
+      return Entry->getParentBB();
+    }
+
+    inline bool operator ==(const BBInfo &RHS) const {
+      // Two BBInfo is equal if and only if their entry is the same.
+      // TODO: Assert the reset fields are the same.
+      return Entry == RHS.Entry;
+    }
+
+    inline bool operator !=(const BBInfo &RHS) const {
+      return !operator==(RHS);
+    }
   };
 
   typedef std::vector<BBInfo> BBInfoMapTy;
