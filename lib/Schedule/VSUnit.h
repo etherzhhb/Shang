@@ -49,6 +49,8 @@ class MachineBasicBlock;
 class MachineInstr;
 class MachineOperand;
 
+class MachineDominatorTree;
+
 /// @brief Inline operation
 class VDEdge {
 public:
@@ -624,8 +626,21 @@ private:
   typedef std::map<InstPtrTy, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
   struct BBInfo {
+    // The entry and exit node of the current BB.
     VSUnit *Entry, *Exit;
+
+    // The initial interval of the pipelined BB.
     unsigned II;
+
+    // The BBInfo of current BB's immediate dominator.
+    // NOTE: Don't use pointer to the BBInfo, because BBInfo is store in a
+    // std::vector, which may reallocate on the fly.
+    unsigned IDomIdx;
+
+    // The shortest path distance from the BB's IDom.
+    // NOTE: The distance is from the entry of the source BB to the entry of
+    // sink BB.
+    unsigned SPDFromIDom;
 
     unsigned getTotalSlot() const {
       return Exit->getSlot() - Entry->getSlot();
@@ -634,6 +649,11 @@ private:
 
   typedef std::vector<BBInfo> BBInfoMapTy;
   BBInfoMapTy BBInfoMap;
+
+  inline const BBInfo &getIDomInfo(const MachineBasicBlock *MBB) const {
+    const BBInfo &Info = getBBInfo(MBB);
+    return BBInfoMap[Info.IDomIdx];
+  }
 
   inline const BBInfo &getBBInfo(const MachineBasicBlock *MBB) const {
     if (enablePipeLine()) {
@@ -754,22 +774,8 @@ public:
 
   void topologicalSortCPSUs();
 
-  VSUnit *createTerminator(const MachineBasicBlock *MBB) {
-    BBInfo Info;
-    Info.Exit = new VSUnit(NextSUIdx++, 0);
-    CPSUs.push_back(Info.Exit);
-    // Initialize the rest of the BBInfo.
-    Info.Entry = lookupSUnit(MBB);
-    assert(Info.Entry && "Create terminator before creating entry!");
-    Info.II = 0;
-
-    // Add the current BBInfo to BBInfoMap.
-    BBInfoMap.push_back(Info);
-    assert((int(BBInfoMap.size()) == MBB->getNumber() + 1
-            || getEntryBB()->getNumber() == MBB->getNumber())
-           && "BBInfoMap's index not synchronized!");
-    return Info.Exit;
-  }
+  VSUnit *createTerminator(const MachineBasicBlock *MBB,
+                           const MachineDominatorTree *MDT = 0);
 
   VSUnit *lookUpTerminator(const MachineBasicBlock *MBB) const {
     unsigned Index = MBB->getNumber();

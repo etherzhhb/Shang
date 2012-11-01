@@ -34,6 +34,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
@@ -65,6 +66,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   VFInfo *FInfo;
 
   MachineLoopInfo *MLI;
+  MachineDominatorTree *MDT;
   LoopInfo *LI;
   AliasAnalysis *AA;
   ScalarEvolution *SE;
@@ -72,7 +74,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // the same bb.
   std::set<const MachineInstr*> MIsToWait, MIsToRead;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID) {
+  VPreRegAllocSched() : MachineFunctionPass(ID), TII(0), MRI(0), FInfo(0),
+      MLI(0), MDT(0), LI(0), AA(0), SE(0) {
     initializeVPreRegAllocSchedPass(*PassRegistry::getPassRegistry());
   }
 
@@ -214,6 +217,7 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<ScalarEvolution>();
   AU.addRequired<MachineBlockFrequencyInfo>();
   AU.addRequired<MachineBranchProbabilityInfo>();
+  AU.addRequired<MachineDominatorTree>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
@@ -226,6 +230,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   FInfo = MF.getInfo<VFInfo>();
   AA = &getAnalysis<AliasAnalysis>();
   MLI = &getAnalysis<MachineLoopInfo>();
+  MDT= &getAnalysis<MachineDominatorTree>();
   LI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
 
@@ -899,7 +904,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &G,
     }
   }
 
-  VSUnit *ExitSU = G.createTerminator(MBB);
+  VSUnit *ExitSU = G.createTerminator(MBB, MDT);
   NewSUs.push_back(ExitSU);
   for (instr_it I = FirstTerminator, E = MBB->end(); I != E; ++I) {
     MachineInstr *MI = I;

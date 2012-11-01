@@ -24,6 +24,7 @@
 #include "vtm/VFInfo.h"
 
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -207,6 +208,33 @@ void VSchedGraph::topologicalSortCPSUs() {
     CPSUs[Idx++] = *I;
 
   assert(Idx == num_cps(this) && "Bad topological sort!");
+}
+
+VSUnit *VSchedGraph::createTerminator(const MachineBasicBlock *MBB,
+                                      const MachineDominatorTree *MDT) {
+  BBInfo Info;
+  Info.Exit = new VSUnit(NextSUIdx++, 0);
+  CPSUs.push_back(Info.Exit);
+  // Initialize the rest of the BBInfo.
+  Info.Entry = lookupSUnit(MBB);
+  assert(Info.Entry && "Create terminator before creating entry!");
+  Info.II = 0;
+  Info.IDomIdx = 0;
+  Info.SPDFromIDom = UINT32_MAX;
+
+  // Set the IDomIdx if MDT is provided.
+  if (MDT) {
+    MachineDomTreeNode *N = MDT->getNode(const_cast<MachineBasicBlock*>(MBB));
+    if (MachineDomTreeNode *IDom = N->getIDom())
+      Info.IDomIdx = IDom->getBlock()->getNumber();
+  }
+
+  // Add the current BBInfo to BBInfoMap.
+  BBInfoMap.push_back(Info);
+  assert((int(BBInfoMap.size()) == MBB->getNumber() + 1
+          || getEntryBB()->getNumber() == MBB->getNumber())
+         && "BBInfoMap's index not synchronized!");
+  return Info.Exit;
 }
 
 void VSchedGraph::resetCPSchedule() {
