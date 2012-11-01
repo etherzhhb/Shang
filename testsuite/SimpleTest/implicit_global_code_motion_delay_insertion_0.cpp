@@ -8,7 +8,7 @@ extern "C" {
 unsigned implicit_global_code_motion_delay_insertion_0(unsigned *p)
   __attribute__ ((noinline));
 unsigned implicit_global_code_motion_delay_insertion_0(unsigned *p) {
-  unsigned a = 0, b = 8;
+  unsigned a = 4, b = 8;
 
   b = p[a];
 
