@@ -722,6 +722,16 @@ private:
   // If we need to copy the result of MI to register return true, otherwise,
   // return false.
   bool fixRegClassForDatapath(MachineInstr *MI);
+
+  template<bool IsValDep>
+  inline unsigned getCtrlStepBetweenImpl(const MachineInstr *SrcInstr,
+                                         const MachineInstr *DstInstr) const {
+    if (!SrcInstr) return getStepsFromEntry(DstInstr);
+
+    if (IsValDep) return ceil(DLInfo.getChainedLatency(SrcInstr, DstInstr));
+
+    return getStepsToFinish(SrcInstr);
+  }
 public:
   const unsigned EntrySlot;
 
@@ -763,9 +773,7 @@ public:
   inline unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr) const;
 
-  unsigned getStepsFromEntry(const MachineInstr *DstInstr) const {
-    return DetialLatencyInfo::getStepsFromEntry(DstInstr);
-  }
+  unsigned getStepsFromEntry(const MachineInstr *DstInstr) const;
 
   // Verify the schedule graph, should be call after the graph is built.
   void verify() const;
@@ -1018,7 +1026,7 @@ inline unsigned
 VSchedGraph::getCtrlStepBetween<VDEdge::ValDep>(const MachineInstr *SrcInstr,
                                                 const MachineInstr *DstInstr)
                                                 const {
-  return DLInfo.getCtrlStepBetween<true>(SrcInstr, DstInstr);
+  return getCtrlStepBetweenImpl<true>(SrcInstr, DstInstr);
 }
 
 template<>
@@ -1026,7 +1034,7 @@ inline unsigned
 VSchedGraph::getCtrlStepBetween<VDEdge::CtrlDep>(const MachineInstr *SrcInstr,
                                                  const MachineInstr *DstInstr)
                                                  const {
-  return DLInfo.getCtrlStepBetween<false>(SrcInstr, DstInstr);
+  return getCtrlStepBetweenImpl<false>(SrcInstr, DstInstr);
 }
 
 template<>
@@ -1034,7 +1042,7 @@ inline unsigned
 VSchedGraph::getCtrlStepBetween<VDEdge::MemDep>(const MachineInstr *SrcInstr,
                                                 const MachineInstr *DstInstr)
                                                 const {
-  return DLInfo.getCtrlStepBetween<false>(SrcInstr, DstInstr);
+  return getCtrlStepBetweenImpl<false>(SrcInstr, DstInstr);
 }
 
 // The wrapper for control-path dependencies graph and data-path dependencies

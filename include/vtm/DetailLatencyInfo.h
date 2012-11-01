@@ -181,21 +181,6 @@ public:
   float getChainedLatency(const MachineInstr *SrcInstr,
                            const MachineInstr *DstInstr) const;
 
-  static unsigned getStepsFromEntry(const MachineInstr *DstInstr) {
-    // Any Instruction can schedule to the same slot with the BBEntry.
-    return 0;
-  }
-
-  template<bool IsValDep>
-  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                              const MachineInstr *DstInstr) {
-    if (!SrcInstr) return getStepsFromEntry(DstInstr);
-
-    if (IsValDep) return ceil(getChainedLatency(SrcInstr, DstInstr));
-
-    return getStepsToFinish(SrcInstr);
-  }
-
   void getAnalysisUsage(AnalysisUsage &AU) const;
 
   bool runOnMachineFunction(MachineFunction &MF);

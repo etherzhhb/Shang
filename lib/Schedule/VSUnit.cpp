@@ -70,6 +70,32 @@ bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
   return MI->getOperand(2).getMBB() == getEntryBB() && enablePipeLine();
 }
 
+unsigned VSchedGraph::getStepsFromEntry(const MachineInstr *DstInstr) const {
+  assert(DstInstr && "DstInstr should not be null!");
+  // Any Instruction can schedule to the same slot with the BBEntry if dangling
+  // operation is allowed.
+  if (AllowDangling) return 0;
+
+  const MCInstrDesc &DstTID = DstInstr->getDesc();
+  unsigned DstOpC = DstTID.getOpcode();
+
+  // Do not worry about PHI Nodes, their will be eliminated at the register
+  // allocation pass.
+  if (DstInstr->getOpcode() == VTM::PHI) return 0;
+
+  // Schedule datapath operation right after the first control slot.
+  if (VInstrInfo::isDatapath(DstOpC)) return 0;
+
+  // Do not schedule function unit operation to the first state at the moment
+  // there may be potential resource conflict: The end slot may be at the middle
+  // of a BB in a pipelined loop body, in that case, any FU can be actived by
+  // the alias slot.
+  if (!VInstrInfo::hasTrivialFU(DstOpC) || VInstrInfo::countNumRegUses(DstInstr))
+    return 1;
+
+  return 0;
+}
+
 void VSchedGraph::verifySU(const VSUnit *SU) const {
   //typedef VSUnit::const_dep_iterator dep_it;
 
