@@ -79,8 +79,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   int analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
                      Loop &L, bool SrcBeforeDest);
 
-  unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
-  unsigned calculateLatencyFromEntry(VSUnit *U) const;
+  unsigned calculateLatencyFromEntry(MachineInstr *MI, VSchedGraph &G) const;
+  unsigned calculateLatencyFromEntry(VSUnit *U, VSchedGraph &G) const;
 
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
@@ -396,7 +396,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs){
   }
 }
 
-unsigned VPreRegAllocSched::calculateLatencyFromEntry(MachineInstr *MI) const {
+unsigned VPreRegAllocSched::calculateLatencyFromEntry(MachineInstr *MI,
+                                                      VSchedGraph &G) const {
   MachineBasicBlock *MBB = MI->getParent();
 
   // PHIs can be scheduled to the first slot.
@@ -423,15 +424,17 @@ unsigned VPreRegAllocSched::calculateLatencyFromEntry(MachineInstr *MI) const {
     if (VInstrInfo::isDatapath(DefMI->getOpcode())) continue;
   }
 
-  return 0;
+  // Further calculate the steps according to the scheduling setting.
+  return G.getStepsFromEntry(MI);
 }
-unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
+unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U,
+                                                      VSchedGraph &G) const {
   int Latency = 0;
 
   for (unsigned i = 0, e = U->num_instrs(); i < e; ++i) {
     // Do not consider positive intra schedule unit latency at the moment.
     int IntraLatency = std::min(int(U->getLatencyAt(i)), 0);
-    int InstLatency = calculateLatencyFromEntry(U->getPtrAt(i));
+    int InstLatency = calculateLatencyFromEntry(U->getPtrAt(i), G);
     Latency = std::max(Latency, InstLatency - IntraLatency);
   }
 
@@ -473,7 +476,7 @@ void VPreRegAllocSched::addControlPathDepForMI(MachineInstr *MI, int MIOffset,
         // Add the cross dependent edge from the BBEntry if SrcMI is from others
         // BB, because we may need to adjust its latency during scheduling.
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
-        unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI);
+        unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI, G);
         LatencyFromBBEntry -= MIOffset;
         A->addDep<true>(BBEntry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
       }
@@ -493,7 +496,7 @@ void VPreRegAllocSched::addControlPathDepForMI(MachineInstr *MI, int MIOffset,
         VSUnit *BBEntry = G.lookupSUnit(CurMBB);
         // Add the cross dependent edge from the BBEntry if SrcMI is from others
         // BB, because we may need to adjust its latency during scheduling.
-        unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI);
+        unsigned LatencyFromBBEntry = calculateLatencyFromEntry(MI, G);
         LatencyFromBBEntry -= MIOffset;
         // FIXME: The latency of this constraint will be changed during
         // scheduling.
@@ -658,7 +661,8 @@ void VPreRegAllocSched::addControlPathDepForSU(VSUnit *A, VSchedGraph &G) {
 
   // Restrict the control-path operations within the BB boundaries.
   VSUnit *Entry = CrossBBOnly?G.getEntryRoot():G.lookupSUnit(A->getParentBB());
-  unsigned LatencyFromBBEntry = CrossBBOnly ? 0 : calculateLatencyFromEntry(A);
+  unsigned LatencyFromBBEntry =
+      CrossBBOnly ? 0 : calculateLatencyFromEntry(A, G);
   A->addDep<true>(Entry, VDEdge::CreateCtrlDep(LatencyFromBBEntry));
 }
 
