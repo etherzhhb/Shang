@@ -695,26 +695,122 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
   // TODO: Fix the dependencies edges.
 }
 
-void VSchedGraph::insertDelayBlock(const BBInfo &Info) {
-  VSUnit *BBEntry = Info.Entry;
+unsigned VSchedGraph::insertDelayBlock(const VSUnit *BBEntry,
+                                       unsigned ExpectedSPD) {
   MachineBasicBlock *MBB = BBEntry->getParentBB();
+  const BBInfo &IDomInfo = getIDomInfo(MBB);
 
-  typedef VSUnit::dep_iterator dep_it;
-  for (dep_it I = cp_begin(Info.Entry), E = cp_end(Info.Entry); I != E; ++I) {
-    VSUnit *PredTerminator = *I;
+  // Handle the trivial case trivially.
+  if (cp_empty(BBEntry)) return 0;
 
-    int ExtraLatency = int(BBEntry->getSlot()) - int(PredTerminator->getSlot());
+  unsigned ActualSPD = UINT32_MAX;
+
+  typedef VSUnit::const_dep_iterator dep_it;
+  for (dep_it I = cp_begin(BBEntry), E = cp_end(BBEntry); I != E; ++I) {
+    const VSUnit *PredTerminator = *I;
+    MachineBasicBlock *PredBB = PredTerminator->getParentBB();
+    const BBInfo &PredInfo = getBBInfo(PredBB);
+
+    // Get the distance from the entry of IDom to the exit of predecessor BB.
+    // It is also the distance from the entry of IDom through predecessor BB
+    // to the entry of current BB.
+    unsigned Entry2ExitDistanceFromIDom
+      = getSPD(IDomInfo, PredInfo, PredInfo.getTotalSlot());
+
+    ActualSPD = std::min(ActualSPD, Entry2ExitDistanceFromIDom);
+
+    int ExtraLatency = int(ExpectedSPD) - int(ActualSPD);
     if (ExtraLatency > 0)
       insertDelayBlock(PredTerminator->getParentBB(), MBB, ExtraLatency);
   }
+
+  // After delay operations are inserted, the actual distance from IDom is no
+  // smaller than the expected distance.
+  return std::max(ActualSPD, ExpectedSPD);
+}
+
+unsigned VSchedGraph::getSPD(const BBInfo &Src, const BBInfo &Snk,
+                             unsigned ExtraDistance) const {
+  const BBInfo *CurSnk = &Snk;
+  assert(Src->getNumber() <= Snk->getNumber() && "Src not dominates Snk?");
+  unsigned SPD = ExtraDistance;
+  // Accumulate the distance from IDom in the dominator tree to get the total
+  // distance.
+  while (Src != *CurSnk) {
+    assert(CurSnk->SPDFromIDom != UINT32_MAX
+           && "SPDFromIDom not initialized yet!");
+    SPD += CurSnk->SPDFromIDom;
+    // Move to IDom.
+    CurSnk = &BBInfoMap[CurSnk->IDomIdx];
+  }
+
+  return SPD;
+}
+
+unsigned VSchedGraph::calculateExpectedSPDFromIDom(const VSUnit *BBEntry) {
+  unsigned EntrySlot = BBEntry->getSlot();
+  MachineBasicBlock *MBB = BBEntry->getParentBB();
+  typedef VSUnit::use_iterator use_it;
+  typedef VSUnit::dep_iterator dep_it;
+  // Shortest path distance from the current BB's IDom.
+  unsigned SPDFromIDom = 0;
+  const BBInfo &IDomInfo = getIDomInfo(MBB);
+
+  for (use_it I = cuse_begin(BBEntry), E = cuse_end(BBEntry); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->getParentBB() != MBB) continue;
+
+    unsigned USlot = U->getSlot();
+    unsigned UOffset = USlot - EntrySlot;
+    for (dep_it DI = cp_begin(U), DE = cp_end(U); DI != DE; ++DI) {
+      if (!DI.isCrossBB()) continue;
+
+      VSUnit *Src = *DI;
+      MachineBasicBlock *SrcBB = Src->getParentBB();
+      assert(SrcBB != MBB && "Not cross BB depenency!");
+      BBInfo &SrcInfo = getBBInfo(SrcBB);
+      VSUnit *SrcEntry = SrcInfo.Entry;
+
+      // Get the required entry-to-entry distance from source BB to current BB.
+      unsigned E2EDistance = DI.getLatency() - UOffset
+                             + (Src-> getSlot() - SrcEntry->getSlot());
+      // Get the actual distance from SrcBB to IDom.
+      unsigned Src2IDomDistance = getSPD(SrcInfo, IDomInfo);
+      // Calculate the required distance from IDom to Current BB.
+      int IDom2BBDistance = std::max(0, int(E2EDistance - Src2IDomDistance));
+
+      SPDFromIDom = std::max(SPDFromIDom, unsigned(IDom2BBDistance));
+    }
+  }
+
+  return SPDFromIDom;
 }
 
 void VSchedGraph::insertDelayBlocks() {
   // Because we will push new BBInfo to BBInfoMap during inserting delay blocks,
   // we should use the index to iterate over the exiting BBInfos, and the newly
   // pushed BBInfos will not be visited.
-  for (unsigned i = 0, e = BBInfoMap.size(); i != e; ++i)
-    insertDelayBlock(BBInfoMap[i]);
+  for (unsigned i = 0, e = BBInfoMap.size(); i != e; ++i) {
+    const VSUnit *BBEntry = BBInfoMap[i].Entry;
+    assert(i == unsigned(BBEntry->getParentBB()->getNumber())
+           && "BBInfoMap's index not synchronized!");
+    // Calculate the the expected shortest path distance from IDom.
+    // Because the source of cross BB chain always dominates the sink, so we
+    // can only calculate the shortest path distance from the immediate
+    // dominator of the sink's parent BB. After that, we can get the total
+    // shortest path distance by adding the distance from the IDom to the source
+    // in the dominator tree.
+    unsigned ExpectedSPD = calculateExpectedSPDFromIDom(BBEntry);
+
+    unsigned ActualSPD = insertDelayBlock(BBEntry, ExpectedSPD);
+
+    // Set the distance from IDom including the delay operations.
+    // NOTE: BBInfoMap may reallocated on the fly in function 'insertDelayBlock'
+    // so we need to visit the current BBInfo via index.
+    BBInfoMap[i].SPDFromIDom = ActualSPD;
+
+    // TODO: Fix the schedule of current BB.
+  }
 }
 
 namespace {

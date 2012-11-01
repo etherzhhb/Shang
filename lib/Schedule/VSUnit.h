@@ -669,6 +669,9 @@ private:
     return BBInfoMap[Info.IDomIdx];
   }
 
+  unsigned getSPD(const BBInfo &Src, const BBInfo &Snk,
+                  unsigned ExtraDistance = 0) const;
+
   inline const BBInfo &getBBInfo(const MachineBasicBlock *MBB) const {
     if (enablePipeLine()) {
       assert(MBB == BBInfoMap.back().Exit->getParentBB()
@@ -705,9 +708,15 @@ private:
 
   void insertDelayBlocks();
 
+  unsigned calculateExpectedSPDFromIDom(const VSUnit *BBEntry);
+
   void insertDelayBlock(MachineBasicBlock *From, MachineBasicBlock *To,
                         unsigned Latency);
-  void insertDelayBlock(const BBInfo &Info);
+  // Insert the necessary delay operation from current BB's predecessors to
+  // current BB to make sure the shortest path distance is satisfied.
+  // Return the actually SPD from current BB's IDom after the delay operations
+  // are inserted.
+  unsigned insertDelayBlock(const VSUnit *BBEntry, unsigned ExpectedSPD);
 
   // Insert the copy operations which copy the result of the operations to
   // registers, so that we can break the chain.
