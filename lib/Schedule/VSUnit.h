@@ -122,6 +122,26 @@ public:
   }
 };
 
+template<VDEdge::Types Type>
+struct IsVDEdgeTypeValDepEval {
+
+};
+
+template<>
+struct IsVDEdgeTypeValDepEval<VDEdge::ValDep> {
+  enum  { Val = true };
+};
+
+template<>
+struct IsVDEdgeTypeValDepEval<VDEdge::CtrlDep> {
+  enum  { Val = false };
+};
+
+template<>
+struct IsVDEdgeTypeValDepEval<VDEdge::MemDep> {
+  enum  { Val = false };
+};
+
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
@@ -771,7 +791,10 @@ public:
 
   template<VDEdge::Types Type>
   inline unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                                     const MachineInstr *DstInstr) const;
+                                     const MachineInstr *DstInstr) const {
+    return getCtrlStepBetweenImpl<IsVDEdgeTypeValDepEval<Type>::Val  >(SrcInstr,
+                                                                       DstInstr);
+  }
 
   unsigned getStepsFromEntry(const MachineInstr *DstInstr) const;
 
@@ -1019,30 +1042,6 @@ int VSUnit::getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const {
     latency = std::max(getLatencyTo<Type>(*I, DstMI, G), latency);
 
   return latency;
-}
-
-template<>
-inline unsigned
-VSchedGraph::getCtrlStepBetween<VDEdge::ValDep>(const MachineInstr *SrcInstr,
-                                                const MachineInstr *DstInstr)
-                                                const {
-  return getCtrlStepBetweenImpl<true>(SrcInstr, DstInstr);
-}
-
-template<>
-inline unsigned
-VSchedGraph::getCtrlStepBetween<VDEdge::CtrlDep>(const MachineInstr *SrcInstr,
-                                                 const MachineInstr *DstInstr)
-                                                 const {
-  return getCtrlStepBetweenImpl<false>(SrcInstr, DstInstr);
-}
-
-template<>
-inline unsigned
-VSchedGraph::getCtrlStepBetween<VDEdge::MemDep>(const MachineInstr *SrcInstr,
-                                                const MachineInstr *DstInstr)
-                                                const {
-  return getCtrlStepBetweenImpl<false>(SrcInstr, DstInstr);
 }
 
 // The wrapper for control-path dependencies graph and data-path dependencies
