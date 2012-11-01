@@ -37,7 +37,6 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
-#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -195,7 +194,6 @@ INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
   INITIALIZE_PASS_DEPENDENCY(LoopInfo)
   INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
   INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
-  INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
   INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
   INITIALIZE_PASS_DEPENDENCY(DetialLatencyInfo)
 INITIALIZE_PASS_END(VPreRegAllocSched, "Verilog-pre-reg-allocet-sched",
@@ -216,7 +214,6 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<ScalarEvolution>();
   AU.addPreserved<ScalarEvolution>();
   AU.addRequired<MachineBlockFrequencyInfo>();
-  AU.addRequired<MachineBranchProbabilityInfo>();
   AU.addRequired<MachineDominatorTree>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
@@ -1103,8 +1100,6 @@ void VPreRegAllocSched::buildGlobalSchedulingGraph(VSchedGraph &G,
 
 void VPreRegAllocSched::schedule(VSchedGraph &G) {
   MachineBlockFrequencyInfo &MBFI = getAnalysis<MachineBlockFrequencyInfo>();
-  MachineBranchProbabilityInfo &MBPI
-    = getAnalysis<MachineBranchProbabilityInfo>();
   double FreqSum = 0.0;
   MachineBasicBlock *EntryBB = G.getEntryBB(), *ExitBB = G.getExitBB();
   typedef MachineFunction::iterator iterator;
@@ -1131,25 +1126,6 @@ void VPreRegAllocSched::schedule(VSchedGraph &G) {
       // => Max BBStart * BBFreq - BBEnd * BBFreq.
       Scheduler.addObjectCoeff(G.lookupSUnit(MBB), BBFreq);
       Scheduler.addObjectCoeff(G.lookUpTerminator(MBB), -BBFreq);
-
-      typedef MachineBasicBlock::const_succ_iterator succ_iterator;
-      for (succ_iterator SI = MBB->succ_begin(), SE = MBB->succ_end();
-           SI != SE; ++SI) {
-        MachineBasicBlock *SuccBB = *SI;
-        // Ignore the back-edges and edge to the virtual ExitBB.
-        if (SuccBB->getNumber() <= MBB->getNumber() || SuccBB == ExitBB)
-          continue;
-
-        BlockFrequency EdgeProb
-          = BlockFrequency(BlockFreq) * MBPI.getEdgeProbability(MBB, SuccBB);
-        double EdgeFreq = double(EdgeProb.getFrequency()) / double(FreqSum);
-
-        // Add soft constraint to the *REVERSE* CFG edges, i.e. dst->src,
-        // so that the MBBs are scheduled as early as possible.
-        Scheduler.addSoftConstraint(G.lookupSUnit(SuccBB),
-                                    G.lookUpTerminator(MBB),
-                                    0, EdgeFreq);
-      }
     }
 
     bool success = Scheduler.schedule();
