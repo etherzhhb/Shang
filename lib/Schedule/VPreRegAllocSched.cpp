@@ -97,7 +97,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void addDatapathDep(VSchedGraph &G, VSUnit *A);
 
-  VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &G, MachineInstr *&Dep) {
+  VSUnit *getDefSUToMerge(const MachineOperand &MO, VSchedGraph &G,
+                          MachineInstr *&Dep) {
     // Only care about the register dependences.
     if (!MO.isReg()) return 0;
 
@@ -113,8 +114,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
     Dep = MRI->getVRegDef(Reg);
     assert(Dep && "Register use without define?");
-    /// Only add the dependence if DepSrc is in the same MBB with MI.
-    return G.lookupSUnit(Dep);
+    // Return the Def only if it is in the same BB with Use.
+    return Dep->getParent() != MO.getParent()->getParent()
+           ? 0 : G.lookupSUnit(Dep);
   }
 
   void buildMemDepEdges(VSchedGraph &G, ArrayRef<VSUnit*> SUs);
@@ -719,12 +721,12 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                      VSchedGraph &G) {
   MachineInstr *SrcMI = 0;
   // Try to merge it into the VSUnit that defining its source operand.
-  if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), G, SrcMI))
+  if (VSUnit *SrcSU = getDefSUToMerge(MI->getOperand(OpIdx), G, SrcMI))
     return G.mapMI2SU(MI, SrcSU, SrcSU->getValLatencyTo(SrcMI, MI, G));
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI))
-    if (VSUnit *SrcSU = getDefSU(*Pred, G, SrcMI))
+    if (VSUnit *SrcSU = getDefSUToMerge(*Pred, G, SrcMI))
       return G.mapMI2SU(MI, SrcSU, SrcSU->getValLatencyTo(SrcMI, MI, G));
 
   // Merge it into the EntryRoot.
@@ -777,7 +779,7 @@ VSUnit *VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &G) {
   case VTM::VOpDisableFU: {
     MachineInstr *SrcMI = 0;
     // Try to merge it into the VSUnit that defining its source operand.
-    VSUnit *SrcSU = getDefSU(MI->getOperand(0), G, SrcMI);
+    VSUnit *SrcSU = getDefSUToMerge(MI->getOperand(0), G, SrcMI);
     assert(SrcSU && "Expected source schedule unit!");
     // Disable the FU at next state.
     bool merged = G.mapMI2SU(MI, SrcSU, 1);
