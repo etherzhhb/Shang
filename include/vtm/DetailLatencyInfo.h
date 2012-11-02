@@ -138,6 +138,9 @@ protected:
 
 public:
   DetialLatencyInfo();
+  const char *getPassName() const {
+    return "Refine-CDFG";
+  }
 
   // Get the source register and the corresponding latency to DstMI
   const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
