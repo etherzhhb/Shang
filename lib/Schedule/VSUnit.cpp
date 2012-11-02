@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/CommandLine.h"
@@ -42,6 +43,13 @@ DisableMultiCyclesChain("vtm-disable-multi-cycles-chain",
                                  "(manually setting all chaining threshold to "
                                  "0 is need)"),
                         cl::init(false));
+
+STATISTIC(NumSUs, "Number of scheduling units");
+STATISTIC(NumEdges, "Number of edges between scheduling units");
+STATISTIC(NumCPSUs, "Number of control-path scheduling units");
+STATISTIC(NumCPEdges, "Number of control-path edges between scheduling units");
+STATISTIC(NumDPSUs, "Number of data-path scheduling units");
+STATISTIC(NumDPEdges, "Number of data-path edges between scheduling units");
 
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
@@ -96,28 +104,20 @@ unsigned VSchedGraph::getStepsFromEntry(const MachineInstr *DstInstr) const {
   return 0;
 }
 
-void VSchedGraph::verifySU(const VSUnit *SU) const {
-  //typedef VSUnit::const_dep_iterator dep_it;
+void VSchedGraph::verifySUDataPath(const VSUnit *SU) const {
+  for (VSUnit::const_dep_iterator DI = dp_begin(SU), DE = dp_end(SU);
+       DI != DE; ++DI) {
+    ++NumDPEdges;
+    ++NumEdges;
+  }
+}
 
-  //bool IsBBEntry = SU->getRepresentativePtr().isMBB();
-  //MachineBasicBlock *ParentMBB = SU->getParentBB();
-  //bool AnyDepFromTheSameParent = IsBBEntry;
-
-  //for (dep_it DI = cp_begin(SU), DE = cp_end(SU); DI != DE; ++DI) {
-  //  const VSUnit *Dep = *DI;
-  //  assert((DI.getEdgeType() == VDEdge::MemDep
-  //          || SU->getIdx() > Dep->getIdx())
-  //         && "Bad value dependent edge!");
-  //  assert((!IsBBEntry || (Dep->getRepresentativePtr()->isTerminator()
-  //                         && DI.getLatency() == 0))
-  //         && "Bad inter BB dependent edge.");
-  //  AnyDepFromTheSameParent |= DI->getParentBB() == ParentMBB;
-  //}
-
-  //assert((SU->isScheduled() || !cuse_empty(SU) || SU == getExitRoot())
-  //        && "Unexpected deteched SU!");
-  //assert((SU->isScheduled() || SU->hasFixedTiming() || AnyDepFromTheSameParent)
-  //       && "Find SU not constrained by the BB entry!");
+void VSchedGraph::verifySUControlPath(const VSUnit *SU) const {
+  for (VSUnit::const_dep_iterator DI = cp_begin(SU), DE = cp_end(SU);
+       DI != DE; ++DI) {
+    ++NumCPEdges;
+    ++NumEdges;
+  }
 }
 
 void VSchedGraph::verify() const {
@@ -126,11 +126,18 @@ void VSchedGraph::verify() const {
   //if (!cuse_empty(getExitRoot()) || !duse_empty(getExitRoot()) )
   //  llvm_unreachable("Exit root should not have any use!");
 
-  //for (const_iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
-  //  verifySU(*I);
+  for (const_iterator I = cp_begin(this), E = cp_end(this); I != E; ++I) {
+    ++NumSUs;
+    ++NumCPSUs;
+    verifySUControlPath(*I);
+    verifySUDataPath(*I);
+  }
 
-  //for (const_iterator I = dp_begin(), E = dp_end(); I != E; ++I)
-  //  verifySU(*I);
+  for (const_iterator I = dp_begin(this), E = dp_end(this); I != E; ++I) {
+    ++NumSUs;
+    ++NumDPSUs;
+    verifySUDataPath(*I);
+  }
 }
 
 VSUnit *VSchedGraph::createVSUnit(InstPtrTy Ptr, unsigned fuid) {

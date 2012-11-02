@@ -800,7 +800,8 @@ public:
 
   // Verify the schedule graph, should be call after the graph is built.
   void verify() const;
-  void verifySU(const VSUnit *SU) const;
+  void verifySUDataPath(const VSUnit *SU) const;
+  void verifySUControlPath(const VSUnit *SU) const;
 
   // Add the the iterator point to the first newly added SU.
   iterator mergeSUsInSubGraph(VSchedGraph &SubGraph);
