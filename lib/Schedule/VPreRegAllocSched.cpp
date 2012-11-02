@@ -508,7 +508,8 @@ void VPreRegAllocSched::addControlPathDepForMI(MachineInstr *MI, int MIOffset,
       // the result is written to register, which means the result will
       // is available 1 slot later than it is expected when we are computing the
       // original latency.
-      if (!VInstrInfo::isCopyLike(SrcMI->getOpcode())) Latency += 1;
+      if (G.AllowDangling && !VInstrInfo::isCopyLike(SrcMI->getOpcode()))
+        Latency += 1;
 
       // We are in local scheduling mode.
       if (SrcSU == 0) continue;
