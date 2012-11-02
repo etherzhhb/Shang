@@ -716,8 +716,10 @@ unsigned VSchedGraph::insertDelayBlock(const VSUnit *BBEntry,
     ActualSPD = std::min(ActualSPD, Entry2ExitDistanceFromIDom);
 
     int ExtraLatency = int(ExpectedSPD) - int(ActualSPD);
-    if (ExtraLatency > 0)
+    if (ExtraLatency > 0) {
+      assert(AllowDangling && "Unexpected extra delay when dangling is disabled!");
       insertDelayBlock(PredTerminator->getParentBB(), MBB, ExtraLatency);
+    }
   }
 
   // After delay operations are inserted, the actual distance from IDom is no
@@ -1287,7 +1289,7 @@ unsigned VSchedGraph::emitSchedule() {
   assert(CPSUs.back() == getExitRoot() && "ExitRoot at an unexpected position!");
   CPSUs.resize(CPSUs.size() - 1);
   // Insert the delay blocks to fix the inter-bb-latencies.
-  if (AllowDangling) insertDelayBlocks();
+  insertDelayBlocks();
 
   // Break the multi-cycles chains to expose more FU sharing opportunities.
   for (iterator I = cp_begin(this), E = cp_end(this); I != E; ++I)
