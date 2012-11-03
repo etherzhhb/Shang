@@ -408,17 +408,6 @@ SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
   return 0;
 }
 
-template<enum VFUs::FUTypes T, unsigned ChainedOpc, unsigned ControlOpc>
-static unsigned SelectOpCode(unsigned FUSize) {
-  return getFUDesc(T)->shouldBeChained(FUSize) ? ChainedOpc : ControlOpc;
-}
-
-template<enum VFUs::FUTypes T, unsigned ChainedOpc, unsigned ControlOpc>
-static unsigned SelectOpCode(SDNode *N) {
-  unsigned FUSize = VTargetLowering::computeSizeInBits(N->getOperand(0));
-  return SelectOpCode<T, ChainedOpc, ControlOpc>(FUSize);
-}
-
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
   if (N->isMachineOpcode())
     return 0;   // Already selected.
@@ -459,20 +448,14 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
   case ISD::SELECT:           return SelectSimpleNode(N, VTM::VOpSel);
 
-  case ISD::SHL:{
-    unsigned Opcode = SelectOpCode<VFUs::Shift, VTM::VOpSHL_c, VTM::VOpSHL>(N);
-    return SelectBinary(N, Opcode);
-  }
+  case ISD::SHL:
+    return SelectBinary(N, VTM::VOpSHL_c);
 
-  case ISD::SRL:{
-    unsigned Opcode = SelectOpCode<VFUs::Shift, VTM::VOpSRL_c, VTM::VOpSRL>(N);
-    return SelectBinary(N, Opcode);
-  }
+  case ISD::SRL:
+    return SelectBinary(N, VTM::VOpSRL_c);
 
-  case ISD::SRA:{
-    unsigned Opcode = SelectOpCode<VFUs::Shift, VTM::VOpSRA_c, VTM::VOpSRA>(N);
-    return SelectBinary(N, Opcode);
-  }
+  case ISD::SRA:
+    return SelectBinary(N, VTM::VOpSRA_c);
 
   case VTMISD::BitRepeat:     return SelectBinary(N, VTM::VOpBitRepeat);
   case VTMISD::BitCat:        return SelectBinary(N, VTM::VOpBitCat);
