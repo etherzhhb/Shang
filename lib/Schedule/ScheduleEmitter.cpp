@@ -713,13 +713,13 @@ unsigned VSchedGraph::insertDelayBlock(const VSUnit *BBEntry,
     unsigned Entry2ExitDistanceFromIDom
       = getSPD(IDomInfo, PredInfo, PredInfo.getTotalSlot());
 
-    ActualSPD = std::min(ActualSPD, Entry2ExitDistanceFromIDom);
-
-    int ExtraLatency = int(ExpectedSPD) - int(ActualSPD);
+    int ExtraLatency = int(ExpectedSPD) - int(Entry2ExitDistanceFromIDom);
     if (ExtraLatency > 0) {
       assert(AllowDangling && "Unexpected extra delay when dangling is disabled!");
       insertDelayBlock(PredTerminator->getParentBB(), MBB, ExtraLatency);
     }
+
+    ActualSPD = std::min(ActualSPD, Entry2ExitDistanceFromIDom);
   }
 
   // After delay operations are inserted, the actual distance from IDom is no
