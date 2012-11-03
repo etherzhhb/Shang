@@ -178,6 +178,7 @@ unsigned VFUMux::getMuxCost(unsigned Size, unsigned BitWidth) {
   float ratio = std::min(float(Size) / float(MaxAllowedMuxSize), 1.0f);
   Size = std::min(Size, MaxAllowedMuxSize);
 
+  BitWidth = std::min(BitWidth, 64u);
   assert(BitWidth <= 64 && "Bad Mux Size!");
 
   return std::ceil(MuxCost[Size - 2][BitWidth] * ratio);

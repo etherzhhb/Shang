@@ -691,7 +691,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
     if (I->getDesc().isCall()) return false;
   }
 
-  return FInfo->getInfo().enablePipeLine();
+  return false; //FInfo->getInfo().enablePipeLine();
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G) {
