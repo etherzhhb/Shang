@@ -277,10 +277,11 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   switch (Opcode) {
   default:
-    updateLatency(CurLatInfo, SrcMI, SrcLatency);
     if (!isCtrl)
       accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                                 getWorstLatency);
+    else
+      updateLatency(CurLatInfo, SrcMI, SrcLatency);
     return;
     // Result bits are computed from LSB to MSB.
   case VTM::VOpAdd_c:
@@ -288,6 +289,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpMult_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getLSB2MSBLatency);
+    break;
     /* FALL THOUGH */
   case VTM::VOpAdd:
   case VTM::VOpMult:
@@ -334,6 +336,7 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcLatency, BitLatency,
                               getCmpLatency);
     /* FALL THOUGH */
+    break;
   case VTM::VOpICmp:
     // Result bits are computed from MSB to LSB.
     updateLatency(CurLatInfo, SrcMI, SrcLatency);

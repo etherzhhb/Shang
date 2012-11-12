@@ -177,8 +177,8 @@ int main(int argc, char **argv) {
                               false/*NoVerify*/);
 
   // Analyse the slack between registers.
-  Passes.add(createCombPathDelayAnalysisPass());
-  Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
+  //Passes.add(createCombPathDelayAnalysisPass());
+  //Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
       luabind::object_cast<std::string>(I.key()).c_str(),
       luabind::object_cast<std::string>(o["FunctionScript"]).c_str(),
       luabind::object_cast<std::string>(o["GlobalScript"]).c_str());
-    Passes.add(P);
+    //Passes.add(P);
   }
 
   // Run the passes.
