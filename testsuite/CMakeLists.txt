@@ -173,7 +173,7 @@ macro(add_general_test test_file config_file altera_setup_prj_file postfix)
     COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
             ${VTS_SOURCE_ROOT}/liblegup.bc
             -o=${MAIN_ORIG_BC}
-    DEPENDS ${TEST_SRC} ${LLVM_LINK}
+    DEPENDS ${TEST_SRC} ${LLVM_LINK} ${CLANG}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Compiling ${TEST_SRC} to ${MAIN_ORIG_BC}"
   )
@@ -328,7 +328,7 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file postfix)
     COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
             ${VTS_SOURCE_ROOT}/liblegup.bc
             -o=${MAIN_ORIG_BC}
-    DEPENDS ${TEST_SRC} ${LLVM_LINK}
+    DEPENDS ${TEST_SRC} ${LLVM_LINK} ${CLANG}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Compiling ${TEST_SRC} to ${MAIN_ORIG_BC}"
   )
