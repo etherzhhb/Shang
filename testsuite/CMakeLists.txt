@@ -114,17 +114,10 @@ add_custom_target(benchmark_report
                   COMMENT "Report the area and FMax about the synthesized module of benchmarks with Quartus II")
 add_dependencies(benchmark_report benchmark_test)
 
-add_custom_target(benchmark_report_xilinx
-                  COMMENT "Report the area and FMax about the synthesized module of benchmarks with Xilinx ISE")
-add_dependencies(benchmark_report_xilinx benchmark_test)
-
 add_custom_target(benchmark_synthesis_main
           COMMAND ${StatsCyclesPy} ${BenchmarkCyclesTmp} ${BenchmarkCyclesXls}
           COMMAND ${StatsSynthesis} ${BenchmarkSummaryTmp} ${BenchmarkSummaryXls}
           COMMENT "Synthesising main module and Run on FPGA board")
-
-add_custom_target(benchmark_synthesis_main_xilinx
-          COMMENT "Using Xilinx ISE to synthesis main module and Run on FPGA board")
 
 add_custom_target(test_verilogbackend
           COMMAND [ -f ${FAILLIST} ] || touch ${FAILLIST}
@@ -132,7 +125,7 @@ add_custom_target(test_verilogbackend
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
             
-macro(add_general_test test_file config_file altera_setup_prj_file xilinx_setup_prj_file postfix)
+macro(add_general_test test_file config_file altera_setup_prj_file postfix)
   set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
   set(DUT_NAME "${TEST_NAME}_DUT")
@@ -150,7 +143,6 @@ macro(add_general_test test_file config_file altera_setup_prj_file xilinx_setup_
   set(MAIN_SDC_SRC 		  "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
   set(MAIN_UCF_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.ucf")
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
-  set(MAIN_XILINX_BIT     "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.bit")
 
   set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
   set(MAIN_SW_LL          "${TEST_BINARY_ROOT}/${DUT_NAME}_SW.ll")
@@ -226,21 +218,6 @@ if(SYNTHESIS_DUT AND TARGET benchmark_report)
   add_dependencies(${TEST}_synthesis ${TEST}_hls)
 endif(SYNTHESIS_DUT AND TARGET benchmark_report)
 
-if(SYNTHESIS_DUT AND TARGET benchmark_report_xilinx)
-  configure_file (
-    ${xilinx_setup_prj_file}
-    "${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl"
-    )
-  add_custom_command(OUTPUT ${MAIN_XILINX_BIT}
-    COMMAND ${XILINX_BIN_DIR}/ISE/bin/lin/xtclsh ${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl rebuild_project
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_xilinx.tcl" ${MAIN_UCF_SRC} ${CycleCounter}
-    WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-    COMMENT "Using Xilinx ISE to synthesising RTL module and interface for ${SYN_FUNC}"
-  )
-  add_custom_target(${TEST}_synthesis_xilinx DEPENDS ${MAIN_XILINX_BIT})
-  add_dependencies(${TEST}_synthesis_xilinx ${TEST}_hls)
-endif(SYNTHESIS_DUT AND TARGET benchmark_report_xilinx)
-
   add_custom_command(OUTPUT ${MAIN_X86_SRC}
     COMMAND ${LLC}
             -march=${LLC_MARCH} "${TEST_BINARY_ROOT}/${DUT_NAME}_SW.ll"
@@ -311,7 +288,7 @@ endif(SYNTHESIS_DUT AND TARGET benchmark_report_xilinx)
 
 endmacro(add_general_test)
 
-macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_setup_prj_file postfix)
+macro(add_general_main_test test_file config_file altera_setup_prj_file postfix)
   set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
   set(DUT_NAME "${TEST_NAME}_main_DUT")
@@ -400,7 +377,6 @@ macro(add_test_cases file_name)
 	add_general_test(${file_name}
           "${VTS_SOURCE_ROOT}/test_config.lua.in"
           "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
-          "${VTS_SOURCE_ROOT}/setup_proj_xilinx.tcl.in"
           "cpp")
 endmacro(add_test_cases)
 
@@ -408,7 +384,6 @@ macro(add_test_main_cases file_name)
   add_general_main_test(${file_name}
           "${VTS_SOURCE_ROOT}/test_config_main.lua.in"
           "${VTS_SOURCE_ROOT}/setup_proj_symain.tcl.in"
-          "${VTS_SOURCE_ROOT}/setup_proj_symain_xilinx.tcl.in"
           "cpp")
 endmacro(add_test_main_cases)
 
