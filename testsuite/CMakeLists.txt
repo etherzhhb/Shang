@@ -21,7 +21,7 @@ set(LLVM_LINK ${LLVM_TOOLS_BINARY_DIR}/llvm-link)
 
 set(SYNTHESIS_DUT ON CACHE BOOL "Use Altera flow to synthesis the design in testsuite")
 if (${SYNTHESIS_DUT} STREQUAL "ON")
-FIND_PATH(QUARTUS_BIN_DIR quartus_sh)
+  FIND_PATH(QUARTUS_BIN_DIR quartus_sh)
 endif(${SYNTHESIS_DUT} STREQUAL "ON")
 
 set(XILINX_BIN_DIR ${XILINX_ROOT_DIR})
