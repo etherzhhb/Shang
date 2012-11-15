@@ -10,12 +10,11 @@ set(ENV{VERILATOR_ROOT} ${VERILATOR_ROOT_DIR})
 FIND_PACKAGE(Verilator  REQUIRED)
 FIND_PACKAGE(SystemC    REQUIRED)
 
-FIND_PROGRAM(FRONTEND clang)
-message(STATUS "Using frontend: " ${FRONTEND})
 #Set up the llvm binaries.
 set(SYNC ${LLVM_TOOLS_BINARY_DIR}/sync)
 set(LLC ${LLVM_TOOLS_BINARY_DIR}/llc)
 set(LLI ${LLVM_TOOLS_BINARY_DIR}/lli)
+set(CLANG ${LLVM_TOOLS_BINARY_DIR}/clang)
 set(LLVM_AS ${LLVM_TOOLS_BINARY_DIR}/llvm-as)
 set(LLVM_LINK ${LLVM_TOOLS_BINARY_DIR}/llvm-link)
 
@@ -176,7 +175,7 @@ macro(add_general_test test_file config_file altera_setup_prj_file xilinx_setup_
   )
 
   add_custom_command(OUTPUT ${MAIN_ORIG_BC}
-    COMMAND ${FRONTEND} ${TEST_SRC}
+    COMMAND ${CLANG} ${TEST_SRC}
             -O0 -c -emit-llvm
             -o ${MAIN_ORIG_BC}
     COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
@@ -346,7 +345,7 @@ macro(add_general_main_test test_file config_file altera_setup_prj_file xilinx_s
     )
 
   add_custom_command(OUTPUT ${MAIN_ORIG_BC}
-    COMMAND ${FRONTEND} ${TEST_SRC}
+    COMMAND ${CLANG} ${TEST_SRC}
             -O0 -c -emit-llvm
             -o ${MAIN_ORIG_BC}
     COMMAND ${LLVM_LINK} ${MAIN_ORIG_BC}
