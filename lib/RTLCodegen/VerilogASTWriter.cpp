@@ -103,11 +103,11 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
 }
 
 bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
-  //if (EnalbeDumpIR) {
+  if (EnalbeDumpIR) {
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
     F.print(Out);
     Out << "`endif\n";
-  //}
+  }
 
   VASTModule *VM = getAnalysis<VerilogModuleAnalysis>().getModule();
 

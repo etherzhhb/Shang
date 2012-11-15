@@ -87,7 +87,6 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual bool addFinalizeRegAlloc() {
-    return true;
     PM->add(createRTLCodegenPreparePass());
     // Generate the code.
     PM->add(createVerilogASTBuilderPass());
@@ -162,7 +161,6 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
-    return;
     addPass(ProcessImplicitDefsID);
     // LiveVariables currently requires pure SSA form.
     //

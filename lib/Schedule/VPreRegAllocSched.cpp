@@ -237,7 +237,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
   buildGlobalSchedulingGraph(G, &MF.front(), VirtualExit);
 
-  //schedule(G);
+  schedule(G);
 
   DEBUG(G.viewCPGraph());
   DEBUG(G.viewDPGraph());
@@ -245,10 +245,10 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   VirtualExit->eraseFromParent();
   MF.RenumberBlocks(&MF.back());
 
-  //unsigned TotalCycles = G.emitSchedule();
-  //FInfo->setTotalSlots(TotalCycles);
+  unsigned TotalCycles = G.emitSchedule();
+  FInfo->setTotalSlots(TotalCycles);
 
-  //cleanUpSchedule();
+  cleanUpSchedule();
 
   return true;
 }
@@ -691,7 +691,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
     if (I->getDesc().isCall()) return false;
   }
 
-  return false; //FInfo->getInfo().enablePipeLine();
+  return FInfo->getInfo().enablePipeLine();
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &G) {
