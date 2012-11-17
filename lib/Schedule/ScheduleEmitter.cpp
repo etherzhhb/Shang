@@ -688,7 +688,7 @@ void VSchedGraph::insertDelayBlock(MachineBasicBlock *From,
   addDummyLatencyEntry(DelayBR);
 
   InterBBLatency += Latency;
-  // TODO: Fix the dependencies edges.
+  // TODO: Fix the dependencies edges in the scheduling graph.
 }
 
 unsigned VSchedGraph::insertDelayBlock(const VSUnit *BBEntry,

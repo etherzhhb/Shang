@@ -210,8 +210,6 @@ struct ConstraintHelper {
 
     int EqTy = (Edge.getEdgeType() == VDEdge::FixedTiming) ? EQ : GE;
 
-    // Adjust the inter-bb latency.
-    RHS -= 0;
 
     if(!add_constraintex(lp, Col.size(), Coeff.data(), Col.data(), EqTy, RHS))
       report_fatal_error("SDCScheduler: Can NOT add dependency constraints"
