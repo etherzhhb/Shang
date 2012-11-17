@@ -37,7 +37,13 @@ extern "C" {
 using namespace llvm;
 
 // The text template processing lua module
+#ifdef _MSC_VER
+static void load_luapp_lo(lua_State *L) {
+#endif
 #include "luapp.inc"
+#ifdef _MSC_VER
+}
+#endif
 
 LuaScript::LuaScript() : State(lua_open()) {
   FUSet.grow(VFUs::LastCommonFUType);
