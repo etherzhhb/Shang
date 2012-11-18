@@ -1215,6 +1215,11 @@ void ChainBreaker::visit(VSUnit *U) {
     unsigned Opcode = MI->getOpcode();
     unsigned SchedSlot = U->getSlot() + I->second / 2;
     unsigned Latency = G.getStepsToFinish(MI);
+    if (VInstrInfo::isDatapath(Opcode))
+      // The result of data-path operation is available 1 slot after the
+      // operation start.
+      Latency = std::max(1u, Latency);
+
     bool IsDangling = U->isDangling();
     ChainValDef Def(*MI, SchedSlot, SchedSlot + Latency);
 
@@ -1230,15 +1235,9 @@ void ChainBreaker::visit(VSUnit *U) {
     // Fix the register class for the result.
     MRI.setRegClass(Def.RegNum, VRegisterInfo::getRepRegisterClass(Opcode));
 
-    if (VInstrInfo::isDatapath(Opcode)) {
-      // The result of data-path operation is available 1 slot after the
-      // operation start.
-      Latency = std::max(1u, Latency);
-      Def.ChainEnd = std::max(SchedSlot + Latency, Def.ChainEnd);
-      assert((!IsPipelined || U->isDangling()
-              || Def.ChainEnd - Def.ChainStart <= CurII)
-             && "Anti-dependencies broken!");
-    }
+    assert((!VInstrInfo::isDatapath(Opcode) || !IsPipelined || U->isDangling()
+            || Def.ChainEnd - Def.ChainStart <= CurII)
+            && "Anti-dependencies broken!");
 
     ChainValDef *NewDef = new (Allocator.Allocate()) ChainValDef(Def);
     addValDef(NewDef);
