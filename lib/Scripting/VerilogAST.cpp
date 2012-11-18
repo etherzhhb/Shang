@@ -513,6 +513,22 @@ void DatapathContainer::reset() {
   Allocator.Reset();
 }
 
+VASTImmediate *DatapathContainer::getOrCreateImmediate(const APInt &Value) {
+  FoldingSetNodeID ID;
+
+  Value.Profile(ID);
+
+  void *IP = 0;
+  if (VASTImmediate *V = UniqueImms.FindNodeOrInsertPos(ID, IP))
+    return V;
+
+  void *P = Allocator.Allocate(sizeof(VASTImmediate), alignOf<VASTImmediate>());
+  VASTImmediate *V = new (P) VASTImmediate(Value, ID.Intern(Allocator));
+  UniqueImms.InsertNode(V, IP);
+
+  return V;
+}
+
 VASTValPtr DatapathContainer::createExpr(VASTExpr::Opcode Opc,
                                          ArrayRef<VASTValPtr> Ops,
                                          unsigned UB, unsigned LB) {
@@ -958,7 +974,7 @@ VASTValue::dp_dep_it VASTValue::dp_dep_end(VASTValue *V) {
 void VASTImmediate::printAsOperandImpl(raw_ostream &OS, unsigned UB,
                                        unsigned LB) const {
   assert(UB == getBitWidth() && LB == 0 && "Cannot print bitslice of Expr!");
-  OS << verilogConstToStr(getUnsignedValue(), getBitWidth(), false);
+  OS << getBitWidth() << "'h" << Int.toString(16, false);
 }
 
 void VASTPort::print(raw_ostream &OS) const {
@@ -1103,7 +1119,7 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 }
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
-  OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getUnsignedValue() << '{';
+  OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getAPInt() << '{';
   Ops[0].printAsOperand(OS);
   OS << "}}";
 }

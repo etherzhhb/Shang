@@ -18,6 +18,7 @@
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
 
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -35,6 +36,7 @@ class MachineOperand;
 class VASTModule;
 template<typename T> struct PtrInvPair;
 class VASTValue;
+class VASTImmediate;
 class VASTSlot;
 class VASTSignal;
 class VASTWire;
@@ -64,7 +66,6 @@ public:
   };
 protected:
   union {
-    int64_t IntVal;
     const char *Name;
     VASTSignal *Signal;
     MachineInstr *BundleStart;
@@ -118,8 +119,8 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool> {
   // Forwarding function of VASTValues
   inline PtrInvPair<VASTValue> getOperand(unsigned i) const;
   inline PtrInvPair<VASTExpr> getExpr() const;
-  inline uint64_t getUnsignedValue() const;
-  inline int64_t getSignedValue() const;
+  inline APInt getAPInt() const;
+  inline APInt getBitSlice(unsigned UB, unsigned LB = 0) const;
   inline bool isAllZeros() const;
   inline bool isAllOnes() const;
 
@@ -402,11 +403,20 @@ template<> struct simplify_type<VASTUse> {
   }
 };
 
-class VASTImmediate : public VASTValue {
-  VASTImmediate(uint64_t Imm, unsigned BitWidth)
-               : VASTValue(vastImmediate, BitWidth) {
-    Contents.IntVal = Imm;
-  }
+template<> struct FoldingSetTrait<VASTImmediate>;
+class VASTImmediate : public VASTValue, public FoldingSetNode  {
+  const APInt Int;
+
+  friend struct FoldingSetTrait<VASTImmediate>;
+  /// FastID - A reference to an Interned FoldingSetNodeID for this node.
+  /// The DatapathContainer's BumpPtrAllocator holds the data.
+  const FoldingSetNodeIDRef FastID;
+
+  VASTImmediate(const APInt &Other, const FoldingSetNodeIDRef ID)
+    : VASTValue(vastImmediate, Other.getBitWidth()), Int(Other), FastID(ID) {}
+
+  VASTImmediate(const VASTImmediate&);              // Do not implement
+  void operator=(const VASTImmediate&);             // Do not implement
 
   void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
@@ -416,20 +426,21 @@ class VASTImmediate : public VASTValue {
 
   friend class DatapathContainer;
 public:
-  uint64_t getUnsignedValue() const {
-    return getBitSlice64(Contents.IntVal, getBitWidth());
-  }
+  /// Profile - Used to insert VASTImm objects, or objects that contain VASTImm
+  ///  objects, into FoldingSets.
+  void Profile(FoldingSetNodeID& ID) const;
 
-  int64_t getSignedValue() const {
-    return SignExtend64(getUnsignedValue(), getBitWidth());
+  const APInt &getAPInt() const { return Int; }
+  APInt getBitSlice(unsigned UB, unsigned LB = 0) const {
+    return getBitSlice(Int, UB, LB);
   }
 
   bool isAllZeros() const {
-    return isAllZeros64(getUnsignedValue(), getBitWidth());
+    return Int.isMinValue();
   }
 
   bool isAllOnes() const {
-    return isAllOnes64(getUnsignedValue(), getBitWidth());
+    return Int.isAllOnesValue();
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -437,21 +448,27 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastImmediate;
   }
+
+  // Helper functions to manipulate APInt at bit level.
+  static APInt getBitSlice(const APInt &Int, unsigned UB, unsigned LB = 0) {
+    return Int.lshr(LB).sextOrTrunc(UB - LB);
+  }
 };
 
 typedef PtrInvPair<VASTImmediate> VASTImmPtr;
 template<>
-inline uint64_t PtrInvPair<VASTImmediate>::getUnsignedValue() const {
-  int64_t Val = get()->getUnsignedValue();
-  return isInverted() ? getBitSlice64(~Val, get()->getBitWidth()) : Val;
+inline APInt PtrInvPair<VASTImmediate>::getAPInt() const {
+  APInt Val = get()->getAPInt();
+  if (isInverted()) Val.flipAllBits();
+  return Val;
 }
 
+typedef PtrInvPair<VASTImmediate> VASTImmPtr;
 template<>
-inline int64_t PtrInvPair<VASTImmediate>::getSignedValue() const {
-  int64_t Val = get()->getSignedValue();
-  return isInverted() ? ~Val : Val;
+inline
+APInt PtrInvPair<VASTImmediate>::getBitSlice(unsigned UB, unsigned LB) const {
+  return VASTImmediate::getBitSlice(getAPInt(), UB, LB);
 }
-
 template<>
 inline bool PtrInvPair<VASTImmediate>::isAllZeros() const {
   return isInverted() ? get()->isAllOnes() : get()->isAllZeros();
@@ -460,6 +477,25 @@ template<>
 inline bool PtrInvPair<VASTImmediate>::isAllOnes() const {
   return isInverted() ? get()->isAllZeros() : get()->isAllOnes();
 }
+
+
+// Specialize FoldingSetTrait for VASTImmediate to avoid needing to compute
+// temporary FoldingSetNodeID values.
+template<>
+struct FoldingSetTrait<VASTImmediate> : DefaultFoldingSetTrait<VASTImmediate> {
+  static void Profile(const VASTImmediate &X, FoldingSetNodeID& ID) {
+    ID = X.FastID;
+  }
+
+  static bool Equals(const VASTImmediate &X, const FoldingSetNodeID &ID,
+                     unsigned IDHash, FoldingSetNodeID &TempID) {
+      return ID == X.FastID;
+  }
+
+  static unsigned ComputeHash(const VASTImmediate &X, FoldingSetNodeID &TempID) {
+    return X.FastID.ComputeHash();
+  }
+};
 
 class VASTNamedValue : public VASTValue {
 protected:
@@ -625,16 +661,17 @@ private:
 
   friend struct FoldingSetTrait<VASTExpr>;
   /// FastID - A reference to an Interned FoldingSetNodeID for this node.
-  /// The ScalarEvolution's BumpPtrAllocator holds the data.
+  /// The DatapathContainer's BumpPtrAllocator holds the data.
   const FoldingSetNodeIDRef FastID;
   mutable float CachedDelay;
   // The total operand of this expression.
   unsigned ExprSize;
 
-  VASTExpr(const VASTExpr&);             // Do not implement
+  VASTExpr(const VASTExpr&);              // Do not implement
+  void operator=(const VASTExpr&);        // Do not implement
 
-  explicit VASTExpr(Opcode Opc, uint8_t numOps, unsigned UB,
-                    unsigned LB, const FoldingSetNodeIDRef ID);
+  VASTExpr(Opcode Opc, uint8_t numOps, unsigned UB, unsigned LB,
+           const FoldingSetNodeIDRef ID);
 
   friend class DatapathContainer;
 
@@ -707,23 +744,23 @@ inline VASTValPtr PtrInvPair<VASTExpr>::getOperand(unsigned i) const {
   return get()->getOperand(i).get().invert(isInverted());
 }
 
-// Specialize FoldingSetTrait for VASTWire to avoid needing to compute
+// Specialize FoldingSetTrait for VASTExpr to avoid needing to compute
 // temporary FoldingSetNodeID values.
 template<>
 struct FoldingSetTrait<VASTExpr> : DefaultFoldingSetTrait<VASTExpr> {
-    static void Profile(const VASTExpr &X, FoldingSetNodeID& ID) {
-        ID = X.FastID;
-    }
+  static void Profile(const VASTExpr &X, FoldingSetNodeID& ID) {
+      ID = X.FastID;
+  }
 
-    static bool Equals(const VASTExpr &X, const FoldingSetNodeID &ID,
-                       unsigned IDHash, FoldingSetNodeID &TempID) {
-      return ID == X.FastID;
-    }
+  static bool Equals(const VASTExpr &X, const FoldingSetNodeID &ID,
+                      unsigned IDHash, FoldingSetNodeID &TempID) {
+    return ID == X.FastID;
+  }
 
-    static unsigned ComputeHash(const VASTExpr &X, FoldingSetNodeID &TempID) {
-      return X.FastID.ComputeHash();
-    }
-  };
+  static unsigned ComputeHash(const VASTExpr &X, FoldingSetNodeID &TempID) {
+    return X.FastID.ComputeHash();
+  }
+};
 
 class VASTWire :public VASTSignal {
 public:
@@ -1105,9 +1142,8 @@ public:
 // The container to hold all VASTExprs in data-path of the design.
 class DatapathContainer {
   // The unique immediate in the data-path.
-  typedef DenseMap<std::pair<uint64_t, char>, VASTImmediate*> UniqueImmSetTy;
-  UniqueImmSetTy UniqueImms;
-  
+  FoldingSet<VASTImmediate> UniqueImms;
+
   // Expression in data-path
   FoldingSet<VASTExpr> UniqueExprs;
 
@@ -1120,16 +1156,10 @@ public:
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                         unsigned UB, unsigned LB);
 
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    Value = getBitSlice64(Value, BitWidth);
-    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
-    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
-    if (!Imm) {// Create the immediate if it is not yet created.
-      Imm = Allocator.Allocate<VASTImmediate>();
-      new (Imm) VASTImmediate(Value, BitWidth);
-    }
+  VASTImmediate *getOrCreateImmediate(const APInt &Value);
 
-    return Imm;
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return getOrCreateImmediate(APInt(BitWidth, Value));
   }
 
   VASTImmediate *getBoolImmediate(bool Value) {
