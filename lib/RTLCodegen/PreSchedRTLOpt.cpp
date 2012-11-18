@@ -752,8 +752,10 @@ MachineOperand PreSchedRTLOpt::getAsOperand(VASTValPtr V) {
     }
   }
 
-  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V))
-    return VInstrInfo::CreateImm(Imm.getUnsignedValue(), Imm->getBitWidth());
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
+    assert(Imm->getBitWidth() <= 65 && "Bit immediate is not supported yet!");
+    return VInstrInfo::CreateImm(Imm.getAPInt().getZExtValue(), Imm->getBitWidth());
+  }
 
   if (VASTMachineOperand *VASTMO = dyn_cast<VASTMachineOperand>(V))
     return VASTMO->getMO();

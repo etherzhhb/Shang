@@ -77,6 +77,10 @@ public:
     return 0;
   }
 
+  virtual VASTImmediate *getOrCreateImmediate(const APInt &Value) {
+    return 0;
+  }
+
   virtual VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                                 unsigned UB, unsigned LB) {
     return 0;
@@ -175,9 +179,9 @@ public:
   
 
   // Bit mask analyzing, bitmask_collecting_iterator.
-  void calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,uint64_t &KnownOnes);
-  void calculateBitCatBitMask(VASTExprPtr Expr, uint64_t &KnownZeros,
-                              uint64_t &KnownOnes);
+  void calculateBitMask(VASTValPtr V, APInt &KnownZeros, APInt &KnownOnes);
+  void calculateBitCatBitMask(VASTExprPtr Expr, APInt &KnownZeros,
+                              APInt &KnownOnes);
 
   VASTValPtr getBoolImmediate(bool Val) {
     return Context.getOrCreateImmediate(Val, 1);
@@ -185,6 +189,10 @@ public:
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return Context.getOrCreateImmediate(Value, BitWidth);
+  }
+
+  VASTImmediate *getOrCreateImmediate(const APInt &Value) {
+    return Context.getOrCreateImmediate(Value);
   }
 
   bool shouldExprBeFlatten(VASTExpr *E) const {

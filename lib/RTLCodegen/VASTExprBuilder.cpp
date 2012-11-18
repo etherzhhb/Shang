@@ -44,35 +44,36 @@ void VASTExprBuilder::flattenExpr(iterator begin, iterator end, visitor F) {
 }
 
 void VASTExprBuilder::calculateBitCatBitMask(VASTExprPtr Expr,
-                                             uint64_t &KnownZeros,
-                                             uint64_t &KnownOnes) {
+                                             APInt &KnownZeros,
+                                             APInt &KnownOnes) {
   unsigned CurUB = Expr->getBitWidth();
+  unsigned ExprSize = Expr->getBitWidth();
   // Clear the mask.
-  KnownOnes = KnownZeros = UINT64_C(0);
+  KnownOnes = KnownZeros = APInt::getNullValue(ExprSize);
 
   // Concatenate the bit mask together.
   for (unsigned i = 0; i < Expr->NumOps; ++i) {
     VASTValPtr CurBitSlice = Expr.getOperand(i);
     unsigned CurSize = CurBitSlice->getBitWidth();
     unsigned CurLB = CurUB - CurSize;
-    uint64_t CurKnownZeros , CurKnownOnes;
+    APInt CurKnownZeros , CurKnownOnes;
     calculateBitMask(CurBitSlice, CurKnownZeros, CurKnownOnes);
-    KnownZeros   |= getBitSlice64(CurKnownZeros, CurSize) << CurLB;
-    CurKnownOnes |= getBitSlice64(CurKnownOnes, CurSize) << CurLB;
+    KnownZeros  |= CurKnownZeros.zextOrSelf(ExprSize).shl(CurLB);
+    KnownOnes   |= CurKnownOnes.zextOrSelf(ExprSize).shl(CurLB);
 
     CurUB = CurLB;
   }
 }
 
-void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
-                                       uint64_t &KnownOnes) {
+void VASTExprBuilder::calculateBitMask(VASTValPtr V, APInt &KnownZeros,
+                                       APInt &KnownOnes) {
   // Clear the mask.
-  KnownOnes = KnownZeros = UINT64_C(0);
+  KnownOnes = KnownZeros = APInt::getNullValue(V->getBitWidth());
 
   // Most simple case: Immediate.
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
-    KnownOnes = Imm.getUnsignedValue();
-    KnownZeros = getBitSlice64(~KnownOnes, Imm->getBitWidth());
+    KnownOnes = Imm.getInt();
+    KnownZeros = ~Imm.getAPInt();
     return;
   }
 
@@ -95,13 +96,13 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
   case VASTExpr::dpAssign:
     calculateBitMask(Expr.getOperand(0), KnownZeros, KnownOnes);
     // Adjust the bitmask by LB.
-    KnownOnes = getBitSlice64(KnownOnes >> Expr->LB, Expr->getBitWidth());
-    KnownZeros = getBitSlice64(KnownZeros >> Expr->LB, Expr->getBitWidth());
+    KnownOnes = VASTImmediate::getBitSlice(KnownOnes, Expr->UB, Expr->LB);
+    KnownZeros = VASTImmediate::getBitSlice(KnownZeros, Expr->UB, Expr->LB);
     return;
   case VASTExpr::dpSel: {
     VASTValPtr OpTrue = Expr.getOperand(1), OpFalse = Expr.getOperand(2);;
     calculateBitMask(OpTrue, KnownZeros, KnownOnes);
-    uint64_t OpFalseKnownOnes, OpFalseKnownZeros;
+    APInt OpFalseKnownOnes, OpFalseKnownZeros;
     calculateBitMask(OpFalse, OpFalseKnownZeros, OpFalseKnownOnes);
     KnownOnes &= OpFalseKnownOnes;
     KnownZeros &= OpFalseKnownZeros;
@@ -113,12 +114,10 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
-
   // Try to promote the invert flag
   if (U.isInverted()) {
     if (VASTImmPtr ImmPtr = dyn_cast<VASTImmPtr>(U))
-        return getOrCreateImmediate(ImmPtr.getUnsignedValue(),
-                                    ImmPtr->getBitWidth());
+        return getOrCreateImmediate(ImmPtr.getAPInt());
 
     if (VASTExpr *Expr = dyn_cast<VASTExpr>(U.get())) {
       if (Expr->getOpcode() == VASTExpr::dpBitCat) {
@@ -141,10 +140,8 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
 
-  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(U)) {
-    uint64_t imm = getBitSlice64(Imm.getUnsignedValue(), UB, LB);
-    return Context.getOrCreateImmediate(imm, UB - LB);
-  }
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(U))
+    return Context.getOrCreateImmediate(Imm.getBitSlice(UB, LB));
 
   VASTExprPtr Expr = dyn_cast<VASTExprPtr>(U);
 
@@ -229,14 +226,13 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
     if (VASTImmPtr CurImm = dyn_cast<VASTImmPtr>(V)) {
       if (LastImm) {
         // Merge the constants.
-        uint64_t HiVal = LastImm.getUnsignedValue(),
-                 LoVal = CurImm.getUnsignedValue();
+        APInt HiVal = LastImm.getAPInt(), LoVal = CurImm.getAPInt();
         unsigned HiSizeInBits = LastImm->getBitWidth(),
                  LoSizeInBits = CurImm->getBitWidth();
         unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
-        assert(SizeInBits <= 64 && "Constant too large!");
-        uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
-        LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
+        APInt Val = LoVal.zextOrSelf(SizeInBits);
+        Val |= HiVal.zextOrSelf(SizeInBits).shl(LoSizeInBits);
+        LastImm = Context.getOrCreateImmediate(Val);
         NewOps[ActualOpPos - 1] = LastImm; // Modify back.
         continue;
       } else {
@@ -301,17 +297,17 @@ VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
 
 VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(Op)) {
-    uint64_t Val = Imm.getUnsignedValue();
+    APInt Val = Imm.getAPInt();
     switch (Opc) {
     case VASTExpr::dpRAnd:
       // Only reduce to 1 if all bits are 1.
-      if (isAllOnes64(Val, Imm->getBitWidth()))
+      if (Val.isAllOnesValue())
         return getBoolImmediate(true);
       else
         return getBoolImmediate(false);
     case VASTExpr::dpRXor:
       // Only reduce to 1 if there are odd 1s.
-      if (CountPopulation_64(Val) & 0x1)
+      if (Val.countPopulation() & 0x1)
         return getBoolImmediate(true);
       else
         return getBoolImmediate(false);
@@ -321,10 +317,11 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
   }
 
   // Try to fold the expression according to the bit mask.
-  uint64_t KnownZeros, KnownOnes;
+  APInt KnownZeros, KnownOnes;
   calculateBitMask(Op, KnownZeros, KnownOnes);
 
-  if (KnownZeros && Opc == VASTExpr::dpRAnd) return getBoolImmediate(false);
+  if (KnownZeros.getBoolValue() && Opc == VASTExpr::dpRAnd)
+    return getBoolImmediate(false);
 
   // Promote the reduction to the operands.
   if (VASTExpr *Expr = dyn_cast<VASTExpr>(Op)) {
@@ -377,7 +374,7 @@ VASTValPtr VASTExprBuilder::buildSelExpr(VASTValPtr Cnd, VASTValPtr TrueV,
          && TrueV->getBitWidth() == BitWidth && "Bad bitwidth!");
 
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(Cnd))
-    return Imm.getUnsignedValue() ? TrueV : FalseV;
+    return Imm.getAPInt().getBoolValue() ? TrueV : FalseV;
 
   Cnd = buildBitRepeat(Cnd, BitWidth);
   return buildOrExpr(buildAndExpr(Cnd, TrueV, BitWidth),
@@ -390,24 +387,25 @@ template<>
 struct VASTExprOpInfo<VASTExpr::dpAnd> {
   VASTExprBuilder &Builder;
   unsigned OperandWidth;
-  uint64_t KnownZeros, KnownOnes;
+  APInt KnownZeros, KnownOnes;
 
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned OperandWidth)
-    : Builder(Builder), OperandWidth(OperandWidth), KnownZeros(UINT64_C(0)),
-      KnownOnes(~UINT64_C(0)) /*Assume all bits are ones*/{}
+    : Builder(Builder), OperandWidth(OperandWidth), KnownZeros(OperandWidth, 0),
+      KnownOnes(APInt::getAllOnesValue(OperandWidth))/*Assume all bits are ones*/
+  {}
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
     assert(OperandWidth == V->getBitWidth() && "Bitwidth not match!");
 
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       // The bit is known one only if the bit of all operand are one.
-      KnownOnes &= Imm.getSignedValue();
+      KnownOnes &= Imm.getAPInt();
       // The bit is known zero if the bit of any operand are zero.
-      KnownZeros |= ~Imm.getSignedValue();
+      KnownZeros |= ~Imm.getAPInt();
       return 0;
     }
 
-    uint64_t OpKnownZeros, OpKnownOnes;
+    APInt OpKnownZeros, OpKnownOnes;
     Builder.calculateBitMask(V, OpKnownZeros, OpKnownOnes);
     KnownOnes &= OpKnownOnes;
     KnownZeros |=OpKnownZeros;
@@ -416,34 +414,38 @@ struct VASTExprOpInfo<VASTExpr::dpAnd> {
     return V;
   }
 
-  bool isAllZeros() const { return isAllOnes64(KnownZeros, OperandWidth); }
-  bool hasAnyZero() const  { return getBitSlice64(KnownZeros, OperandWidth); }
+  bool isAllZeros() const { return KnownZeros.isAllOnesValue(); }
+  bool hasAnyZero() const  { return KnownZeros.getBoolValue(); }
   // For the and expression, only zero is known.
-  uint64_t getImmVal() const { return ~KnownZeros; }
+  APInt getImmVal() const { return ~KnownZeros; }
 
   bool getZeroMaskSplitPoints(unsigned &HiPt, unsigned &LoPt) const {
     HiPt = OperandWidth;
     LoPt = 0;
 
-    if (!KnownZeros) return false;
+    if (!KnownZeros.getBoolValue()) return false;
 
-    if (isShiftedMask_64(KnownZeros) || isMask_64(KnownZeros)) {
-      unsigned NumZeros = CountPopulation_64(KnownZeros);
+    if (APIntOps::isShiftedMask(OperandWidth, KnownZeros)
+        || APIntOps::isMask(OperandWidth, KnownZeros)) {
+      unsigned NumZeros = KnownZeros.countPopulation();
+
+      // FIXME: Improve the profitable analysis.
       if (NumZeros < OperandWidth / 2) return false;
 
-      LoPt = CountTrailingZeros_64(KnownZeros);
-      HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(KnownZeros));
+      LoPt = KnownZeros.countTrailingZeros();
+      HiPt = OperandWidth - KnownZeros.countLeadingZeros();
       assert(HiPt > LoPt && "Bad split point!");
       return true;
     }
 
-    uint64_t NotKnownZeros = ~KnownZeros;
-    if (isShiftedMask_64(NotKnownZeros) || isMask_64(NotKnownZeros)) {
-      unsigned NumZeros = CountPopulation_64(KnownZeros);
+    APInt NotKnownZeros = ~KnownZeros;
+    if (APIntOps::isShiftedMask(OperandWidth, NotKnownZeros)
+        || APIntOps::isMask(OperandWidth, NotKnownZeros)) {
+      unsigned NumZeros = KnownZeros.countPopulation();
       if (NumZeros < OperandWidth / 2) return false;
 
-      LoPt = CountTrailingZeros_64(NotKnownZeros);
-      HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(NotKnownZeros));
+      LoPt = NotKnownZeros.countTrailingZeros();
+      HiPt = OperandWidth - NotKnownZeros.countLeadingZeros();
       assert(HiPt > LoPt && "Bad split point!");
       return true;
     }
@@ -466,7 +468,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
     return getOrCreateImmediate(UINT64_C(0), BitWidth);
 
   if (OpInfo.hasAnyZero()) {
-    NewOps.push_back(Context.getOrCreateImmediate(OpInfo.getImmVal(), BitWidth));
+    NewOps.push_back(Context.getOrCreateImmediate(OpInfo.getImmVal()));
 
     // Split the word according to known zeros.
     unsigned HiPt, LoPt;
@@ -575,17 +577,18 @@ struct AddMultOpInfoBase {
   VASTExprBuilder &Builder;
   const unsigned ResultSize;
   unsigned ActualResultSize;
-  uint64_t ImmVal;
+  APInt ImmVal;
   unsigned ImmSize;
   unsigned MaxTailingZeros;
   VASTValPtr OpWithTailingZeros;
 
   AddMultOpInfoBase(VASTExprBuilder &Builder, unsigned ResultSize)
-    : Builder(Builder), ResultSize(ResultSize), ActualResultSize(0), ImmVal(0),
-      ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
+    : Builder(Builder), ResultSize(ResultSize), ActualResultSize(0),
+      ImmVal(ResultSize, 0), ImmSize(0), MaxTailingZeros(0),
+      OpWithTailingZeros(0) {}
 
   VASTValPtr analyzeBitMask(VASTValPtr V,  unsigned &CurTailingZeros) {
-    uint64_t KnownZeros, KnownOnes;
+    APInt KnownZeros, KnownOnes;
     unsigned OperandSize = V->getBitWidth();
     // Trim the unused bits according to the result's size
     if (OperandSize > ResultSize)
@@ -595,21 +598,17 @@ struct AddMultOpInfoBase {
 
     Builder.calculateBitMask(V, KnownZeros, KnownOnes);
     // Any known zeros?
-    if (KnownZeros) {
-      // Try to trim the leading zeros.
-      KnownZeros = SignExtend64(KnownZeros, OperandSize);
-
+    if (KnownZeros.getBoolValue()) {
       // Ignore the zero operand for the addition.
-      if (KnownZeros == ~UINT64_C(0)) return 0;
+      if (KnownZeros.isAllOnesValue()) return 0;
 
       // Any known leading zeros?
-      if (KnownZeros >> 63) {
-        unsigned NoZerosUB = 64 - CountLeadingOnes_64(KnownZeros);
-
+      if (unsigned LeadingZeros = KnownZeros.countLeadingOnes()) {
+        unsigned NoZerosUB = OperandSize - LeadingZeros;
         V = Builder.buildBitSliceExpr(V, NoZerosUB, 0);
       }
 
-      CurTailingZeros = CountTrailingOnes_64(KnownZeros);
+      CurTailingZeros = KnownZeros.countTrailingOnes();
     }
 
     return V;
@@ -652,9 +651,9 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       ImmSize = std::max(ImmSize, Imm->getBitWidth());
       // Each addition will produce 1 extra bit (carry bit).
-      if (ImmVal) ImmSize = std::min(ImmSize + 1, ResultSize);
+      if (ImmVal.getBoolValue()) ImmSize = std::min(ImmSize + 1, ResultSize);
 
-      ImmVal += Imm->getUnsignedValue();
+      ImmVal += Imm->getAPInt().zextOrSelf(ResultSize);
       return 0;
     }
 
@@ -664,10 +663,10 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
   }
 
   VASTValPtr flushImmOperand() {
-    if (ImmVal) {
-      VASTImmPtr Imm = Builder.getOrCreateImmediate(ImmVal, ImmSize);
-      uint64_t KnownZeros = ~Imm.getUnsignedValue();
-      unsigned CurTailingZeros = CountTrailingOnes_64(KnownZeros);
+    if (ImmVal.getBoolValue()) {
+      VASTImmPtr Imm = Builder.getOrCreateImmediate(ImmVal.zextOrTrunc(ImmSize));
+      APInt KnownZeros = ~Imm.getAPInt();
+      unsigned CurTailingZeros = KnownZeros.countTrailingOnes();
 
       updateTailingZeros(Imm, CurTailingZeros);
 
@@ -723,7 +722,7 @@ struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
 
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       // Ignore multiply by 1.
-      if (Imm.getUnsignedValue() == 1) return 0;
+      if (Imm.getAPInt() == 1) return 0;
     }
 
     updateTailingZeros(V, CurTailingZeros);
@@ -800,7 +799,8 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   std::sort(NewOps.begin(), NewOps.end(), VASTExprOpInfo<VASTExpr::dpAdd>::sort);
 
   // All operands are zero?
-  if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
+  if (NewOps.empty())
+    return Context.getOrCreateImmediate(APInt::getNullValue(BitWidth));
 
   bool CarryPresented = NewOps.back()->getBitWidth() == 1;
 
@@ -926,27 +926,24 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
     RHS = buildBitSliceExpr(RHS, RHSMaxSize, 0);
 
   if (VASTExprPtr RHSExpr = dyn_cast<VASTExprPtr>(RHS)) {
-    uint64_t KnownZeros, KnownOnes;
+    APInt KnownZeros, KnownOnes;
     calculateBitMask(RHSExpr, KnownZeros, KnownOnes);
     
     // Any known zeros?
-    if (KnownZeros) {
-      // Try to trim the leading zeros.
-      KnownZeros = SignExtend64(KnownZeros, RHS->getBitWidth());
-
+    if (KnownZeros.getBoolValue()) {
       // Ignore the zero operand for the addition.
-      if (KnownZeros == ~UINT64_C(0)) return 0;
+      if (KnownZeros.isAllOnesValue()) return 0;
 
       // Any known leading zeros?
-      if (KnownZeros >> 63) {
-        unsigned NoZerosUB = 64 - CountLeadingOnes_64(KnownZeros);
+      if (unsigned LeadingZeros = KnownZeros.countLeadingOnes()) {
+        unsigned NoZerosUB = RHS->getBitWidth() - LeadingZeros;
         RHS = buildBitSliceExpr(RHS, NoZerosUB, 0);
       }
     }
   }
 
   if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(RHS)) {
-    uint8_t ShiftAmount = Imm.getUnsignedValue();
+    unsigned ShiftAmount = Imm.getAPInt().getZExtValue();
 
     // If we not shift at all, simply return the operand.
     if (ShiftAmount == 0) return LHS;
