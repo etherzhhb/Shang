@@ -189,6 +189,7 @@ struct MemBusBuilder {
     VM->assign(MemBusByteEn, Builder.buildExpr(BeExpr));
   }
 };
+
 class VerilogASTBuilder : public MachineFunctionPass,
                           public DatapathBuilderContext {
   const Module *M;
@@ -206,8 +207,10 @@ class VerilogASTBuilder : public MachineFunctionPass,
     return !EmittedSubModules.insert(Name);
   }
 
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return VM->getOrCreateImmediate(Value, BitWidth);
+  using VASTExprBuilderContext::getOrCreateImmediate;
+
+  VASTImmediate *getOrCreateImmediate(const APInt &Value) {
+    return VM->getOrCreateImmediate(Value);
   }
 
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,

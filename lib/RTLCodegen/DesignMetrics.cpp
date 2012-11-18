@@ -67,9 +67,11 @@ class DesignMetricsImpl : public EarlyDatapathBuilderContext {
 
   // TODO: To not perform cycle-accurate speed performance estimation at the IR
   // layer, instead we should only care about the number of memory accesses.
-  
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return DPContainer.getOrCreateImmediate(Value, BitWidth);
+
+  using VASTExprBuilderContext::getOrCreateImmediate;
+
+  VASTImmediate *getOrCreateImmediate(const APInt &Value) {
+    return DPContainer.getOrCreateImmediate(Value);
   }
 
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,

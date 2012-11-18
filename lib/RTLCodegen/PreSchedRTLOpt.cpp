@@ -71,8 +71,10 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
                    VMachineOperandValueTrait> VASTMOMapTy;
   VASTMOMapTy VASTMOs;
 
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return DPContainer.getOrCreateImmediate(Value, BitWidth);
+  using VASTExprBuilderContext::getOrCreateImmediate;
+
+  VASTImmediate *getOrCreateImmediate(const APInt &Value) {
+    return DPContainer.getOrCreateImmediate(Value);
   }
 
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,

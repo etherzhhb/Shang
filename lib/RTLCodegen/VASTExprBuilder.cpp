@@ -15,10 +15,24 @@
 #include "VASTExprBuilder.h"
 #include "vtm/Utilities.h"
 
+#include "llvm/Support/ErrorHandling.h"
 #define DEBUG_TYPE "vtm-vast-expr-builder"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+
+
+VASTImmediate *VASTExprBuilderContext::getOrCreateImmediate(const APInt &Value) {
+  llvm_unreachable("reach Unimplemented function of VASTExprBuilderContext!");
+  return 0;
+}
+
+VASTValPtr VASTExprBuilderContext::createExpr(VASTExpr::Opcode Opc,
+                                              ArrayRef<VASTValPtr> Ops,
+                                              unsigned UB, unsigned LB) {
+  llvm_unreachable("reach Unimplemented function of VASTExprBuilderContext!");
+  return 0;
+}
 
 // Inline all operands in the expression whose Opcode is the same as Opc
 // recursively;

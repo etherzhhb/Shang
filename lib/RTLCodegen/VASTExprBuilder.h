@@ -73,18 +73,14 @@ public:
     return Expr;
   }
 
-  virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return 0;
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return getOrCreateImmediate(APInt(BitWidth, Value));
   }
 
-  virtual VASTImmediate *getOrCreateImmediate(const APInt &Value) {
-    return 0;
-  }
+  virtual VASTImmediate *getOrCreateImmediate(const APInt &Value);
 
   virtual VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                                unsigned UB, unsigned LB) {
-    return 0;
-  }
+                                unsigned UB, unsigned LB);
 };
 
 // The helper class to collect the information about the operands of a VASTExpr.
