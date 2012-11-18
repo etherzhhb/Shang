@@ -77,7 +77,7 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
 
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                         unsigned UB, unsigned LB) {
-    return DPContainer.createExpr(Opc, Ops, UB, LB);;
+    return DPContainer.createExpr(Opc, Ops, UB, LB);
   }
 
   // Remember in which MachineBasicBlock the expression is first created, we can
