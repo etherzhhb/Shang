@@ -927,7 +927,7 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
 
   if (VASTExprPtr RHSExpr = dyn_cast<VASTExprPtr>(RHS)) {
     uint64_t KnownZeros, KnownOnes;
-    calculateBitCatBitMask(RHSExpr, KnownZeros, KnownOnes);
+    calculateBitMask(RHSExpr, KnownZeros, KnownOnes);
     
     // Any known zeros?
     if (KnownZeros) {
