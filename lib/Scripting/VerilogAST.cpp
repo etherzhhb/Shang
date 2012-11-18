@@ -503,7 +503,7 @@ VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
   assert(NumOps && "Unexpected empty operand list!");
 }
 
-bool llvm::VASTExpr::isInlinable() const {
+bool VASTExpr::isInlinable() const {
   return ExprSize < ExprInlineThreshold && getOpcode() <= LastInlinableOpc;
 }
 
