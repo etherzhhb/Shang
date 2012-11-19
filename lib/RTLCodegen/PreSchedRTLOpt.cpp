@@ -541,11 +541,13 @@ unsigned PreSchedRTLOpt::rewriteAdd(VASTExpr *Expr, MachineInstr *IP) {
 template<VFUs::ICmpFUType ICmpTy>
 unsigned PreSchedRTLOpt::rewriteICmp(VASTExpr *Expr, MachineInstr *IP) {
   MachineOperand DefMO = allocateRegMO(Expr);
+  unsigned ICMPBitWidth = std::max(Expr->getOperand(0)->getBitWidth(),
+                                   Expr->getOperand(1)->getBitWidth());
   BuildMI(*IP->getParent(), IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpICmp_c))
     .addOperand(DefMO)
     .addOperand(getAsOperand(Expr->getOperand(0)))
     .addOperand(getAsOperand(Expr->getOperand(1)))
-    .addOperand(VInstrInfo::CreateImm(ICmpTy, 8))
+    .addOperand(VInstrInfo::CreateImm(ICmpTy, ICMPBitWidth))
     .addOperand(VInstrInfo::CreatePredicate())
     .addOperand(VInstrInfo::CreateTrace());
   return DefMO.getReg();
