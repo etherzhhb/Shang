@@ -50,7 +50,7 @@ struct DataPathPromotion : public MachineFunctionPass {
             break;
           }
           case VTM::VOpICmp_c: {
-            unsigned Size = VInstrInfo::getBitWidth(MI->getOperand(0));
+            unsigned Size = VInstrInfo::getBitWidth(MI->getOperand(3));
             if (!getFUDesc(VFUs::ICmp)->shouldBeChained(Size)) 
               MI->setDesc(VInstrInfo::getDesc(VTM::VOpICmp));           
             break;
