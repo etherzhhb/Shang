@@ -107,7 +107,7 @@ private:
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
-  float computeLatencyFor(const MachineInstr *MI);
+  float computeAndCacheLatencyFor(const MachineInstr *MI);
   CachedLatMapTy::mapped_type
   getCachedLatencyResult(const MachineInstr *MI) const {
     CachedLatMapTy::const_iterator at = CachedLatencies.find(MI);

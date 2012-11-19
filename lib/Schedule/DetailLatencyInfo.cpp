@@ -199,7 +199,7 @@ static LatInfoTy ensureElementalLatency(LatInfoTy L) {
                    L.second == 0.0f ? 0.0f : std::max(L.second, VFUs::LutLatency));
 }
 
-float DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
+float DetialLatencyInfo::computeAndCacheLatencyFor(const MachineInstr *MI) {
   float TotalLatency = VInstrInfo::getDetialLatency(MI);
   // Remember the latency from all MI's dependence leaves.
   CachedLatencies.insert(std::make_pair(MI, TotalLatency));
@@ -394,7 +394,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI,
   }
 
   // Compute the latency of MI.
-  float Latency = computeLatencyFor(MI);
+  float Latency = computeAndCacheLatencyFor(MI);
 
   // We will not get any latency information if a datapath operation do not
   // depends any control operation in the same BB.
