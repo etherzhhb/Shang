@@ -200,7 +200,22 @@ static LatInfoTy ensureElementalLatency(LatInfoTy L) {
 }
 
 float DetialLatencyInfo::computeAndCacheLatencyFor(const MachineInstr *MI) {
-  float TotalLatency = VInstrInfo::getDetialLatency(MI);
+  float TotalLatency = 0.0f;
+
+  if (MI->getOpcode() == VTM::VOpBitSlice && MI->getOperand(1).isReg()) {
+    unsigned SrcReg = MI->getOperand(1).getReg();
+    MachineInstr *BitSliceSrc = MRI->getVRegDef(SrcReg);
+    assert(BitSliceSrc && "The source MachineInstr for BitSlice not found!");
+    // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
+    // and the lower bound of the bitslice.
+    unsigned UB = MI->getOperand(2).getImm(), LB = MI->getOperand(3).getImm();
+    // Create the entry for the bitslice, the latency of the bitslice is the
+    // same as the scaled BitSliceSrc.
+    LatInfoTy Lat = getLatencyToDst<false>(BitSliceSrc, VTM::VOpMove, UB, LB);
+    TotalLatency = std::max(Lat.first, Lat.second);
+  } else
+    TotalLatency = VInstrInfo::getDetialLatency(MI);
+
   // Remember the latency from all MI's dependence leaves.
   CachedLatencies.insert(std::make_pair(MI, TotalLatency));
   return TotalLatency;
