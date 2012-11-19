@@ -275,6 +275,9 @@ public:
   }
 
   VASTValPtr buildXorExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
+
+  VASTValPtr buildZExtExpr(VASTValPtr V, unsigned DstBitWidth);
+  VASTValPtr buildSExtExpr(VASTValPtr V, unsigned DstBitWidth);
 };
 }
 

@@ -60,7 +60,7 @@ VASTValPtr EarlyDatapathBuilder::visitZExtInst(ZExtInst &I) {
   if (NumBits > 64) return VASTValPtr();
 
   VASTValPtr Operand = getAsOperand(I.getOperand(0));
-  return padHigherBits(Operand, NumBits, false);
+  return buildZExtExpr(Operand, NumBits);
 }
 
 VASTValPtr EarlyDatapathBuilder::visitSExtInst(SExtInst &I) {
@@ -70,13 +70,7 @@ VASTValPtr EarlyDatapathBuilder::visitSExtInst(SExtInst &I) {
   if (NumBits > 64) return VASTValPtr();
 
   VASTValPtr Operand = getAsOperand(I.getOperand(0));
-  VASTValPtr SignBit = getSignBit(Operand);
-  unsigned NumExtendBits = NumBits - Operand->getBitWidth();
-  VASTValPtr ExtendBits = buildExpr(VASTExpr::dpBitRepeat, SignBit,
-                                    getOrCreateImmediate(NumExtendBits, 8),
-                                    NumExtendBits);
-  VASTValPtr Ops[] = { ExtendBits, Operand };
-  return buildBitCatExpr(Ops, NumBits);
+  return buildSExtExpr(Operand, NumBits);
 }
 
 VASTValPtr EarlyDatapathBuilder::visitBitCastInst(BitCastInst &I) {

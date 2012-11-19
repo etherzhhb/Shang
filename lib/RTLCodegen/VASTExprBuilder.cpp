@@ -996,6 +996,23 @@ VASTValPtr VASTExprBuilder::buildShiftExpr(VASTExpr::Opcode Opc,
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
+VASTValPtr VASTExprBuilder::buildZExtExpr(VASTValPtr V, unsigned DstBitWidth) {
+  assert(DstBitWidth > V->getBitWidth() && "Unexpected DstBitWidth!");
+  return padHigherBits(V, DstBitWidth, false);
+}
+
+VASTValPtr VASTExprBuilder::buildSExtExpr(VASTValPtr V, unsigned DstBitWidth) {
+  assert(DstBitWidth > V->getBitWidth() && "Unexpected DstBitWidth!");
+  unsigned NumExtendBits = DstBitWidth - V->getBitWidth();
+  VASTValPtr SignBit = getSignBit(V);
+
+  VASTValPtr ExtendBits = buildExpr(VASTExpr::dpBitRepeat, SignBit,
+                                    getOrCreateImmediate(NumExtendBits, 8),
+                                    NumExtendBits);
+  VASTValPtr Ops[] = { ExtendBits, V };
+  return buildBitCatExpr(Ops, DstBitWidth);
+}
+
 VASTWire *VASTModule::addPredExpr(VASTWire *CndWire,
                                   SmallVectorImpl<VASTValPtr> &Cnds,
                                   bool AddSlotActive){
