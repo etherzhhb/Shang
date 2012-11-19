@@ -278,6 +278,22 @@ public:
 
   VASTValPtr buildZExtExpr(VASTValPtr V, unsigned DstBitWidth);
   VASTValPtr buildSExtExpr(VASTValPtr V, unsigned DstBitWidth);
+
+  VASTValPtr buildZExtExprOrSelf(VASTValPtr V, unsigned DstBitWidth) {
+    if (V->getBitWidth() < DstBitWidth) {
+      V = buildZExtExpr(V, DstBitWidth);
+    }
+
+    return V;
+  }
+
+  VASTValPtr buildSExtExprOrSelf(VASTValPtr V, unsigned DstBitWidth) {
+    if (V->getBitWidth() < DstBitWidth) {
+      V = buildSExtExpr(V, DstBitWidth);
+    }
+
+    return V;
+  }
 };
 }
 
