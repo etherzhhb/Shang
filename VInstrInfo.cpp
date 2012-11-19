@@ -18,6 +18,7 @@
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
+#include "vtm/DetailLatencyInfo.h"
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -32,8 +33,6 @@
 #include "llvm/Support/Debug.h"
 #define GET_INSTRINFO_CTOR
 #include "VerilogBackendGenInstrInfo.inc"
-#include <float.h>
-#include "vtm/DetailLatencyInfo.h"
 
 namespace llvm {
 extern const MCInstrDesc VTMInsts[];
