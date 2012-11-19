@@ -239,9 +239,8 @@ LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
       // DirtyHack: Ignore the invert flag.
       if (SrcSize != 1 && UB != 3) {
         assert(UB <= SrcSize && UB > LB  && "Bad bitslice!");
-        tie(MSBLatency, LSBLatency)
-          = getBitSliceLatency(SrcSize, UB, LB,
-                               LatInfoTy(MSBLatency, LSBLatency));
+        return getBitSliceLatency(SrcSize, UB, LB,
+                                  LatInfoTy(MSBLatency, LSBLatency));
       }
     }
   } else {
