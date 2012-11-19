@@ -125,8 +125,7 @@ private:
   // Add the latency information from SrcMI to CurLatInfo.
   template<bool IsCtrlDep>
   void buildDepLatInfo(const MachineInstr *SrcMI, DepLatInfoTy &CurLatInfo,
-                       unsigned UB, unsigned LB,
-                       unsigned DstOpcode = VTM::INSTRUCTION_LIST_END);
+                       unsigned UB, unsigned LB, unsigned DstOpcode);
 
   template<bool IsCtrlDep>
   DepLatInfoTy::mapped_type getLatencyToDst(const MachineInstr *SrcMI,
