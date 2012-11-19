@@ -837,7 +837,7 @@ VASTValPtr VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool
 }
 
 VASTValPtr VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
-                                   VASTExpr::Opcode Opc) {
+                                          VASTExpr::Opcode Opc) {
   std::string ResultName = "shift" + utostr_32(FUNum) + "o";
 
 
@@ -849,7 +849,7 @@ VASTValPtr VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
 }
 
 VASTValPtr VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
-                                 bool isSigned) {
+                                        bool isSigned) {
   std::string ResultName = "cmp" + utostr_32(FUNum) + "o";
   if (isSigned)  ResultName = "s" + ResultName;
   else           ResultName = "u" + ResultName;
