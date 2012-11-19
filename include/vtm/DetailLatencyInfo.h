@@ -115,11 +115,6 @@ private:
     return at->second;
   }
 
-  template<bool IsCtrlDep>
-  DepLatInfoTy::mapped_type
-  getBitSliceSrcLatency(const MachineInstr *MI, const MachineInstr *SrcMI,
-                        unsigned DstOpcode);
-
   static bool propagateFromLSB2MSB(unsigned Opcode);
 
   // The latency from all register source through the datapath to a given

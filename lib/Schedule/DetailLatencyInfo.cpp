@@ -253,23 +253,6 @@ LatInfoTy DetialLatencyInfo::getLatencyToDst(const MachineInstr *SrcMI,
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
-
-template<bool IsCtrlDep>
-LatInfoTy DetialLatencyInfo::getBitSliceSrcLatency(const MachineInstr *MI,
-                                                   const MachineInstr *SrcMI,
-                                                   unsigned DstOpcode) {
-  assert(MI && SrcMI
-         && "The BitSlice or the source MachineInstr for BitSlice not available!");
-  // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
-  // and the lower bound of the bitslice.
-  unsigned UB = MI->getOperand(2).getImm();
-  unsigned LB = MI->getOperand(3).getImm();
-  // Create the entry for the bitslice, the latency of the bitslice is the
-  // same as the scaled BitSliceSrc.
-  LatInfoTy SrcLatency = getLatencyToDst<IsCtrlDep>(SrcMI, DstOpcode, UB, LB);
-  return ensureElementalLatency(SrcLatency);
-}
-
 template<bool IsCtrlDep>
 void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         DepLatInfoTy &CurLatInfo,
@@ -318,9 +301,15 @@ void DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     if (SrcMI->getOperand(1).isReg()) {
       unsigned SrcReg = SrcMI->getOperand(1).getReg();
       MachineInstr *BitSliceSrc = MRI->getVRegDef(SrcReg);
-
-      SrcLatency
-        = getBitSliceSrcLatency<IsCtrlDep>(SrcMI, BitSliceSrc, DstOpcode);
+      assert(BitSliceSrc && "The source MachineInstr for BitSlice not found!");
+      // Update SrcMSBLatency and SrcLSBLatency according to the upper bound
+      // and the lower bound of the bitslice.
+      UB = SrcMI->getOperand(2).getImm();
+      LB = SrcMI->getOperand(3).getImm();
+      // Create the entry for the bitslice, the latency of the bitslice is the
+      // same as the scaled BitSliceSrc.
+      SrcLatency = getLatencyToDst<IsCtrlDep>(BitSliceSrc, DstOpcode, UB, LB);
+      SrcLatency = ensureElementalLatency(SrcLatency);
       updateLatency(CurLatInfo, SrcMI, SrcLatency);
 
       buildDepLatInfo<IsCtrlDep>(BitSliceSrc, CurLatInfo, UB, LB, DstOpcode);
