@@ -41,6 +41,13 @@ set DataJSON [open "@BenchmarkSummaryTmp@" a+]
 
 puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\","
 puts $DataJSON "\"restricted_fmax\":\"[get_report_panel_data -name {*Fmax*} -col 1 -row 1]\","
+#############################################################################
+set MAIN_RTL_ENTITY "@MAIN_RTL_ENTITY@"
+set BenchmarkReportTmp "@BenchmarkReportTmp@"
+
+source @VTS_SOURCE_ROOT@/report_json_data.tcl
+###################
+
 #Read the execution cycles
 set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
 #while { [gets $cycleFile line] >= 0 } {
@@ -51,11 +58,11 @@ set wait
 puts $DataJSON "\"cycles\":\"$total\",\"wait\":\"$wait\","
 #}
 close $cycleFile
-#############################################################################
-set MAIN_RTL_ENTITY "@MAIN_RTL_ENTITY@"
-set BenchmarkReportTmp "@BenchmarkReportTmp@"
 
-source @VTS_SOURCE_ROOT@/report_json_data.tcl
-#############################################################################
+###################
+puts $DataJSON "\}"
+close $DataJSON
+
+##########################################################
 
 project_close
