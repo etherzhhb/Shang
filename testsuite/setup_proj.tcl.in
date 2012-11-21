@@ -55,7 +55,7 @@ gets $cycleFile line
 regexp {@MAIN_RTL_ENTITY@ hardware run cycles ([0-9]+) wait cycles ([0-9]+)} $line match total wait
 set total
 set wait
-puts $DataJSON "\"cycles\":\"$total\",\"wait\":\"$wait\","
+puts $DataJSON "\"cycles\":\"$total\",\"wait\":\"$wait\""
 #}
 close $cycleFile
 
