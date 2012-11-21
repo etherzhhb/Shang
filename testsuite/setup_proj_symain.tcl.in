@@ -120,6 +120,27 @@ if {0} {
       puts $DataJSON ",\"power_mw\":\"$total_pow\""
     }
   }
+
+  while { [gets $powerFile line] >= 0 } {
+    if {[regexp {Core Dynamic Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
+      set total_pow
+      puts $DataJSON ",\"power_mw\":\"$total_pow\""
+    }
+  }
+
+  while { [gets $powerFile line] >= 0 } {
+    if {[regexp {Core Static Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
+      set total_pow
+      puts $DataJSON ",\"power_mw\":\"$total_pow\""
+    }
+  }
+
+  while { [gets $powerFile line] >= 0 } {
+    if {[regexp {I/O Thermal Power Dissipation : ([0-9.]+)} $line match total_pow]} {
+      set total_pow
+      puts $DataJSON ",\"power_mw\":\"$total_pow\""
+    }
+  }
 }
 
 puts $DataJSON "\}"
