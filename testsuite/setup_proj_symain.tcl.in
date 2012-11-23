@@ -98,7 +98,7 @@ if {0} {
   #Simulate the netlist with the reported FMAX.
   regexp {([0-9.]+)} "$FMAX" match FMAX_NUM
   set FMAX_NUM
-  set half_period_ns [expr "ceil(500 / $FMAX_NUM)"]
+  set half_period_ns [expr "ceil(500 / $FMAX_NUM) + 0.001"]
   exec bash -c "sed -i -e 's/<half-period>/$half_period_ns/' DUT_TOP_tb.sv"
   #Set the simulation time according to the functional simulation.
   set run_time [expr "2 * $half_period_ns * $total_cycles + 100"]
