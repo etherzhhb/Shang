@@ -85,4 +85,6 @@ if (ENABLE_TESTSUITE)
   add_subdirectory(testsuite)
 endif (ENABLE_TESTSUITE)
 
+add_subdirectory(util/TestAllDelayandLEs)
+
 # TODO: docs.

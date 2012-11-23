@@ -1,7 +1,7 @@
 import re
 
 f=open('@FIT_FILE@','r+')
-writefile = open('@SUBMODULE_REPORT_FILE_MUX@','a')
+writefile = open('@LE_REPORT_FILE_MUX@','a')
 Total_LEs = 0
 #Put the max number in testDict 
 for line in f:
@@ -18,7 +18,7 @@ writefile.write("\"Total_LEs\":\"%s\""%(Total_LEs))
 writefile.write("}\n")
 writefile.close()    
 f.close()
-JustForCmake = open('@PseudoMuxTarget@','w+')
+JustForCmake = open('@PseudoTarget@','w+')
 JustForCmake.write("JustForCmake")
 JustForCmake.close()
 

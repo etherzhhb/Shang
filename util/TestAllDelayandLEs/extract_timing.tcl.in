@@ -1,15 +1,15 @@
 if {"@IsMux@" == "testMux"} {
-	set FileTmp [open "@REPORT_JSON_MUX@" a+]
+	set FileTmp [open "@TIMING_REPORT_JSON_MUX@" a+]
 	foreach_in_collection path [get_timing_paths -setup  -npath 1 -detail path_only] {
 	  set Data_Delay [get_path_info $path -data_delay]
-	  puts $FileTmp ",\n\{\"name\":\"@TEST_NAMES@\","
+	  puts $FileTmp ",\n\{\"name\":\"@DUT_NAME@\","
 	  puts $FileTmp "\"delay\":\"$Data_Delay\","
 	}
 } else {
-	set FileTmp [open "@REPORT_JSON@" a+]
+	set FileTmp [open "@TIMING_REPORT_JSON@" a+]
 	foreach_in_collection path [get_timing_paths -setup  -npath 1 -detail path_only] {
 	  set Data_Delay [get_path_info $path -data_delay]
-	  puts $FileTmp ",\n\{\"name\":\"@TEST_NAMES@\","
+	  puts $FileTmp ",\n\{\"name\":\"@DUT_NAME@\","
 	  puts $FileTmp "\"delay\":\"$Data_Delay\","
 	}
 }

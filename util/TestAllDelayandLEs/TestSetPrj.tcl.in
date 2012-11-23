@@ -9,8 +9,8 @@ load_package ::quartus::incremental_compilation
 
 project_new @TEST_NAMES@ -overwrite
 
-set_global_assignment -name FAMILY CycloneII
-set_global_assignment -name DEVICE EP2C70F896C6
+set_global_assignment -name FAMILY CycloneIVE
+set_global_assignment -name DEVICE EP4CE115F29I8L
 
 # Build project and specify some confige
 # =====================
@@ -24,8 +24,7 @@ set_global_assignment -name STRATIX_DEVICE_IO_STANDARD LVTTL
 set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 1
 
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"
-set_global_assignment -name LL_ROOT_REGION ON -section_id "Root Region"
-set_global_assignment -name LL_MEMBER_STATE LOCKED -section_id "Root Region"
+
 # Create timing assignments
 #create_base_clock -fmax "100 MHz" -target clk clk
 
@@ -49,20 +48,14 @@ set_global_assignment -name IGNORE_PARTITIONS OFF
 #set_global_assignment -name TIMEQUEST_REPORT_WORST_CASE_TIMING_PATHS ON
 #Report 10 paths per clock domain
 
-if { "@IsMux@" != "testMux"} { 
 #set_global_assignment -name TIMEQUEST_REPORT_NUM_WORST_CASE_TIMING_PATHS 10
-create_partition -partition "@DUT_NAME@:i0" -contents @DUT_NAME@:i0
-# Commit assignments
+
 export_assignments
-}
 
 #execute_flow -full_compile
 
 execute_module -tool map
 
-if { "@IsMux@" != "testMux"} { 
-execute_module -tool cdb -args {--merge=on}
-}
 execute_module -tool fit
 execute_module -tool asm
 execute_module -tool sta -args {--report_script @TEST_ROOT@/extract_timing.tcl}
@@ -71,20 +64,27 @@ load_report
 ################################################################################
 # Summary
 if { "@IsMux@" == "testMux"} { 
-set DataJSON [open "@REPORT_JSON_MUX@" a+]
+set DataJSON [open "@TIMING_REPORT_JSON_MUX@" a+]
 puts $DataJSON "\"Input_Num \":\"@INPUT_NUM@\","
-puts $DataJSON "\"Bit_Width \":\"@WIDTH@\","
-puts $DataJSON "\"Total_LEs \":\"[get_fitter_resource_usage -le -used]\""
-puts $DataJSON "\}"
-close $DataJSON
 } else {
-set DataJSON [open "@REPORT_JSON@" a+]
-puts $DataJSON "\"Bit_Width \":\"@WIDTH@\","
-puts $DataJSON "\"Total_LEs \":\"[get_fitter_resource_usage -le -used]\""
-puts $DataJSON "\}"
-close $DataJSON
+set DataJSON [open "@TIMING_REPORT_JSON@" a+]
 }
 unload_report
 
+if { "@IsMux@" != "testMux"} { 
+  set_global_assignment -name TOP_LEVEL_ENTITY @DUT_NAME@
+
+  export_assignments
+  execute_flow -full_compile
+
+  # Also extract the LE ussage.
+  load_report
+  puts $DataJSON "\"Total_LEs\":\"[get_fitter_resource_usage -le -used]\""
+  unload_report
+}
+
+puts $DataJSON "\"Bit_Width\":\"@WIDTH@\","
+puts $DataJSON "\}"
+close $DataJSON
 
 project_close

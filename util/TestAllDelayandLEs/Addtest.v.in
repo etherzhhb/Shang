@@ -6,7 +6,7 @@ module @TEST_NAMES@(
   input wire[`WIDTH-1:0] a,
   input wire[`WIDTH-1:0] b,
   input wire[`BIT-1:0] c,
-  output reg[`WIDTH-1:0] d
+  output reg[`WIDTH:0] d
 );
 
   reg [`WIDTH-1:0] a_reg0;
@@ -15,8 +15,8 @@ module @TEST_NAMES@(
   reg [`WIDTH-1:0] b_reg1;
   reg [`BIT-1:0] c_reg0;
   reg [`BIT-1:0] c_reg1;
-  reg [`WIDTH-1:0] d_reg0;
-  wire [`WIDTH-1:0] d_wire;
+  reg [`WIDTH:0] d_reg0;
+  wire [`WIDTH:0] d_wire;
   
 always@(posedge clk) begin
   a_reg0 <= a;
@@ -42,7 +42,7 @@ module Add(
   input wire[`WIDTH-1:0] a,
   input wire[`WIDTH-1:0] b,
   input wire[`BIT-1:0] c,
-  output wire[`WIDTH-1:0] d
+  output wire[`WIDTH:0] d
 );
 
 assign d = a + b + c;
