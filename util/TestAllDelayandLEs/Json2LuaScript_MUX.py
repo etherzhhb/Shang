@@ -24,7 +24,7 @@ Width64 = 0
 inputnum = 2
 while inputnum <= 32:
  for data in json_read:
-   if int(data["Input_Num "]) == inputnum :
+   if int(data["Input_Num"]) == inputnum :
      if data["Bit_Width"] == "8":
        Width8 = data["delay"]
      if data["Bit_Width"] == "16":

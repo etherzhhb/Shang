@@ -4,8 +4,7 @@ from optparse import OptionParser
 parser = OptionParser()
 parser.add_option("-t", "--timing_report", dest="timing_report",
                   help="Timing report to read", metavar="FILE")
-parser.add_option("-l", "--logic_element_report", dest="logic_element_report",
-                  help="Logic element usage report to read", metavar="FILE")
+
 parser.add_option("-o", "--output", dest="output",
                   help="The output LUAScript file", metavar="FILE")
 

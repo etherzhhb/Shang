@@ -92,7 +92,7 @@ add_dependencies(get_mux_data get_data_${TEST_NAMES})
 add_dependencies(get_all_data get_data_${TEST_NAMES})
 endmacro(test_mux)			
 
-foreach(loop_input_num RANGE 2 64 [1])
+foreach(loop_input_num RANGE 2 32 [1])
 	foreach(loop_bit_width ${bit_width})
 		test_mux(${loop_input_num} 
 				 ${loop_bit_width})
