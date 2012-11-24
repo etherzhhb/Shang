@@ -91,17 +91,10 @@ namespace VFUs {
   typedef std::pair<std::string, unsigned> ModOpInfo;
   unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
                              SmallVectorImpl<ModOpInfo> &OpInfo);
-  // Cost parameters.
-  extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64],
-                  SelCost[64], ReductionCost[64];
 
   extern unsigned LUTCost;
   extern unsigned RegCost;
   extern unsigned MaxLutSize;
-
-  // Latency tables
-  extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-               ShiftLatencies[4],SelLatencies[4], ReductionLatencies[4];
 
   extern float BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector
