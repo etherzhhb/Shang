@@ -19,17 +19,17 @@ set_global_assignment -name SOURCE_FILE @MAIN_INT_BRAMINIT@
 set_global_assignment -name SDC_FILE @MAIN_SDC_SRC@
 set_global_assignment -name VERILOG_MACRO "quartus_synthesis"
 
-set_location_assignment PIN_T29 -to rstN
-set_location_assignment PIN_T28 -to start
-set_location_assignment PIN_W27 -to LED7[0]
-set_location_assignment PIN_W25 -to LED7[1]
-set_location_assignment PIN_W23 -to LED7[2]
-set_location_assignment PIN_Y27 -to LED7[3]
-set_location_assignment PIN_Y24 -to LED7[4]
-set_location_assignment PIN_Y23 -to LED7[5]
-set_location_assignment PIN_AA27 -to LED7[6]
-set_location_assignment PIN_AA24 -to LED7[7]
-set_location_assignment PIN_D16 -to clk
+#set_location_assignment PIN_T29 -to rstN
+#set_location_assignment PIN_T28 -to start
+#set_location_assignment PIN_W27 -to LED7[0]
+#set_location_assignment PIN_W25 -to LED7[1]
+#set_location_assignment PIN_W23 -to LED7[2]
+#set_location_assignment PIN_Y27 -to LED7[3]
+#set_location_assignment PIN_Y24 -to LED7[4]
+#set_location_assignment PIN_Y23 -to LED7[5]
+#set_location_assignment PIN_AA27 -to LED7[6]
+#set_location_assignment PIN_AA24 -to LED7[7]
+#set_location_assignment PIN_D16 -to clk
 
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 set_global_assignment -name RESERVE_ASDO_AFTER_CONFIGURATION "AS OUTPUT DRIVING AN UNSPECIFIED SIGNAL"
