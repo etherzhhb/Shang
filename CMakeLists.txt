@@ -85,6 +85,8 @@ if (ENABLE_TESTSUITE)
   add_subdirectory(testsuite)
 endif (ENABLE_TESTSUITE)
 
-add_subdirectory(util/TestAllDelayandLEs)
+IF (NOT MSVC)
+  add_subdirectory(util/TestAllDelayandLEs)
+ENDIF (NOT MSVC)
 
 # TODO: docs.
