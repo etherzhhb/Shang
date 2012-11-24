@@ -65,7 +65,7 @@ load_report
 # Summary
 if { "@IsMux@" == "testMux"} { 
 set DataJSON [open "@TIMING_REPORT_JSON_MUX@" a+]
-puts $DataJSON "\"Input_Num \":\"@INPUT_NUM@\","
+puts $DataJSON "\"Input_Num\":\"@INPUT_NUM@\","
 } else {
 set DataJSON [open "@TIMING_REPORT_JSON@" a+]
 }
@@ -79,11 +79,11 @@ if { "@IsMux@" != "testMux"} {
 
   # Also extract the LE ussage.
   load_report
-  puts $DataJSON "\"Total_LEs\":\"[get_fitter_resource_usage -le -used]\""
+  puts $DataJSON "\"Total_LEs\":\"[get_fitter_resource_usage -le -used]\","
   unload_report
 }
 
-puts $DataJSON "\"Bit_Width\":\"@WIDTH@\","
+puts $DataJSON "\"Bit_Width\":\"@WIDTH@\""
 puts $DataJSON "\}"
 close $DataJSON
 
