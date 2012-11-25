@@ -34,8 +34,6 @@ struct DataPathPromotion : public MachineFunctionPass {
   DataPathPromotion() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) {
-    MachineRegisterInfo &MRI = MF.getRegInfo();
-
     for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
       for (MachineBasicBlock::instr_iterator II = I->instr_begin(),
            IE = I->instr_end(); II != IE; ++II) {
