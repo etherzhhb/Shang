@@ -3,7 +3,7 @@ FUs.BRam.Prefix = [=[altsyncram:]=]
 FUs.BRam.Template=[=[
 // Block Ram $(num)
 reg  [$(datawidth - 1):0]  bram$(num)arrayout;
-(* ramstyle = "M4K, no_rw_check" *) reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
+(* ramstyle = "no_rw_check" *) reg  [$(datawidth - 1):0]  bram$(num)array[0:$(size - 1)];
 
 #if filename ~= [[]] then
 initial

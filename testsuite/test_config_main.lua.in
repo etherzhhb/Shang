@@ -33,7 +33,7 @@ MUX_ChainingThreshold = -1
 dofile('@TEST_BINARY_ROOT@/' .. 'common_config.lua')
 -- load platform information script
 dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
-dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
+dofile('@VTS_SOURCE_ROOT@/' .. 'EP4CE75F29C6.lua')
 
 
 -- Define some function

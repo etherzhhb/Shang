@@ -6,8 +6,8 @@ load_package report
 project_new DUT_TOP -overwrite
 
 # Target: DE2-70 Board
-set_global_assignment -name FAMILY CycloneII
-set_global_assignment -name DEVICE EP2C70F896C6
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE75F29C6
 
 # Build project and specify some confige
 # =====================
