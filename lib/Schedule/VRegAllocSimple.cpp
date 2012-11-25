@@ -341,14 +341,12 @@ struct FanoutChecker {
 
 };
 
-template<int NUMSRC>
+template<class FUDescTy, int NUMSRC>
 struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
                             public WidthChecker {
   VRASimple *VRA;
-  // The pre-bit cost of this kind of function unit.
-  const unsigned *const Cost;
 
-  CompEdgeWeightBase(VRASimple *V, const unsigned cost[]) : VRA(V), Cost(cost) {}
+  CompEdgeWeightBase(VRASimple *V) : VRA(V) {}
 
   void reset() {
     resetFanouts();
@@ -365,7 +363,7 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
     int Weight = 0;
     // We can save some register if we merge these two registers.
     unsigned Index = std::min(FanInWidth, 64u);
-    Weight += /*FU Cost*/VFUDesc::lookupCost(Cost,Index);
+    Weight += /*FU Cost*/ getFUDesc<FUDescTy>()->lookupCost(Index);
     Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(FanInWidth);
     Weight += getSavedFanoutsCost(FanOutWidth);
     return Weight;
@@ -375,15 +373,15 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
 };
 
 // Weight computation functor for register Compatibility Graph.
-struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
+struct CompRegEdgeWeight : public CompEdgeWeightBase<VFUDesc, 1> {
   // Context
   // Do not try to merge PHI copies, it is conditional and we cannot handle
   // them correctly at the moment.
   bool hasPHICopy;
   unsigned DstReg;
 
-  typedef CompEdgeWeightBase<1> Base;
-  CompRegEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
+  typedef CompEdgeWeightBase<VFUDesc, 1> Base;
+  CompRegEdgeWeight(VRASimple *V) : Base(V) {}
 
   void reset(unsigned DstR) {
     DstReg = DstR;
@@ -461,14 +459,14 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     // Src register appear in the src of mux do not cost anything.
     removeSrcReg<0>(Src->reg);
 
-    return Cost[0] * getWidth();
+    return VFUs::RegCost * getWidth();
   }
 };
 
 // Weight computation functor for commutable binary operation Compatibility
 // Graph.
-template<unsigned OpCode, unsigned OpIdx>
-struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
+template<class FUDescTy, unsigned OpCode, unsigned OpIdx>
+struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
   // Is there a copy between the src and dst of the edge?
   //bool hasCopy;
 
@@ -482,8 +480,8 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
     addFanin<Offset>(MI->getOperand(OpIdx + Offset));
   }
 
-  typedef CompEdgeWeightBase<2> Base;
-  CompBinOpEdgeWeight(VRASimple *V, const unsigned cost[]) : Base(V, cost) {}
+  typedef CompEdgeWeightBase<FUDescTy, 2> Base;
+  explicit CompBinOpEdgeWeight(VRASimple *V) : Base(V) {}
 
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
@@ -523,11 +521,12 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
   }
 };
 
-struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
+struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VFUICmp, VTM::VOpICmp, 1>
+{
   bool hasSignedCC, hasUnsignedCC;
 
-  typedef CompBinOpEdgeWeight<VTM::VOpICmp, 1> Base;
-  CompICmpEdgeWeight(VRASimple *V, const unsigned cost[]) : Base(V, cost) {}
+  typedef CompBinOpEdgeWeight<VFUICmp, VTM::VOpICmp, 1> Base;
+  CompICmpEdgeWeight(VRASimple *V) : Base(V) {}
 
   void reset() {
     hasSignedCC = false;
@@ -711,21 +710,15 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(LsrCG);
   buildCompGraph(ShlCG);
 
-  CompRegEdgeWeight RegWeight(this, &VFUs::RegCost);
-  CompBinOpEdgeWeight<VTM::VOpAdd, 1>
-    AddWeight(this, getFUDesc<VFUAddSub>()->getCostTable());
-  CompICmpEdgeWeight ICmpWeight(this, getFUDesc<VFUICmp>()->getCostTable());
+  CompRegEdgeWeight RegWeight(this);
+  CompBinOpEdgeWeight<VFUAddSub, VTM::VOpAdd, 1> AddWeight(this);
+  CompICmpEdgeWeight ICmpWeight(this);
   //CompSelEdgeWeight SelWeight(this, VFUs::SelCost);
-  CompBinOpEdgeWeight<VTM::VOpMult, 1>
-    MulWeiht(this, getFUDesc<VFUMult>()->getCostTable());
-  CompBinOpEdgeWeight<VTM::VOpMultLoHi, 1>
-    MulLHWeiht(this, getFUDesc<VFUMult>()->getCostTable());
-  CompBinOpEdgeWeight<VTM::VOpSRA, 1>
-    SRAWeight(this, getFUDesc<VFUShift>()->getCostTable());
-  CompBinOpEdgeWeight<VTM::VOpSRL, 1>
-    SRLWeight(this, getFUDesc<VFUShift>()->getCostTable());
-  CompBinOpEdgeWeight<VTM::VOpSHL, 1>
-    SHLWeight(this, getFUDesc<VFUShift>()->getCostTable());
+  CompBinOpEdgeWeight<VFUMult, VTM::VOpMult, 1> MulWeiht(this);
+  CompBinOpEdgeWeight<VFUMult, VTM::VOpMultLoHi, 1> MulLHWeiht(this);
+  CompBinOpEdgeWeight<VFUShift, VTM::VOpSRA, 1> SRAWeight(this);
+  CompBinOpEdgeWeight<VFUShift, VTM::VOpSRL, 1> SRLWeight(this);
+  CompBinOpEdgeWeight<VFUShift, VTM::VOpSHL, 1> SHLWeight(this);
 
   bool SomethingBound = !DisableFUSharing;
   // Reduce the Compatibility Graphs
@@ -1110,7 +1103,7 @@ void VRASimple::bindCompGraph(LICGraph &G) {
 }
 
 void VRASimple::bindICmps(LICGraph &G) {
-  CompICmpEdgeWeight ICmpChecker(this, 0);
+  CompICmpEdgeWeight ICmpChecker(this);
 
   for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();

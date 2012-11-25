@@ -167,9 +167,10 @@ protected:
 
   VFUDesc(VFUs::FUTypes type, const luabind::object &FUTable, float *Delay,
           unsigned *Cost);
+
   static float lookupLatency(const float *Table, unsigned SizeInBits);
-public:
   static unsigned lookupCost(const unsigned *Table, unsigned SizeInBits);
+public:
 
   static const char *getTypeName(VFUs::FUTypes FU) {
     return VFUs::VFUNames[FU];
@@ -290,8 +291,6 @@ public:
 
   static VFUs::FUTypes getType() { return T; };
   static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
-
-  const unsigned *getCostTable() const { return Cost; }
 
   float lookupLatency(unsigned SizeInBits) const {
     return VFUDesc::lookupLatency(Delay, SizeInBits);
