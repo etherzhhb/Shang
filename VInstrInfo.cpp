@@ -775,11 +775,11 @@ bool VInstrInfo::isReadAtEmit(unsigned OpC) {
          || isCopyLike(OpC);
 }
 
-template<int Idx>
-static float LookupLatency(const float *Table, const MachineInstr *MI){
+template<int Idx, class FUClass>
+static float LookupLatency(const MachineInstr *MI){
   unsigned SizeInBits = VInstrInfo::getBitWidth(MI->getOperand(Idx));
 
-  return VFUDesc::lookupLatency(Table, SizeInBits);
+  return getFUDesc<FUClass>()->lookupLatency(SizeInBits);
 }
 
 FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
@@ -898,17 +898,17 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
     // TODO: Bitrepeat.
   case VTM::VOpICmp_c:
   case VTM::VOpICmp:
-    return LookupLatency<1>(getFUDesc<VFUICmp>()->getDelayTable(), MI);
+    return LookupLatency<1, VFUICmp>(MI);
   // Retrieve the FU bit width from its operand bit width
   case VTM::VOpAdd_c:
   case VTM::VOpAdd:
-    return LookupLatency<1>(getFUDesc<VFUAddSub>()->getDelayTable(), MI);
+    return LookupLatency<1, VFUAddSub>(MI);
 
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
   case VTM::VOpMultLoHi:
   case VTM::VOpMult:
-    return LookupLatency<0>(getFUDesc<VFUMult>()->getDelayTable(), MI);
+    return LookupLatency<0, VFUMult>(MI);
 
   case VTM::VOpSRA_c:
   case VTM::VOpSRL_c:
@@ -916,13 +916,13 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:
-    return LookupLatency<0>(getFUDesc<VFUShift>()->getDelayTable(), MI);
+    return LookupLatency<0, VFUShift>(MI);
 
   case VTM::VOpMemTrans:    return getFUDesc<VFUMemBus>()->getLatency();
 
   // Can be fitted into LUT.
   case VTM::VOpSel:
-    return LookupLatency<0>(getFUDesc<VFUSel>()->getDelayTable(), MI);
+    return LookupLatency<0, VFUSel>(MI);
 
   // Ignore the trivial logic operation latency at the moment.
   case VTM::VOpLUT:
@@ -934,7 +934,7 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpRXor:
   case VTM::VOpROr:
   case VTM::VOpRAnd:
-    return LookupLatency<1>(getFUDesc<VFUReduction>()->getDelayTable(), MI);
+    return LookupLatency<1, VFUReduction>(MI);
 
   case VTM::VOpBRAMTrans:   return getFUDesc<VFUBRAM>()->getLatency();
 
