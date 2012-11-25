@@ -1,6 +1,5 @@
-FUs.ClkEnSelLatency = 1.535 / PERIOD --1.535
 FUs.MaxLutSize = 4
-FUs.LutLatency = 0.635 / PERIOD
+FUs.LutLatency = 0.828 / PERIOD
 -- Latency table for EP2C35F672C6
 FUs.AddSub = { Latencies = { 1.000 / PERIOD, 1.747 / PERIOD, 2.357 / PERIOD, 3.361 / PERIOD, 5.140 / PERIOD }, --Add 
                Costs = {2 * 64, 10 * 64, 18 * 64, 34 * 64, 66 * 64}, --Add 
@@ -11,7 +10,7 @@ FUs.Shift = { Latencies = { 0.827 / PERIOD, 2.541 / PERIOD, 2.609 / PERIOD, 3.70
               StartInterval=1,
 			        ChainingThreshold = SHIFT_ChainingThreshold}
 FUs.Mult = { Latencies = { 0.827 / PERIOD, 2.620 / PERIOD, 3.170 / PERIOD, 6.806 / PERIOD, 9.087 / PERIOD }, --Mul 
-	           Costs = {1 * 64, 0 * 64, 0 * 64, 28 * 64, 168 * 64}, --Mul
+	           Costs = {1 * 64, 103 * 64, 344 * 64, 1211 * 64, 4478 * 64}, --Mul
              StartInterval=1,
 			       ChainingThreshold = MULT_ChainingThreshold}
 
