@@ -196,19 +196,19 @@ static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
     if (const VASTRegister *R = dyn_cast<VASTRegister>(V))
       // The block RAM should be printed as Prefix + ArrayName in the script.
       if (R->getRegType() == VASTRegister::BRAM) {
-        OS << " { Name ='" << getFUDesc<VFUBRAM>()->getPrefix()
-           << VFUBRAM::getArrayName(R->getDataRegNum()) << "' }";
+        OS << " { NameSet =[=[ [ list " << getFUDesc<VFUBRAM>()->getPrefix()
+           << VFUBRAM::getArrayName(R->getDataRegNum()) << " ] ]=] }";
         return true;
       }
 
     if (const char *N = NV->getName()) {
-      OS << " { Name ='" << N << "' }";
+      OS << " { NameSet =[=[ [ list " << N << " ] ]=] }";
       return true;
     }
   } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V)) {
     std::string Name = E->getSubModName();
     if (!Name.empty()) {
-      OS << " { Name ='" << E->getSubModName() << "' }";
+      OS << " { NameSet =[=[ [ list " << E->getSubModName() << " ] ]=] }";
       return true;
     }
   }
