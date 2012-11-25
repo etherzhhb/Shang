@@ -12,7 +12,7 @@ project_new @MAIN_RTL_ENTITY@ -overwrite
 #set_global_assignment -name DEVICE AUTO
 
 # Target: DE2 Board
-set_global_assignment -name FAMILY CycloneII
+set_global_assignment -name FAMILY "Cyclone IV E"
 set_global_assignment -name DEVICE EP4CE75F29C6
 
 # Target: StratixII
