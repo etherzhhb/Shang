@@ -477,7 +477,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
 
   template<unsigned Offset>
   void visitOperand(MachineInstr *MI) {
-    addFanin<Offset>(MI->getOperand(OpIdx + Offset));
+    FaninChecker<2>::addFanin<Offset>(MI->getOperand(OpIdx + Offset));
   }
 
   typedef CompEdgeWeightBase<FUDescTy, 2> Base;
@@ -489,7 +489,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
     MachineOperand &MO = I.getOperand();
     if (I.getOperand().isDef()) {
       // 1. Get the bit width information.
-      if (!checkWidth(VInstrInfo::getBitWidth(MO)))
+      if (!Base::checkWidth(VInstrInfo::getBitWidth(MO)))
         return true;
       // 2. Analyze the definition op.
       MachineInstr *MI = &*I;
@@ -499,7 +499,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
       visitOperand<1>(MI);
     }
 
-    if (!MO.isImplicit()) addFanout(I);
+    if (!MO.isImplicit()) FanoutChecker::addFanout(I);
 
     return false;
   }
@@ -508,16 +508,16 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
     assert(Dst && Src && "Unexpected null li!");
     reset();
 
-    if (VRA->iterateUseDefChain(Src->reg, *this))
+    if (Base::VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     // Go on check next source.
-    nextSrc();
+    Base::nextSrc();
 
-    if (VRA->iterateUseDefChain(Dst->reg, *this))
+    if (Base::VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    return computeWeight(getWidth());
+    return Base::computeWeight(Base::getWidth());
   }
 };
 
