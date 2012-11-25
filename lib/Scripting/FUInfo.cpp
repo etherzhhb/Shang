@@ -61,22 +61,7 @@ namespace llvm {
     unsigned RegCost = 4;
     unsigned MaxLutSize = 4;
 
-    unsigned AddCost[64];
-    unsigned MulCost[64];
-    unsigned ShiftCost[64];
-    unsigned ICmpCost[64];
-    unsigned SelCost[64];
-    unsigned ReductionCost[64];
-
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
-    float AdderLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float CmpLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float MultLatencies[]      = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float ShiftLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float SelLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float ReductionLatencies[] = { 1.0f,  1.0f,  1.0f, 1.0f };
-    float MemBusLatency = 1.0f;
-    float BRamLatency = 1.0f;
     float LutLatency = 0.0f;
     float ClkEnSelLatency = 0.0f;
 
@@ -112,46 +97,45 @@ namespace llvm {
         //Initial the array form a[31] to a[63]
         computeCost(CopyTable[3], CopyTable[4], 33, 32, 31, CostTable);
     }
-
-    float lookupLatency(const float *Table, unsigned SizeInBits) {
-      int i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
-      // All latency table only contains 4 entries.
-      assert(i < 4 && "Bad" && "Bad index!");
-
-      float RoundUpLatency   = Table[i],
-            RoundDownLatency = i ? Table[i - 1] : 0.0f;
-      unsigned SizeRoundUpToByteInBits = 8 << i;
-      unsigned SizeRoundDownToByteInBits = i ? (8 << (i - 1)) : 0;
-      float PerBitLatency =
-        (RoundUpLatency - RoundDownLatency)
-        / (SizeRoundUpToByteInBits - SizeRoundDownToByteInBits);
-      // Scale the latency according to the actually width.
-      return
-        RoundDownLatency
-        + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
-    }
-
-    unsigned lookupCost(const unsigned *Table, unsigned SizeInBits) {
-      assert(SizeInBits > 0 && SizeInBits <= 64 && "Bit Size is not appropriate");
-
-      return Table[SizeInBits - 1];
-    }
   }
 }
 
-VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs,
-                 float *latencies)
+VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, float *Delay,
+                 unsigned *Cost)
   : ResourceType(type), StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
-    Costs(costs), LatencyTable(latencies),
     ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
   luabind::object LatTable = FUTable["Latencies"];
-  VFUs::initLatencyTable(LatTable, latencies, 4);
+  VFUs::initLatencyTable(LatTable, Delay, 5);
   luabind::object CostTable = FUTable["Costs"];
-  VFUs::initCostTable(CostTable, costs, 5);
+  VFUs::initCostTable(CostTable, Cost, 5);
+}
+
+float VFUDesc::lookupLatency(const float *Table, unsigned SizeInBits) {
+  int i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
+  // All latency table only contains 4 entries.
+  assert(i < 4 && "Bad" && "Bad index!");
+
+  float RoundUpLatency   = Table[i],
+    RoundDownLatency = i ? Table[i - 1] : 0.0f;
+  unsigned SizeRoundUpToByteInBits = 8 << i;
+  unsigned SizeRoundDownToByteInBits = i ? (8 << (i - 1)) : 0;
+  float PerBitLatency =
+    (RoundUpLatency - RoundDownLatency)
+    / (SizeRoundUpToByteInBits - SizeRoundDownToByteInBits);
+  // Scale the latency according to the actually width.
+  return
+    RoundDownLatency
+    + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
+}
+
+unsigned VFUDesc::lookupCost(const unsigned *Table, unsigned SizeInBits) {
+  assert(SizeInBits > 0 && SizeInBits <= 64 && "Bit Size is not appropriate");
+
+  return Table[SizeInBits - 1];
 }
 
 VFUMux::VFUMux(luabind::object FUTable)
-  : VFUDesc(VFUs::Mux, 1, 0, 0),
+  : VFUDesc(VFUs::Mux, 1),
     MaxAllowedMuxSize(getProperty<unsigned>(FUTable, "MaxAllowedMuxSize", 1)) {
   for (unsigned i = 0; i < MaxAllowedMuxSize - 1; i++) {
     luabind::object LatTable = FUTable["Latencies"][i+1];
@@ -169,7 +153,7 @@ float VFUMux::getMuxLatency(unsigned Size, unsigned BitWidth) {
 
   assert(BitWidth <= 64 && "Bad Mux Size!");
 
-  return VFUs::lookupLatency(MuxLatencies[Size - 2], BitWidth) * ratio;
+  return VFUDesc::lookupLatency(MuxLatencies[Size - 2], BitWidth) * ratio;
 }
 
 unsigned VFUMux::getMuxCost(unsigned Size, unsigned BitWidth) {
@@ -186,24 +170,18 @@ unsigned VFUMux::getMuxCost(unsigned Size, unsigned BitWidth) {
 }
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
-  : VFUDesc(VFUs::MemoryBus,
-            getProperty<unsigned>(FUTable, "StartInterval"),
-            0, &VFUs::MemBusLatency),
+  : VFUDesc(VFUs::MemoryBus, getProperty<unsigned>(FUTable, "StartInterval")),
     AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")),
-    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")){
-  *LatencyTable = getProperty<float>(FUTable, "Latency");
-}
+    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
+    Latency(getProperty<float>(FUTable, "Latency")) {}
 
 VFUBRAM::VFUBRAM(luabind::object FUTable)
-  : VFUDesc(VFUs::BRam,
-            getProperty<unsigned>(FUTable, "StartInterval"),
-            0, &VFUs::BRamLatency),
+  : VFUDesc(VFUs::BRam, getProperty<unsigned>(FUTable, "StartInterval")),
     DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
+    Latency(getProperty<float>(FUTable, "Latency")),
     Prefix(getProperty<std::string>(FUTable, "Prefix")),
     Template(getProperty<std::string>(FUTable, "Template")),
-    InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){
-  *LatencyTable = getProperty<float>(FUTable, "Latency");
-}
+    InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")) {}
 
 // Dirty Hack: anchor from SynSettings.h
 SynSettings::SynSettings(StringRef Name, SynSettings &From)

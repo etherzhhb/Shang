@@ -346,9 +346,9 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
                             public WidthChecker {
   VRASimple *VRA;
   // The pre-bit cost of this kind of function unit.
-  unsigned *const Cost;
+  const unsigned *const Cost;
 
-  CompEdgeWeightBase(VRASimple *V, unsigned cost[]) : VRA(V), Cost(cost) {}
+  CompEdgeWeightBase(VRASimple *V, const unsigned cost[]) : VRA(V), Cost(cost) {}
 
   void reset() {
     resetFanouts();
@@ -365,7 +365,7 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
     int Weight = 0;
     // We can save some register if we merge these two registers.
     unsigned Index = std::min(FanInWidth, 64u);
-    Weight += /*FU Cost*/VFUs::lookupCost(Cost,Index);
+    Weight += /*FU Cost*/VFUDesc::lookupCost(Cost,Index);
     Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(FanInWidth);
     Weight += getSavedFanoutsCost(FanOutWidth);
     return Weight;
@@ -483,7 +483,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
   }
 
   typedef CompEdgeWeightBase<2> Base;
-  CompBinOpEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
+  CompBinOpEdgeWeight(VRASimple *V, const unsigned cost[]) : Base(V, cost) {}
 
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
@@ -527,7 +527,7 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
   bool hasSignedCC, hasUnsignedCC;
 
   typedef CompBinOpEdgeWeight<VTM::VOpICmp, 1> Base;
-  CompICmpEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
+  CompICmpEdgeWeight(VRASimple *V, const unsigned cost[]) : Base(V, cost) {}
 
   void reset() {
     hasSignedCC = false;
@@ -712,14 +712,20 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(ShlCG);
 
   CompRegEdgeWeight RegWeight(this, &VFUs::RegCost);
-  CompBinOpEdgeWeight<VTM::VOpAdd, 1> AddWeight(this, VFUs::AddCost);
-  CompICmpEdgeWeight ICmpWeight(this, VFUs::ICmpCost);
+  CompBinOpEdgeWeight<VTM::VOpAdd, 1>
+    AddWeight(this, getFUDesc<VFUAddSub>()->getCostTable());
+  CompICmpEdgeWeight ICmpWeight(this, getFUDesc<VFUICmp>()->getCostTable());
   //CompSelEdgeWeight SelWeight(this, VFUs::SelCost);
-  CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
-  CompBinOpEdgeWeight<VTM::VOpMultLoHi, 1> MulLHWeiht(this, VFUs::MulCost);
-  CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);
-  CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
-  CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, VFUs::ShiftCost);
+  CompBinOpEdgeWeight<VTM::VOpMult, 1>
+    MulWeiht(this, getFUDesc<VFUMult>()->getCostTable());
+  CompBinOpEdgeWeight<VTM::VOpMultLoHi, 1>
+    MulLHWeiht(this, getFUDesc<VFUMult>()->getCostTable());
+  CompBinOpEdgeWeight<VTM::VOpSRA, 1>
+    SRAWeight(this, getFUDesc<VFUShift>()->getCostTable());
+  CompBinOpEdgeWeight<VTM::VOpSRL, 1>
+    SRLWeight(this, getFUDesc<VFUShift>()->getCostTable());
+  CompBinOpEdgeWeight<VTM::VOpSHL, 1>
+    SHLWeight(this, getFUDesc<VFUShift>()->getCostTable());
 
   bool SomethingBound = !DisableFUSharing;
   // Reduce the Compatibility Graphs

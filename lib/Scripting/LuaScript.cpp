@@ -160,9 +160,9 @@ raw_ostream &LuaScript::getOutputFileStream(std::string &Name) {
   return NewFile->os();
 }
 
-void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
-                             unsigned *Costs, float *Latencies) {
-  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)], Costs, Latencies);
+template<enum VFUs::FUTypes T>
+void LuaScript::initSimpleFU(luabind::object FUs) {
+  FUSet[T] = new VSimpleFUDesc<T>(FUs[VFUDesc::getTypeName(T)]);
 }
 
 void LuaScript::updateFUs() {
@@ -172,18 +172,17 @@ void LuaScript::updateFUs() {
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
   FUSet[VFUs::BRam] = new VFUBRAM(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
 
-  initSimpleFU(VFUs::AddSub, FUs, VFUs::AddCost, VFUs::AdderLatencies);
+  initSimpleFU<VFUs::AddSub>(FUs);
 
-  initSimpleFU(VFUs::Shift, FUs, VFUs::ShiftCost, VFUs::ShiftLatencies);
+  initSimpleFU<VFUs::Shift>(FUs);
 
-  initSimpleFU(VFUs::Mult, FUs, VFUs::MulCost, VFUs::MultLatencies);
+  initSimpleFU<VFUs::Mult>(FUs);
 
-  initSimpleFU(VFUs::ICmp, FUs, VFUs::ICmpCost, VFUs::CmpLatencies);
+  initSimpleFU<VFUs::ICmp>(FUs);
 
-  initSimpleFU(VFUs::Sel, FUs, VFUs::SelCost, VFUs::SelLatencies);
+  initSimpleFU<VFUs::Sel>(FUs);
 
-  initSimpleFU(VFUs::Reduction, FUs, VFUs::ReductionCost, 
-               VFUs::ReductionLatencies);
+  initSimpleFU<VFUs::Reduction>(FUs);
 
   FUSet[VFUs::Mux] = new VFUMux(FUs[VFUDesc::getTypeName(VFUs::Mux)]);
 

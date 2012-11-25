@@ -58,8 +58,8 @@ class LuaScript {
   friend SynSettings *getSynSetting(StringRef Name, SynSettings *ParentSetting);
   friend VFUDesc *getFUDesc(enum VFUs::FUTypes T);
 
-  void initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
-                    unsigned *Costs, float *Latencies);
+  template<enum VFUs::FUTypes T>
+  void initSimpleFU(luabind::object FUs);
 
 public:
 
