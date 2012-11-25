@@ -300,7 +300,7 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
   // we can use it to detect if more one case condition is true at the same
   // time.
   OS << "if (!$onehot0(" << AllPred << "))"
-        " begin $display(\"At time %t, register "
+        " begin\n $display(\"At time %t, register "
         << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
         << " has more than one active assignment: %b!\", $time(), "
         << AllPred << ");\n";
