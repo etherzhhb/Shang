@@ -97,7 +97,7 @@ namespace VFUs {
   extern unsigned MaxLutSize;
 
   // Latency of clock enable multiplexer selector
-  extern float LutLatency, ClkEnSelLatency;
+  extern float LutLatency;
 }
 
 class FuncUnitId {

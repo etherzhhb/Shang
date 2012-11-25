@@ -60,10 +60,7 @@ namespace llvm {
     unsigned LUTCost = 64;
     unsigned RegCost = 4;
     unsigned MaxLutSize = 4;
-
-    // Default value of Latency tables.         8bit 16bit 32bit 64bit
     float LutLatency = 0.0f;
-    float ClkEnSelLatency = 0.0f;
 
     void initLatencyTable(luabind::object LuaLatTable, float *LatTable,
                           unsigned Size) {
