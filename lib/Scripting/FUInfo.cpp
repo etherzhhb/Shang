@@ -115,8 +115,7 @@ float VFUDesc::lookupLatency(const float *Table, unsigned SizeInBits) {
   // All latency table only contains 4 entries.
   assert(i < 4 && "Bad" && "Bad index!");
 
-  float RoundUpLatency   = Table[i],
-    RoundDownLatency = i ? Table[i - 1] : 0.0f;
+  float RoundUpLatency   = Table[i + 1], RoundDownLatency = Table[i];
   unsigned SizeRoundUpToByteInBits = 8 << i;
   unsigned SizeRoundDownToByteInBits = i ? (8 << (i - 1)) : 0;
   float PerBitLatency =
