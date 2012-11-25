@@ -166,7 +166,7 @@ protected:
     : ResourceType(type), StartInt(startInt), ChainingThreshold(0) {}
 
 
-  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, float *Delay,
+  VFUDesc(VFUs::FUTypes type, const luabind::object &FUTable, float *Delay,
           unsigned *Cost);
 public:
   static float lookupLatency(const float *Table, unsigned SizeInBits);
@@ -278,7 +278,7 @@ class VSimpleFUDesc : public VFUDesc {
   float Delay[5];
   unsigned Cost[64];
 public:
-  explicit VSimpleFUDesc(luabind::object FUTable)
+  explicit VSimpleFUDesc(const luabind::object &FUTable)
     : VFUDesc(T, FUTable, Delay, Cost) {}
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   template<enum VFUs::FUTypes OtherT>

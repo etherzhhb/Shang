@@ -28,7 +28,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 // Helper functions for reading function unit table from script.
 template<typename PropType, typename IdxType>
-static PropType getProperty(luabind::object &FUTable, IdxType PropName,
+static PropType getProperty(const luabind::object &FUTable, IdxType PropName,
   PropType DefaultRetVal = PropType()) {
     if (luabind::type(FUTable) != LUA_TTABLE) return DefaultRetVal;
 
@@ -100,7 +100,7 @@ namespace llvm {
   }
 }
 
-VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, float *Delay,
+VFUDesc::VFUDesc(VFUs::FUTypes type, const luabind::object &FUTable, float *Delay,
                  unsigned *Cost)
   : ResourceType(type), StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
     ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
