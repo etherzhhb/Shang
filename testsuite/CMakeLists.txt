@@ -361,7 +361,7 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   add_dependencies(main_sim ${TEST}_simulate_main)
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
-    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
+    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
     DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
