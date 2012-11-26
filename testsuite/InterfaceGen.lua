@@ -112,7 +112,7 @@ module Main2Bram(
 	input       [31:0]			return_value,
   //--------Signal from Bram----------------------//
 	input				[63:0]    	q_i,
-	//_-------Linking LED to show the correct-------//
+	//_-------Linking LED to show the activity-------//
 	output reg	[7:0]				LED7,
   //--------Signal to IP--------------------------//
 	output            			mem0rdy,
@@ -154,6 +154,10 @@ assign          q[63:56] = (rden&&byen2R[7])? q_i[63:56]:0;
 //-=======================================================================================
 assign          mem0in = readrdy? (q >> {addr2R_read[2:0],3'b0}):0;
 
+// synthesis translate_off
+integer MemAccessCycles = 0;
+// synthesis translate_on
+
 always@(posedge clk,negedge rstN)begin
 	if(!rstN)begin
 		state <= S0;
@@ -169,6 +173,9 @@ always@(posedge clk,negedge rstN)begin
 					state <= S_wait;
 					readbyte_en <= mem0be_wire;
           rden <= 1;
+          // synthesis translate_off
+          ++MemAccessCycles;
+          // synthesis translate_on
 				end else begin
 					addr2R_read <= 0;
 					state <= S0;
@@ -180,6 +187,9 @@ always@(posedge clk,negedge rstN)begin
 			S_wait :begin
 			  state <= S0;//Write process is less a cycle to Read process
 			  readrdy <= 1;
+        // synthesis translate_off
+        ++MemAccessCycles;
+        // synthesis translate_on
 			end
 			default : state <= S0;
 		endcase
@@ -199,6 +209,13 @@ assign          wren = writeactive? 1:0;
 assign 					mem0rdy = ((readrdy)||(writerdy))? 1:0;
 assign 					addr2R = (wren)? mem0addr[$(getGVBit(Num64GV)+2):3]:addr2R_read[$(getGVBit(Num64GV)+2):3];/////////////////////////////////
 assign					byen2R = (wren)? writebyte_en:readbyte_en;
+
+// synthesis translate_off
+always@(posedge clk) begin
+  if (writeactive) ++MemAccessCycles;
+end
+// synthesis translate_on
+
 //-=======================================================================================
 //-=======================================================================================
 //Return the value
@@ -213,8 +230,6 @@ always@(posedge clk,negedge rstN)begin
 			end else begin
 				LED7 <= 8'b00000000;
 			end
-		end else begin
-			LED7 <= LED7;
 		end
 	end
 end
@@ -267,8 +282,7 @@ module BRAM
   $('$')readmemb("$(RTLModuleName)_BramInit.txt",ram);
   end
 
-	always_ff@(posedge clk)
-	begin
+	always@(posedge clk) begin
 		if(we) begin
 		// edit this code if using other than four bytes per word
 			if(be[0]) ram[waddr][0] <= wdata[7:0];
@@ -359,9 +373,11 @@ always_comb begin
     $('$')fclose(wfile);
 
     wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
-    $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
+    $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}", cnt);
     $('$')fclose(wtmpfile);
     $display("At %t the result is correct!", $('$')time());
+  
+    //$display("$(RTLModuleName) memory access cycles: %d", DUT_TOP_tb.i1.i1.MemAccessCycles);
     $('$')stop;
   end
 end
