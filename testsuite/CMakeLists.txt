@@ -200,23 +200,6 @@ macro(add_general_test test_file config_file altera_setup_prj_file postfix)
   )  
   add_custom_target(${TEST}_hls DEPENDS ${MAIN_RTL_SRC})
   add_dependencies(hls ${TEST}_hls)
-  
-if(SYNTHESIS_DUT AND TARGET benchmark_report)
-  configure_file (
-    ${altera_setup_prj_file}
-    "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl"
-    )
-  add_custom_command(OUTPUT ${MAIN_RTL_STA}
-    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl" > /dev/null
-    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
-    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj.tcl" ${MAIN_SDC_SRC} ${CycleCounter}
-    WORKING_DIRECTORY ${TEST_BINARY_ROOT}
-    COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
-  )
-  add_custom_target(${TEST}_synthesis DEPENDS ${MAIN_RTL_STA})
-  add_dependencies(${TEST}_synthesis ${TEST}_hls)
-endif(SYNTHESIS_DUT AND TARGET benchmark_report)
 
   add_custom_command(OUTPUT ${MAIN_X86_SRC}
     COMMAND ${LLC}
