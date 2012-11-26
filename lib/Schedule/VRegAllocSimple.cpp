@@ -459,7 +459,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<VFUDesc, 1> {
     // Src register appear in the src of mux do not cost anything.
     removeSrcReg<0>(Src->reg);
 
-    return VFUs::RegCost * getWidth();
+    return Base::computeWeight(Base::getWidth());
   }
 };
 
@@ -581,6 +581,9 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VFUICmp, VTM::VOpICmp, 1>
 
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
+
+    // Go on check next source.
+    nextSrc();
 
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
