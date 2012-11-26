@@ -362,8 +362,8 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    unsigned Index = std::min(FanInWidth, 64u);
-    Weight += /*FU Cost*/ getFUDesc<FUDescTy>()->lookupCost(Index);
+    unsigned Size = std::min(FanInWidth, 64u);
+    Weight += /*FU Cost*/ getFUDesc<FUDescTy>()->lookupCost(Size);
     Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(FanInWidth);
     Weight += getSavedFanoutsCost(FanOutWidth);
     return Weight;
@@ -371,6 +371,24 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
 
   int computeWeight(int BitWidth) { return computeWeight(BitWidth, BitWidth); }
 };
+
+// Dirty Hack: Specialize for register.
+template<>
+int CompEdgeWeightBase<VFUDesc, 1>::computeWeight(unsigned FanInWidth,
+                                                  unsigned FanOutWidth) {
+  VFUMux *MUXDesc = getFUDesc<VFUMux>();
+  // Only merge the register if the mux size not exceed the max allowed size.
+  if (FaninChecker<1>::getMaxMergedSrcMuxSize() > int(MUXDesc->MaxAllowedMuxSize))
+    return CompGraphWeights::HUGE_NEG_VAL;
+
+  int Weight = 0;
+  // We can save some register if we merge these two registers.
+  Weight += /*FU Cost*/ FanInWidth * VFUs::RegCost;
+  Weight += FaninChecker<1>::getTotalSavedSrcMuxCost(FanInWidth);
+
+  return Weight;
+
+}
 
 // Weight computation functor for register Compatibility Graph.
 struct CompRegEdgeWeight : public CompEdgeWeightBase<VFUDesc, 1> {
