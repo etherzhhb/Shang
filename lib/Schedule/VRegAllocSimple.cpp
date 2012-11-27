@@ -535,6 +535,9 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<FUDescTy, 2> {
     if (Base::VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
+    if (Base::getMaxMergedSrcMuxSize() > 1) 
+      return CompGraphWeights::HUGE_NEG_VAL;
+
     return Base::computeWeight(Base::getWidth());
   }
 };
@@ -604,6 +607,9 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VFUICmp, VTM::VOpICmp, 1>
     nextSrc();
 
     if (VRA->iterateUseDefChain(Dst->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
+
+    if (Base::getMaxMergedSrcMuxSize() > 1) 
       return CompGraphWeights::HUGE_NEG_VAL;
 
     return computeWeight(getWidth(), 1);
