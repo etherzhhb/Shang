@@ -28,13 +28,14 @@ set(OTHER_FU_STAT_SCRIPT			"${FU_EST_SOUCE_ROOT}/Json2LuaScript_Others.py")
 add_custom_target(get_mux_verilog_file
 				  COMMENT "Get all the Verilog files for MUXs")
 add_custom_target(get_mux_data
-				  COMMAND python ${MUX_STAT_SCRIPT} 
+				  COMMAND python ${MUX_STAT_SCRIPT} -t ${TIMING_REPORT_JSON_MUX} -l ${LE_REPORT_FILE_MUX} -o ${LUA_SCRIPT_MUX}
 				  COMMENT "Get the data for MUXs")
 add_custom_target(get_others_data
-				  COMMAND python ${OTHER_FU_STAT_SCRIPT} -t ${TIMING_REPORT_JSON} -l ${LE_REPORT_FILE} -o ${LUA_SCRIPT_OTHERS}
+				  COMMAND python ${OTHER_FU_STAT_SCRIPT} -t ${TIMING_REPORT_JSON} -o ${LUA_SCRIPT_OTHERS}
 				  COMMENT "Get the data for FUs except MUXs")
 add_custom_target(get_all_data
 				  COMMENT "Get all data for all FUs")
+add_dependencies(get_all_data get_others_data get_mux_data)
 				  
 macro(test_mux input_num width)
 set(DUT_NAME				"mux")
@@ -81,15 +82,14 @@ add_custom_target(${input_num}_get_verilog_${width} DEPENDS ${TEST_VERILOG})
 add_dependencies(get_mux_verilog_file ${input_num}_get_verilog_${width})
 
 add_custom_command(OUTPUT ${PseudoTarget}
-	COMMAND quartus_sh -t ${SETUP_PRJ_TCL} > /dev/null
+	COMMAND quartus_sh -t ${SETUP_PRJ_TCL}
 	COMMAND python ${PYTHON_READ_RPT}
 	WORKING_DIRECTORY ${TEST_ROOT}
-	DEPENDS ${TEST_VERILOG}
+	DEPENDS ${TEST_VERILOG} ${TEST_ROOT}/MuxReadRpt.py ${TEST_ROOT}/extract_timing.tcl ${TEST_ROOT}/TestSetPrj.tcl
 	COMMENT "Setup quartus project to extract timing infomation"
 	)
 add_custom_target(get_data_${TEST_NAMES} DEPENDS ${PseudoTarget})
 add_dependencies(get_mux_data get_data_${TEST_NAMES})
-add_dependencies(get_all_data get_data_${TEST_NAMES})
 endmacro(test_mux)			
 
 foreach(loop_input_num RANGE 2 32 [1])
@@ -129,19 +129,15 @@ configure_file(
 	"${FU_EST_SOUCE_ROOT}/extract_timing.tcl.in"
 	"${TEST_ROOT}/extract_timing.tcl"
 )
-configure_file(
-	"${FU_EST_SOUCE_ROOT}/ReadRpt.py.in"
-	"${TEST_ROOT}/ReadRpt.py"
-)
+
 add_custom_command(OUTPUT ${PseudoTarget}
 	COMMAND quartus_sh -t ${SETUP_PRJ_TCL}
 	WORKING_DIRECTORY ${TEST_ROOT}
-	DEPENDS ${TEST_VERILOG}
+	DEPENDS ${TEST_VERILOG} ${TEST_ROOT}/extract_timing.tcl ${TEST_ROOT}/TestSetPrj.tcl ${TEST_ROOT}/${DUT_NAME}test.v
 	COMMENT "Extract timing infomation and LE usage for ${TEST_NAMES}"
 )
 add_custom_target(get_data_${TEST_NAMES} DEPENDS ${PseudoTarget}) 
 add_dependencies(get_others_data get_data_${TEST_NAMES})
-add_dependencies(get_all_data get_data_${TEST_NAMES})
 endmacro(test_others)
 	
 foreach(loop_bit_width ${bit_width})

@@ -9,8 +9,8 @@ load_package ::quartus::incremental_compilation
 
 project_new @TEST_NAMES@ -overwrite
 
-set_global_assignment -name FAMILY CycloneIVE
-set_global_assignment -name DEVICE EP4CE115F29I8L
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE75F29C6
 
 # Build project and specify some confige
 # =====================
