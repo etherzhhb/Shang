@@ -1,6 +1,10 @@
 [The Shang High-level Synthesis Framework](http://sysueda.github.com/Shang/)
 ========================================
 
+News
+----
+A more powerful Opensource HLS framework developed in [ADSC](http://adsc.illinois.edu/) will be released soon!
+
 Overview
 --------
 
