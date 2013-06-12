@@ -1,9 +1,0 @@
-all: board_test.cld
-	run56sim -t board_test.cld
-
-board_test.cld: board_test.cln g721.cln
-	g56k board_test.cln g721.cln -o board_test.cld
-
-%.cln: %.c
-	g56k -D__G56K__ -alo -c $*.c
-

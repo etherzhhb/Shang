@@ -1,1 +1,0 @@
-s56x_play -d $S56DSP/libdrp/ssirp.lod -r 8000 $HOME/cossap/costmp/data.out $1

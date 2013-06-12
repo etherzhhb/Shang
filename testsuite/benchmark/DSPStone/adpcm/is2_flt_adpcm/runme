@@ -1,4 +1,0 @@
-flt_adpcm.exe
-xgraph datain.tmp &
-xgraph dataout.tmp &
-xgraph error.tmp &
