@@ -3,7 +3,7 @@
 
 News
 ----
-A more powerful Opensource HLS framework developed in [ADSC](http://adsc.illinois.edu/) will be released soon!
+We will modernize Shang and push new release. 
 
 Overview
 --------
