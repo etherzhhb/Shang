@@ -42,8 +42,8 @@ Shang cooperates with others components in the same system.
 *  ...
 
 Combining these together, Shang outperforms the commercial tool eXCite by 10% and
-the open source HLS tool LegUp by 30%, respectively, with a naive FUs/Registers
-sharing algorithm which only shares FUs/Registers with identical fanins.
+the old version of open source HLS tool LegUp by 30%, respectively,
+on the CHStone benchmark suite.
 
 Getting Start
 -------------
